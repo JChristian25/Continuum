@@ -1,0 +1,62 @@
+{
+  "installedAt": "2026-11-09T07:46:28.963480+00:00",
+  "scope": "Backend skill files only. Framework/database selections remain open. No bundled scripts or services executed.",
+  "skills": [
+    {
+      "name": "api-design-principles",
+      "repository": "wshobson/agents",
+      "commit": "9c61ab243def98f72da12abd41cfcf5bcd91af9d",
+      "sourcePath": "plugins/backend-development/skills/api-design-principles",
+      "skillSha256": "1f6166c23c0a0f32d703c19d84b3c30c2873daefb9e8732339a009934fa17013"
+    },
+    {
+      "name": "auth-implementation-patterns",
+      "repository": "wshobson/agents",
+      "commit": "9c61ab243def98f72da12abd41cfcf5bcd91af9d",
+      "sourcePath": "plugins/developer-essentials/skills/auth-implementation-patterns",
+      "skillSha256": "1fc61d6074ace3d3db9d527ef92a7188118ff305b6ea98e0f9356545c6e15996"
+    },
+    {
+      "name": "python-testing-patterns",
+      "repository": "wshobson/agents",
+      "commit": "9c61ab243def98f72da12abd41cfcf5bcd91af9d",
+      "sourcePath": "plugins/python-development/skills/python-testing-patterns",
+      "skillSha256": "a1020718f31629c2a5b20731cad1804dbb81b18800495c5cebdf16e6cac9c175"
+    },
+    {
+      "name": "fastapi-templates",
+      "repository": "wshobson/agents",
+      "commit": "9c61ab243def98f72da12abd41cfcf5bcd91af9d",
+      "sourcePath": "plugins/api-scaffolding/skills/fastapi-templates",
+      "skillSha256": "dba8e1287ae03591198ea0ea638bb9862ec3c7b5cbdeb1163368f3ebc9487cb6"
+    },
+    {
+      "name": "property-based-testing",
+      "repository": "trailofbits/skills",
+      "commit": "e4dd0bb5b15535f7c5a0834187dffba6ac37e4ff",
+      "sourcePath": "plugins/property-based-testing/skills/property-based-testing",
+      "skillSha256": "9448cacb65c6237a7c22dc59602667177ecae405524079ae9ff92240590b995a"
+    },
+    {
+      "name": "neo4j-modeling-skill",
+      "repository": "neo4j-contrib/neo4j-skills",
+      "commit": "004c7823fc05d352647f2e9e5106d9ae2a4080e5",
+      "sourcePath": "neo4j-modeling-skill",
+      "skillSha256": "e1e7f025e516960ea762040902cfc2c559f90a56d1b064380830b1526458a83b"
+    },
+    {
+      "name": "neo4j-cypher-skill",
+      "repository": "neo4j-contrib/neo4j-skills",
+      "commit": "004c7823fc05d352647f2e9e5106d9ae2a4080e5",
+      "sourcePath": "neo4j-cypher-skill",
+      "skillSha256": "fe905929ea87ea0c50420b3d660a47ffa61b4e9e464f65587e0ee2d26353d316"
+    },
+    {
+      "name": "neo4j-driver-python-skill",
+      "repository": "neo4j-contrib/neo4j-skills",
+      "commit": "004c7823fc05d352647f2e9e5106d9ae2a4080e5",
+      "sourcePath": "neo4j-driver-python-skill",
+      "skillSha256": "f74bb8c2dc794e94fc3d2e28c2a76bbcdd7278b8a9e827baba457b9e46d33a8b"
+    }
+  ]
+}

@@ -1,0 +1,96 @@
+<!doctype html><html><head><meta charset="utf-8"><style>figure{margin:18px 0}svg{width:100%;height:auto;display:block}p{color:var(--muted-foreground);font:14px var(--font-sans);line-height:1.6}img{display:block;margin:0 auto;width:140px;border-radius:16px}</style></head><body><img src="../assets/continuum-logo.png" alt="Continuum logo"><p>Proposed system diagrams · Work in progress</p><figure><svg xmlns="http://www.w3.org/2000/svg" width="1100" height="720" viewBox="0 0 1100 720" role="img" aria-labelledby="title desc"><title id="title">How the proposed system fits together</title><desc id="desc">Versioned inputs feed artifact context, human relationship review, revision revalidation and current or historical knowledge access.</desc><defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 Z" fill="#8bcdbd"/></marker></defs><rect width="1100" height="720" rx="20" fill="#071718"/><style>text{font-family:Arial,Helvetica,sans-serif}.title{font-size:25px;font-weight:700;fill:#effcf7}.sub{font-size:15px;fill:#9fbeb6}.head{font-size:19px;font-weight:700;fill:#d7fff1}.body{font-size:16px;fill:#c0d6d0}.tag{font-size:12px;font-weight:700;letter-spacing:1.7px;fill:#95e0c8}.edge{fill:none;stroke:#8bcdbd;stroke-width:2;marker-end:url(#arrow)}.label{font-size:14px;fill:#a4c6ba}</style>
+<text x="36" y="43" class="title">How the proposed system fits together</text>
+<text x="36" y="70" class="sub">PROPOSED SYSTEM · Specification stage · Backend integration is not implemented</text>
+<rect x="330" y="95" width="735" height="420" rx="18" fill="none" stroke="#365c52" stroke-dasharray="6 6"/>
+<rect x="35" y="120" width="255" height="155" rx="12" fill="#102b2a" stroke="#365c52"/>
+<text x="55" y="148" class="tag">SUPPORTED INPUTS</text>
+<text x="55" y="177" class="head">Project files</text>
+<text x="55" y="202" class="body">One selected Git project</text>
+<text x="55" y="227" class="body">Python code</text>
+<text x="55" y="252" class="body">Markdown and plain text</text>
+<rect x="35" y="345" width="255" height="130" rx="12" fill="#102b2a" stroke="#365c52"/>
+<text x="55" y="373" class="head">Authored records</text>
+<text x="55" y="398" class="body">Requirements and decisions</text>
+<text x="55" y="423" class="body">Attributed, versioned capture</text>
+<rect x="360" y="120" width="290" height="150" rx="12" fill="#102b2a" stroke="#365c52"/>
+<text x="380" y="148" class="tag">C-01 / C-02 / C-03</text>
+<text x="380" y="177" class="head">Artifact context</text>
+<text x="380" y="202" class="body">Stable identity, exact versions</text>
+<text x="380" y="227" class="body">Evidence anchors and origin</text>
+<rect x="735" y="120" width="300" height="150" rx="12" fill="#102b2a" stroke="#365c52"/>
+<text x="755" y="148" class="tag">C-04 / C-05 / C-07 / C-10</text>
+<text x="755" y="177" class="head">Relationship review</text>
+<text x="755" y="202" class="body">Evidence-backed candidates</text>
+<text x="755" y="227" class="body">Human judgment and reason</text>
+<rect x="735" y="340" width="300" height="150" rx="12" fill="#102b2a" stroke="#365c52"/>
+<text x="755" y="368" class="tag">C-06 / C-07 / C-09</text>
+<text x="755" y="397" class="head">Revision revalidation</text>
+<text x="755" y="422" class="body">Selected Git comparisons</text>
+<text x="755" y="447" class="body">Affected contexts, kept history</text>
+<rect x="360" y="340" width="290" height="150" rx="12" fill="#102b2a" stroke="#365c52"/>
+<text x="380" y="368" class="tag">C-03 / C-08</text>
+<text x="380" y="397" class="head">Knowledge access</text>
+<text x="380" y="422" class="body">Typed graph and search</text>
+<text x="380" y="447" class="body">Current and historical context</text>
+<rect x="360" y="565" width="675" height="100" rx="12" fill="#102b2a" stroke="#365c52"/>
+<text x="380" y="593" class="head">Practitioner workspace</text>
+<text x="380" y="618" class="body">Inspect evidence, review links and retrieve earlier rationale.</text>
+<path d="M290 190 H360" class="edge"/>
+<path d="M290 405 H312 V240 H360" class="edge"/>
+<path d="M650 195 H735" class="edge"/>
+<path d="M505 270 V340" class="edge"/>
+<path d="M735 235 H694 V380 H650" class="edge"/>
+<path d="M885 340 V270" class="edge"/>
+<text x="900" y="293" class="label">re-review</text>
+<path d="M735 440 H650" class="edge"/>
+<path d="M505 490 V565" class="edge"/>
+<text x="365" y="542" class="label">Future frontend integration, preserving the existing design</text>
+<text x="36" y="684" class="label">Conceptual capabilities; framework, storage, authentication and discovery-method choices remain open.</text>
+<path d="M260 275 V305 H1050 V415 H1035" class="edge"/><text x="365" y="325" class="label">Selected revision pair for comparison</text></svg></figure><figure><svg xmlns="http://www.w3.org/2000/svg" width="1100" height="760" viewBox="0 0 1100 760" role="img" aria-labelledby="title desc"><title id="title">The proposed knowledge continuity cycle</title><desc id="desc">Capture versioned sources, discover candidates, review and retain decisions. Changed versions create new contexts while earlier decisions remain available.</desc><defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 Z" fill="#8bcdbd"/></marker></defs><rect width="1100" height="760" rx="20" fill="#071718"/><style>text{font-family:Arial,Helvetica,sans-serif}.title{font-size:25px;font-weight:700;fill:#effcf7}.sub{font-size:15px;fill:#9fbeb6}.head{font-size:19px;font-weight:700;fill:#d7fff1}.body{font-size:16px;fill:#c0d6d0}.tag{font-size:12px;font-weight:700;letter-spacing:1.7px;fill:#95e0c8}.edge{fill:none;stroke:#8bcdbd;stroke-width:2;marker-end:url(#arrow)}.label{font-size:14px;fill:#a4c6ba}</style>
+<text x="36" y="43" class="title">The proposed knowledge continuity cycle</text>
+<text x="36" y="70" class="sub">PROPOSED SYSTEM · Specification stage · Backend integration is not implemented</text>
+<rect x="35" y="110" width="300" height="140" rx="12" fill="#102b2a" stroke="#365c52"/>
+<text x="55" y="138" class="tag">01 / CAPTURE</text>
+<text x="55" y="167" class="head">Capture exact versions</text>
+<text x="55" y="192" class="body">Supported artifacts, sources</text>
+<text x="55" y="217" class="body">and evidence anchors</text>
+<rect x="400" y="110" width="300" height="140" rx="12" fill="#102b2a" stroke="#365c52"/>
+<text x="420" y="138" class="tag">02 / DISCOVER</text>
+<text x="420" y="167" class="head">Create candidates</text>
+<text x="420" y="192" class="body">Discovered or manually captured</text>
+<text x="420" y="217" class="body">Unconfirmed until human review</text>
+<rect x="765" y="110" width="300" height="140" rx="12" fill="#102b2a" stroke="#365c52"/>
+<text x="785" y="138" class="tag">03 / HUMAN REVIEW</text>
+<text x="785" y="167" class="head">Review with a reason</text>
+<text x="785" y="192" class="body">Authorized human inspects</text>
+<text x="785" y="217" class="body">versions and evidence</text>
+<path d="M335 180 H400" class="edge"/>
+<path d="M700 180 H765" class="edge"/>
+<rect x="765" y="330" width="300" height="140" rx="12" fill="#102b2a" stroke="#365c52"/>
+<text x="785" y="358" class="tag">04 / PRESERVE</text>
+<text x="785" y="387" class="head">Retain the decision</text>
+<text x="785" y="412" class="body">Confirm or reject a candidate</text>
+<text x="785" y="437" class="body">Keep actor, time and rationale</text>
+<path d="M915 250 V330" class="edge"/>
+<rect x="400" y="330" width="300" height="140" rx="12" fill="#102b2a" stroke="#365c52"/>
+<text x="420" y="358" class="tag">05 / COMPARE</text>
+<text x="420" y="387" class="head">Compare selected revisions</text>
+<text x="420" y="412" class="body">Identify supported changes</text>
+<text x="420" y="437" class="body">and directly affected contexts</text>
+<path d="M765 400 H700" class="edge"/>
+<rect x="35" y="330" width="300" height="170" rx="12" fill="#102b2a" stroke="#365c52"/>
+<text x="55" y="358" class="tag">06 / REVALIDATE</text>
+<text x="55" y="387" class="head">Open new review contexts</text>
+<text x="55" y="412" class="body">Previously confirmed → stale</text>
+<text x="55" y="437" class="body">Never confirmed → candidate</text>
+<text x="55" y="462" class="body">Unresolved → show limitation</text>
+<path d="M400 400 H335" class="edge"/>
+<path d="M185 330 V290 H1080 V180 H1065" class="edge"/>
+<text x="370" y="282" class="label">Inspect incoming evidence; reconfirm, correct or retire as appropriate</text>
+<rect x="35" y="570" width="1030" height="115" rx="12" fill="#102b2a" stroke="#365c52"/>
+<text x="55" y="598" class="head">History remains inspectable</text>
+<text x="55" y="623" class="body">Earlier judgments stay attached to their original versions. New review never overwrites that history.</text>
+<text x="55" y="648" class="body">Search and graph access distinguish current context from retained earlier context.</text>
+<path d="M915 470 V570" class="edge"/>
+<text x="36" y="724" class="label">No affected context within declared scope is not proof of complete coverage. Follow-up work stays separate.</text>
+</svg></figure></body></html>

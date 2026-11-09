@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="720" viewBox="0 0 1100 720" role="img" aria-labelledby="title desc"><title id="title">How the proposed system fits together</title><desc id="desc">Versioned inputs feed artifact context, human relationship review, revision revalidation and current or historical knowledge access.</desc><defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 Z" fill="#8bcdbd"/></marker></defs><rect width="1100" height="720" rx="20" fill="#071718"/><style>text{font-family:Arial,Helvetica,sans-serif}.title{font-size:25px;font-weight:700;fill:#effcf7}.sub{font-size:15px;fill:#9fbeb6}.head{font-size:19px;font-weight:700;fill:#d7fff1}.body{font-size:16px;fill:#c0d6d0}.tag{font-size:12px;font-weight:700;letter-spacing:1.7px;fill:#95e0c8}.edge{fill:none;stroke:#8bcdbd;stroke-width:2;marker-end:url(#arrow)}.label{font-size:14px;fill:#a4c6ba}</style>
+<text x="36" y="43" class="title">How the proposed system fits together</text>
+<text x="36" y="70" class="sub">PROPOSED SYSTEM · Specification stage · Backend integration is not implemented</text>
+<rect x="330" y="95" width="735" height="420" rx="18" fill="none" stroke="#365c52" stroke-dasharray="6 6"/>
+<rect x="35" y="120" width="255" height="155" rx="12" fill="#102b2a" stroke="#365c52"/>
+<text x="55" y="148" class="tag">SUPPORTED INPUTS</text>
+<text x="55" y="177" class="head">Project files</text>
+<text x="55" y="202" class="body">One selected Git project</text>
+<text x="55" y="227" class="body">Python code</text>
+<text x="55" y="252" class="body">Markdown and plain text</text>
+<rect x="35" y="345" width="255" height="130" rx="12" fill="#102b2a" stroke="#365c52"/>
+<text x="55" y="373" class="head">Authored records</text>
+<text x="55" y="398" class="body">Requirements and decisions</text>
+<text x="55" y="423" class="body">Attributed, versioned capture</text>
+<rect x="360" y="120" width="290" height="150" rx="12" fill="#102b2a" stroke="#365c52"/>
+<text x="380" y="148" class="tag">C-01 / C-02 / C-03</text>
+<text x="380" y="177" class="head">Artifact context</text>
+<text x="380" y="202" class="body">Stable identity, exact versions</text>
+<text x="380" y="227" class="body">Evidence anchors and origin</text>
+<rect x="735" y="120" width="300" height="150" rx="12" fill="#102b2a" stroke="#365c52"/>
+<text x="755" y="148" class="tag">C-04 / C-05 / C-07 / C-10</text>
+<text x="755" y="177" class="head">Relationship review</text>
+<text x="755" y="202" class="body">Evidence-backed candidates</text>
+<text x="755" y="227" class="body">Human judgment and reason</text>
+<rect x="735" y="340" width="300" height="150" rx="12" fill="#102b2a" stroke="#365c52"/>
+<text x="755" y="368" class="tag">C-06 / C-07 / C-09</text>
+<text x="755" y="397" class="head">Revision revalidation</text>
+<text x="755" y="422" class="body">Selected Git comparisons</text>
+<text x="755" y="447" class="body">Affected contexts, kept history</text>
+<rect x="360" y="340" width="290" height="150" rx="12" fill="#102b2a" stroke="#365c52"/>
+<text x="380" y="368" class="tag">C-03 / C-08</text>
+<text x="380" y="397" class="head">Knowledge access</text>
+<text x="380" y="422" class="body">Typed graph and search</text>
+<text x="380" y="447" class="body">Current and historical context</text>
+<rect x="360" y="565" width="675" height="100" rx="12" fill="#102b2a" stroke="#365c52"/>
+<text x="380" y="593" class="head">Practitioner workspace</text>
+<text x="380" y="618" class="body">Inspect evidence, review links and retrieve earlier rationale.</text>
+<path d="M290 190 H360" class="edge"/>
+<path d="M290 405 H312 V240 H360" class="edge"/>
+<path d="M650 195 H735" class="edge"/>
+<path d="M505 270 V340" class="edge"/>
+<path d="M735 235 H694 V380 H650" class="edge"/>
+<path d="M885 340 V270" class="edge"/>
+<text x="900" y="293" class="label">re-review</text>
+<path d="M735 440 H650" class="edge"/>
+<path d="M505 490 V565" class="edge"/>
+<text x="365" y="542" class="label">Future frontend integration, preserving the existing design</text>
+<text x="36" y="684" class="label">Conceptual capabilities; framework, storage, authentication and discovery-method choices remain open.</text>
+<path d="M260 275 V305 H1050 V415 H1035" class="edge"/><text x="365" y="325" class="label">Selected revision pair for comparison</text></svg>

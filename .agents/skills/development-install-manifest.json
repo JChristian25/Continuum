@@ -1,0 +1,40 @@
+{
+  "installedAt": "2026-11-09T07:37:05.677012+00:00",
+  "scope": "Project-local skills only; no hooks or application integration executed",
+  "skills": [
+    {
+      "name": "ponytail",
+      "repository": "DietrichGebert/ponytail",
+      "commit": "96608e078b2d5ea607c5c3b8b5a54d1c1fba6846",
+      "sourcePath": "skills/ponytail",
+      "skillSha256": "9badd22a32e19cb884e46dfa8d3aae82bb81dfa5484105b8b4f0262df823a509"
+    },
+    {
+      "name": "impeccable",
+      "repository": "pbakaus/impeccable",
+      "commit": "613fbf88e0ef08709eaf238653285f430250c0ea",
+      "sourcePath": ".agents/skills/impeccable",
+      "skillSha256": "ec5c81f17af6476cafd351875d9109b7d03329e05b3f845cb2d0bbbd4bc31b2c"
+    },
+    {
+      "name": "vercel-react-best-practices",
+      "repository": "vercel-labs/agent-skills",
+      "commit": "1a2c79d4e6c4a2283dc2c614b6538cbe1ed5ca62",
+      "sourcePath": "skills/react-best-practices",
+      "skillSha256": "71ed7794962fa6e803ee83030517b5b93a9f70fbfeb431ec4535c5480a8d8355"
+    },
+    {
+      "name": "vercel-composition-patterns",
+      "repository": "vercel-labs/agent-skills",
+      "commit": "1a2c79d4e6c4a2283dc2c614b6538cbe1ed5ca62",
+      "sourcePath": "skills/composition-patterns",
+      "skillSha256": "e38e0eaa609316b10423a9a138ed95e35099accd3f735585295c8a8f165c28a3"
+    }
+  ],
+  "protectedFilesSha256": {
+    "PRODUCT.md": "389cc5b65c1767f67b276b6743ba2a3c9a38f197bd88a7236f7370a091f71cab",
+    "DESIGN.md": "3af8c52aa1dca1f50740285ab2c6d45c41abd1f7ec086fbf40fd09239a676c9d",
+    "package.json": "d145bce461f0ec9d32c0cda54a0bc64de40095f27948c2227d09ce9fec2e65e3",
+    "package-lock.json": "f1ee1bd9f48dfcce077dccfe0ed5ff945a45c4fc7be25bdeaef0e41b5314bc61"
+  }
+}

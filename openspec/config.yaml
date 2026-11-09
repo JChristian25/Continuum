@@ -1,0 +1,59 @@
+schema: spec-driven
+
+context: |
+  Continuum's sole implementation source is D:\[Research] SKCF\prototype.
+  Inspect only this project; do not inspect sibling folders or use another local
+  project as its backend, source of truth, or evidence baseline.
+  Current implementation: React 19 / Vite 8, JavaScript/JSX, synthetic fixture data,
+  browser localStorage/sessionStorage, Node built-in workflow tests.
+  No connected backend or real repository processing is verified.
+  Current authorization is OpenSpec setup and specification work only.
+  Do not implement product code, ingest/clone a repository, start services,
+  change package dependencies, deploy, or archive unimplemented requirements.
+  Preserve PRODUCT.md and DESIGN.md and the current visual design.
+  Existing specs/ documents are research context and engineering proposals;
+  extract focused behavior from them rather than bulk-converting them.
+  openspec/specs describes observed current behavior. Proposed unimplemented
+  capabilities belong in openspec/changes until implemented and verified.
+  Healthchecks is the accepted future test-project identity, with Python as the
+  selected language and Markdown/plain-text documents at file scope. Plain text
+  was explicitly included by the user in the latest-manuscript reconciliation. Source acquisition, exact revisions and inventory
+  remain open. Do not read other local checkouts.
+  Latest manuscript source: specs/manuscript-source.md (MS-2026-11-09).
+  The user authorized read-only access to the exact PDF identified there.
+  Scoped core/method/readiness reconciliation is recorded in
+  specs/manuscript-reconciliation.md. Full schema/design decisions and actual
+  implementation verification remain pending.
+  The thesis supplied in the planning chat bounds the core and extensions;
+  traceability anchors already recorded in specs/requirements.md are references,
+  not proof of implementation or independent accuracy/productivity gains.
+  Write in English using plain, neutral prose and Humanizer's editorial principles.
+  Separate observed, accepted, proposed, and unknown claims.
+
+rules:
+  proposal:
+    - State one continuity outcome and name what remains out of scope.
+    - Cite relevant C-/X-/HC- requirements without treating extensions as core.
+    - State that planning does not authorize implementation.
+  specs:
+    - Each requirement must state one observable behavior using SHALL or MUST.
+    - Give each requirement at least one named Scenario using WHEN and THEN.
+    - Cover uncertainty, exact revision context, historical preservation, and permission failures where relevant.
+    - Keep storage/framework/algorithm choices in design.md unless externally observable.
+    - Keep stable requirement IDs and distinguish current behavior from proposed deltas.
+  design:
+    - Ground decisions in authored files inside this project.
+    - Record open decisions explicitly instead of inventing an existing backend.
+    - Preserve the UI and keep candidate validity, content concerns, and follow-up separate.
+  tasks:
+    - Keep future implementation tasks unchecked during specification work.
+    - Include concrete verification and meaningful negative cases with requirement IDs.
+    - Mark prerequisites and unresolved choices; artifact existence is not implementation readiness.
+
+operations:
+  apply:
+    guidance:
+      - Current authorization is specs only; wait for a new explicit implementation request.
+  archive:
+    guidance:
+      - Never merge proposed backend behavior into current specs before implementation and verification.

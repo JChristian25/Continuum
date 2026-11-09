@@ -1,0 +1,19 @@
+flowchart TB
+  files["Selected Git project: Python, Markdown and plain text"]
+  records["Captured requirements and architectural decisions"]
+  subgraph proposed["PROPOSED continuity capabilities"]
+    context["Artifact context: identity, exact versions and evidence anchors"]
+    review["Relationship review: candidate discovery, evidence and authorized judgments"]
+    revision["Revision revalidation: selected comparisons and affected contexts"]
+    access["Knowledge access: typed graph, search and retained rationale"]
+    context --> review
+    context --> access
+    review -->|Retained decisions| access
+    revision -->|New exact-version contexts| review
+    revision -->|Earlier context preserved| access
+  end
+  files --> context
+  records --> context
+  files -->|Selected revision pair| revision
+  access --> ui["Frontend access: future integration using the existing design"]
+  ui -->|Practitioner inspects and reviews| review

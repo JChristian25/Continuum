@@ -1,0 +1,22 @@
+flowchart TB
+  capture["1. Capture supported artifacts at exact versions"]
+  discover["2. Discover or manually capture candidate relationships"]
+  review["3. Authorized human inspects evidence and records a reason"]
+  retained["4. Retain exact-version decisions and rationale"]
+  compare["5. Compare explicitly selected Git revisions"]
+  affected{"Affected relationship context?"}
+  confirmed["Previously confirmed: new context is stale"]
+  candidate["Never confirmed: new context remains a candidate"]
+  unchanged["No affected context identified within declared scope"]
+  unavailable["Unresolved identity or evidence: report limitation"]
+  capture --> discover --> review
+  review -->|Confirm or reject candidate| retained
+  retained --> compare --> affected
+  affected -->|Previously confirmed| confirmed
+  affected -->|Unconfirmed| candidate
+  affected -->|No| unchanged
+  affected -->|Cannot establish continuity| unavailable
+  confirmed -->|Reconfirm, correct or retire with a reason| review
+  candidate --> review
+  retained --> history["Search and inspect current or historical context"]
+  retained -.-> separate["Content concerns and follow-up remain separate"]
