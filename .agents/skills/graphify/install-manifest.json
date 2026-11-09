@@ -1,0 +1,65 @@
+{
+  "installedAt": "2026-11-09T08:11:06.456388+00:00",
+  "repository": "Graphify-Labs/graphify",
+  "commit": "6c8002eca4acad58db6160eabcb466e61fc35afb",
+  "upstreamVersion": "0.9.104",
+  "scope": "Project-local Codex skill and references only; no CLI package, hooks, indexing or services installed or run.",
+  "packaging": "Upstream graphify/skill-codex.md saved as SKILL.md; matching Codex references preserved.",
+  "files": [
+    {
+      "localPath": "SKILL.md",
+      "sourcePath": "graphify/skill-codex.md",
+      "sha256": "4d630cad0691ed805f80becd4245c2c15a219c8458c87fdaa7cb6c32ffba615f"
+    },
+    {
+      "localPath": "references/add-watch.md",
+      "sourcePath": "graphify/skills/codex/references/add-watch.md",
+      "sha256": "1e77351815547334c7e030f018dba513b303d397bf73d11fac47df03ace3b3f4"
+    },
+    {
+      "localPath": "references/exports.md",
+      "sourcePath": "graphify/skills/codex/references/exports.md",
+      "sha256": "c39a2f8062be9a5ac319220d6e66ca586ed0b0798292b1321206834be74c1b33"
+    },
+    {
+      "localPath": "references/extraction-spec.md",
+      "sourcePath": "graphify/skills/codex/references/extraction-spec.md",
+      "sha256": "9525ca4e865711dc73406aa978600acda81e3a0f4ad164d707b87b5cdef2ba7b"
+    },
+    {
+      "localPath": "references/github-and-merge.md",
+      "sourcePath": "graphify/skills/codex/references/github-and-merge.md",
+      "sha256": "e5ebd90c7686f50363ff7a535556bc2f596d4c47ec1e6c8b95e11e36a0dfea2b"
+    },
+    {
+      "localPath": "references/hooks.md",
+      "sourcePath": "graphify/skills/codex/references/hooks.md",
+      "sha256": "c3141e7124be8d1f0e96ff3895220a1b6318a644c4c6a60120e4aa6b1cd92d4a"
+    },
+    {
+      "localPath": "references/query.md",
+      "sourcePath": "graphify/skills/codex/references/query.md",
+      "sha256": "314e98daa21478e697643ec5b7cef5a35d04c4eb410037b37e22ac457610a147"
+    },
+    {
+      "localPath": "references/transcribe.md",
+      "sourcePath": "graphify/skills/codex/references/transcribe.md",
+      "sha256": "676a1e39aa6d43cdfcc416ec56616e36f7bad74066a82bd33a9485515b9a865c"
+    },
+    {
+      "localPath": "references/update.md",
+      "sourcePath": "graphify/skills/codex/references/update.md",
+      "sha256": "66a13120e96344c0c5c39c54d899b94244c1f50dad6b093af3d633f0a44a3654"
+    },
+    {
+      "localPath": "LICENSE",
+      "sourcePath": "LICENSE",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    {
+      "localPath": "NOTICE",
+      "sourcePath": "NOTICE",
+      "sha256": "3448ea175bba09f6fed8a743000139fb4c7112de83f164355b5540b158576621"
+    }
+  ]
+}

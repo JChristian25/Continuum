@@ -132,6 +132,7 @@ Project-local skills live under `.agents/skills/` and load when relevant to a ta
 
 - OpenSpec: exploration, proposals, artifact updates and later implementation workflows.
 - Ponytail: bounded changes and reuse of existing code.
+- Graphify: optional repository knowledge graphs for development navigation. The [Codex skill and references](.agents/skills/graphify/SKILL.md) are installed; the CLI runtime and graph generation are not set up by this installation. Generated graph data belongs in ignored `graphify-out/` and is not evidence that Continuum's proposed capabilities work.
 - Impeccable: targeted interface review and refinement within the existing design.
 - Vercel React Best Practices and Composition Patterns: React performance and component structure.
 - API Design Principles and Auth Implementation Patterns: API contracts, identity and authorization.
