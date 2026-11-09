@@ -51,4 +51,4 @@ playwright-report/
 
 # Generated local output and prototype backup
 /outputs/
-/continuum_original_backup.html
+/apps/web/continuum_original_backup.html

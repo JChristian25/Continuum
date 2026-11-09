@@ -1,5 +1,7 @@
 from pathlib import Path
-p = Path('src/context/ContinuumContext.jsx')
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+p = (PROJECT_ROOT / 'apps/web/src/context/ContinuumContext.jsx')
 s = p.read_text(encoding='utf-8-sig')
 s = s.replace("import { loadState, saveState, CHANGE_NEIGHBOR_IDS, createInitialState }", "import { loadState, saveState, createInitialState }")
 s = s.replace("const ContinuumContext", "import { commitReview, reviewError, pendingItems, undoCommittedReview, REVIEW_IDS } from '../data/workflow.js';\n\nconst ContinuumContext", 1)

@@ -18,4 +18,4 @@ Claude-inspired light workspace: warm paper surfaces, quiet navigation, serif he
 - Existing evidence, revision, persona, search, intent, and judgment controls retain their behavior.
 
 ## Implementation
-`src/redesign.css` owns the visual layer over existing module styles. Light mode is the initial appearance. Synthetic/demo provenance is visible on home and assistant screens.
+`apps/web/src/redesign.css` owns the visual layer over existing module styles. Light mode is the initial appearance. Synthetic/demo provenance is visible on home and assistant screens.

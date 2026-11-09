@@ -34,8 +34,8 @@ Continuum uses a continuity/infinity identity with a Claude-inspired light inter
 
 ## Evidence on Hand
 
-- Synthetic state and interaction model: `src/data/state.js`
-- Current web prototype: `src/`
+- Synthetic state and interaction model: `apps/web/src/data/state.js`
+- Current web prototype: `apps/web/src/`
 - User-supplied visual references for STAR, STRIDE, and the incumbent Continuum implementation.
 
 ## Product Principles

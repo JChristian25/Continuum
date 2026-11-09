@@ -1,5 +1,7 @@
 # Engineering review of the frontend baseline
 
+> Path note (2026-11-09): this review predates the repository restructure. Its `src/` and package paths refer to the original root-level frontend, now under `apps/web/`. Original hashes, commands and observed results below are retained as historical evidence.
+
 Date: 2026-11-09. Target: the accepted continuity cycle in the current frontend. Proposed work in this round is documentation only. Implementation is not authorized. Runtime design and delivery estimates below remain proposals until reviewed.
 
 ## Scope and evidence

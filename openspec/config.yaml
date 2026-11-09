@@ -4,6 +4,8 @@ context: |
   Continuum's sole implementation source is D:\[Research] SKCF\prototype.
   Inspect only this project; do not inspect sibling folders or use another local
   project as its backend, source of truth, or evidence baseline.
+  Frontend package and its lockfiles/configuration live under apps/web/.
+  Run frontend npm commands with npm --prefix apps/web from the repository root.
   Current implementation: React 19 / Vite 8, JavaScript/JSX, synthetic fixture data,
   browser localStorage/sessionStorage, Node built-in workflow tests.
   No connected backend or real repository processing is verified.

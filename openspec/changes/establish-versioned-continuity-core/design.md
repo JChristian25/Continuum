@@ -4,7 +4,7 @@
 
 See proposal.md for the intent and the four capability deltas for proposed behavior. This is a draft technical design during specification work. It is not implementation-ready: the blocking decisions below must be resolved before a bounded implementation task is authorized.
 
-The only implementation baseline is this project's React/Vite frontend. `src/data/workflow.js` stores judgments on fixture artifacts; `src/context/ContinuumContext.jsx` manages browser state and client personas. `src/data/state.js` suppresses storage errors. `src/components/Inspector.jsx` combines baseline and incoming history, and `src/components/ReviewSummary.jsx` uses fixed sample repository/revision labels. Those are observed limitations, not existing service contracts.
+The only implementation baseline is this project's React/Vite frontend. `apps/web/src/data/workflow.js` stores judgments on fixture artifacts; `apps/web/src/context/ContinuumContext.jsx` manages browser state and client personas. `apps/web/src/data/state.js` suppresses storage errors. `apps/web/src/components/Inspector.jsx` combines baseline and incoming history, and `apps/web/src/components/ReviewSummary.jsx` uses fixed sample repository/revision labels. Those are observed limitations, not existing service contracts.
 
 ## Goals / Non-Goals
 

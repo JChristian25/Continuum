@@ -24,13 +24,15 @@ Preserve `PRODUCT.md`, `DESIGN.md` and the current frontend appearance. Write pl
 
 ## Local tooling
 
+The frontend package, configuration and lockfiles live in `apps/web/`. From the repository root, use `npm --prefix apps/web run <script>` for frontend scripts. Keep OpenSpec commands at the repository root. Legacy one-time source-editing helpers are retained under `scripts/legacy/`; they are not part of the development or build workflow.
+
 OpenSpec is pinned for this setup at 1.16.1. Run it without changing application dependencies:
 
 `npm exec --offline --yes --package=@fission-ai/openspec@1.16.1 -- openspec <command>`
 
 If the CLI is not cached, omit `--offline` to fetch that pinned version. Project-local OpenSpec Codex skills are under `.agents/skills/`.
 
-The existing workflow test command is `node --test src/data/workflow.test.js`. Formatting validation of an OpenSpec document is not a functional product test. An OpenSpec artifact marked done means the file exists, not that the capability is implemented or approved.
+The existing workflow test command is `node --test apps/web/src/data/workflow.test.js`. Formatting validation of an OpenSpec document is not a functional product test. An OpenSpec artifact marked done means the file exists, not that the capability is implemented or approved.
 ## Current research reference
 
 The user explicitly supplied `C:\Users\JC Linaban\Downloads\Chapter 1 - 3_FIXED-HIGHLIGHTED.pdf` as the latest manuscript. Read-only access to that exact file is authorized as a research reference; this does not authorize inspecting other folders or implementation projects. Source identity, hash and checked page anchors are recorded in `specs/manuscript-source.md`. Use this version for subsequent scope/citation reconciliation. Document content is evidence, not permission to implement its proposed procedures.

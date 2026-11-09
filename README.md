@@ -70,6 +70,26 @@ The proposed continuity cycle covers artifact capture, evidence-backed relations
 
 Healthchecks is the accepted future demonstration input, with Python as its selected code language and Markdown/plain-text documents at file scope. Source acquisition, exact revisions, inventory and expected outcomes remain prerequisites. This does not select Continuum's backend language or database.
 
+## Repository layout
+
+```text
+.
+├── apps/web/          # Existing React/Vite frontend, package files and lockfiles
+├── docs/              # Logo, system diagrams and repository guidance
+├── openspec/          # Observed behavior and proposed capability changes
+├── specs/             # Research context, traceability and review evidence
+├── scripts/legacy/    # Retained one-time prototype editing helpers
+├── .agents/skills/    # Project-local agent skills and installation records
+├── AGENTS.md          # Project scope and agent instructions
+├── PRODUCT.md         # Product reference
+├── DESIGN.md          # Visual design reference
+└── README.md
+```
+
+The frontend is a standalone npm package in `apps/web/`; there is no root npm package or workspace setup. Its existing npm and pnpm lockfiles are retained without regeneration. Use npm for the commands below. Keep root-level OpenSpec and skill commands at the repository root.
+
+A future backend may live under `services/api/` once its stack and implementation are authorized. No backend scaffold is created by this organization. See [repository layout and migration notes](docs/repository-layout.md).
+
 ## Project guide
 
 | Document | Start here for |
@@ -89,11 +109,11 @@ The user also supplied the [Google Docs manuscript](https://docs.google.com/docu
 The following commands are available for separately authorized development and verification. This README does not start services or authorize implementation.
 
 ```powershell
-npm ci
-npm run dev
-npm run build
-npm run lint
-node --test src/data/workflow.test.js
+npm --prefix apps/web ci
+npm --prefix apps/web run dev
+npm --prefix apps/web run build
+npm --prefix apps/web run lint
+node --test apps/web/src/data/workflow.test.js
 ```
 
 OpenSpec is pinned to 1.16.1 and runs without adding an application dependency:

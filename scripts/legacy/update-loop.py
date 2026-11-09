@@ -1,5 +1,7 @@
 from pathlib import Path
-p=Path('src/components/ChangesModule.jsx'); s=p.read_text(encoding='utf-8-sig')
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+p=(PROJECT_ROOT / 'apps/web/src/components/ChangesModule.jsx'); s=p.read_text(encoding='utf-8-sig')
 s=s.replace("import { CHANGE_NEIGHBOR_IDS } from '../data/state.js';", "import { REVIEW_IDS } from '../data/workflow.js';")
 s=s.replace('CHANGE_NEIGHBOR_IDS', 'REVIEW_IDS')
 s=s.replace('useState(true);', 'useState(false);',1)
@@ -20,7 +22,7 @@ s=s.replace('              </div>\n            )}\n          </div>\n        </d
         </div>
       </section>''')
 p.write_text(s,encoding='utf-8')
-p=Path('src/components/DashboardModule.jsx'); s=p.read_text(encoding='utf-8-sig')
+p=(PROJECT_ROOT / 'apps/web/src/components/DashboardModule.jsx'); s=p.read_text(encoding='utf-8-sig')
 s=s.replace("const REVIEW_ITEMS = ['aaa.py::submitUserOrder', 'REQ-02', 'docs/onboarding_notes.md'];", "import { reviewItems, pendingItems, followUpItems } from '../data/workflow.js';")
 s=s.replace('const outstanding = REVIEW_ITEMS.map(id => state.artifacts[id]).filter(Boolean);', 'const items = reviewItems(state);\n  const outstanding = pendingItems(state);\n  const openWork = followUpItems(state).filter(item => !item.followUpResolved);')
 s=s.replace("const reviewed = outstanding.filter(item => item.r1Status === 'reviewed').length;", "const reviewed = items.length - outstanding.length;")
@@ -31,7 +33,7 @@ s=s.replace('<span>1 deferred update</span>', '<span>{openWork.length} open foll
 s=s.replace('<h2 id="review-now-heading">Pick up where the context changed</h2>', '<h2 id="review-now-heading">{outstanding.length ? \'Pick up where the context changed\' : \'All queued relationships reviewed\'}</h2>')
 s=s.replace('            {outstanding.map(item => {', "            {!outstanding.length && <div className=\"queue-empty\"><p>{reviewed} judgments recorded. Follow-up work and coverage limits remain visible in the review summary.</p><button className=\"text-link\" onClick={() => switchModule('summary')}>Review the outcome <ArrowRight size={14} /></button></div>}\n            {outstanding.map(item => {")
 p.write_text(s,encoding='utf-8')
-p=Path('src/components/Inspector.jsx'); s=p.read_text(encoding='utf-8-sig')
+p=(PROJECT_ROOT / 'apps/web/src/components/Inspector.jsx'); s=p.read_text(encoding='utf-8-sig')
 s=s.replace("import { getStatusInfo", "import { REVIEW_IDS, pendingItems } from '../data/workflow.js';\nimport { getStatusInfo",1)
 s=s.replace("const authorized = isAuthorized();", "const authorized = isAuthorized();\n  const inQueue = REVIEW_IDS.includes(art.id);\n  const pending = pendingItems(state);\n  const saveNotice = state.lastSavedReview?.artifactId === art.id;")
 s=s.replace("{state.revisionMode === 'R0' ? (", "{!inQueue ? (<div className=\"inline-notice\"><p>This record provides context. Relationship judgments are recorded on items in the review queue.</p></div>) : state.revisionMode === 'R0' ? (",1)
@@ -55,6 +57,6 @@ s=s.replace("            {art.historyR0?.map", '''            {art.reviewHistory
             {!art.historyR0?.length && !art.reviewHistory?.length && art.r1Status !== 'reviewed' && <p>No recorded review history for this artifact yet.</p>}
             {art.historyR0?.map''')
 p.write_text(s,encoding='utf-8')
-p=Path('src/data/helpers.js'); s=p.read_text(encoding='utf-8-sig')
+p=(PROJECT_ROOT / 'apps/web/src/data/helpers.js'); s=p.read_text(encoding='utf-8-sig')
 s=s.replace("if (revisionMode === 'R0') return { dot: 'dot--neutral', text: 'Accepted at R0', cls: 'status--neutral' };", "if (revisionMode === 'R0') return { dot: 'dot--neutral', text: art.historyR0?.length ? 'Recorded at R0' : 'No R0 judgment', cls: 'status--neutral' };")
 p.write_text(s,encoding='utf-8')
