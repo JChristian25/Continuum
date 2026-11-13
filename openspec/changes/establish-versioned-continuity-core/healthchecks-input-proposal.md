@@ -5,6 +5,12 @@ review. Prepared on 2026-11-13 from public upstream metadata, commit diffs and
 bounded source reads. No source checkout, local source-byte archive, ingestion,
 upstream execution or Continuum integration was performed.
 
+Later disposition, 2026-11-13: the user accepted this input package and then
+separately selected the frozen P-08 profile. See `healthchecks-input-acceptance.json`,
+`discovery-profile-acceptance.json` and `healthchecks-processing-verification.json`.
+The original proposal-stage statements below are retained as history. Current
+implementation and verification boundaries are in `services/api/PROCESSING.md`.
+
 The user authorized preparation of this public upstream proposal. That is not
 acceptance of the revisions, acquisition procedure, discovery configuration or
 expected outcomes below. A-INPUT and A-DISCOVERY remain open. Task 3.1 remains

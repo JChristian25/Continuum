@@ -52,4 +52,5 @@ playwright-report/
 # Generated local output and prototype backup
 /outputs/
 /graphify-out/
+/inputs/healthchecks/
 /apps/web/continuum_original_backup.html

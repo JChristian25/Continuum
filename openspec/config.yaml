@@ -8,7 +8,8 @@ context: |
   Run frontend npm commands with npm --prefix apps/web from the repository root.
   Current implementation: React 19 / Vite 8, JavaScript/JSX, synthetic fixture data,
   browser localStorage/sessionStorage, Node built-in workflow tests.
-  No connected backend or real repository processing is verified.
+  The separate FastAPI/PostgreSQL review and bounded capture/discovery service
+  has automated/API verification. The frontend remains synthetic and unconnected.
   On 2026-11-13 the user authorized implementation and selected FastAPI,
   PostgreSQL, provisioned accounts and server-side sessions. Follow the active
   implementation.md and tasks.md for implemented and pending boundaries.
@@ -22,7 +23,9 @@ context: |
   Healthchecks is the accepted future test-project identity, with Python as the
   selected language and Markdown/plain-text documents at file scope. Plain text
   was explicitly included by the user in the latest-manuscript reconciliation. Source acquisition, exact revisions and inventory
-  remain open. Do not read other local checkouts.
+  are now bounded by healthchecks-input-acceptance.json and the separate frozen
+  discovery-profile-acceptance.json in the active change. Use their exact scope;
+  do not infer broader acquisition or read other local checkouts.
   Latest manuscript source: specs/manuscript-source.md (MS-2026-11-09).
   The user authorized read-only access to the exact PDF identified there.
   Scoped core/method/readiness reconciliation is recorded in

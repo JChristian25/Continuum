@@ -20,6 +20,7 @@ def session_factory(engine):
 
 def initialize(engine):
     from .models import Base
+    from . import pipeline_models  # Register additive processing tables before initial schema creation.
 
     Base.metadata.create_all(engine)
     with engine.begin() as connection:
@@ -29,7 +30,9 @@ def initialize(engine):
                 RAISE EXCEPTION 'Continuum retained records are immutable';
             END $$
         """))
-        for table in ("artifact_versions", "assertions", "assertion_revisions", "review_events", "receipts", "security_audit"):
+        for table in ("artifact_versions", "assertions", "assertion_revisions", "review_events", "receipts", "security_audit",
+                      "input_registrations", "profile_registrations", "snapshots", "selection_artifacts", "selection_contexts", "review_view_bindings",
+                      "processing_activities", "evidence_origins", "revision_origins"):
             connection.execute(text(f"""
                 CREATE OR REPLACE TRIGGER retained_record
                 BEFORE UPDATE OR DELETE ON {table}

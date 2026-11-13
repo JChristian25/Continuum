@@ -67,7 +67,14 @@ def evidence_excerpt(db, evidence):
         fail("missing_evidence", details={"evidenceIds": [evidence.id]})
     version = scoped(db, ArtifactVersion, evidence.artifact_version_id, evidence.repository_id)
     locator = evidence.locator
-    if digest(version.content) != version.digest or locator.get("kind") != "lines":
+    if digest(version.content) != version.digest:
+        fail("missing_evidence", details={"evidenceIds": [evidence.id]})
+    if locator == {"kind": "field", "fieldPath": "identity.path"}:
+        path = version.identity.get("path")
+        if not isinstance(path, str) or digest(path) != evidence.excerpt_digest:
+            fail("missing_evidence", details={"evidenceIds": [evidence.id]})
+        return path
+    if locator.get("kind") != "lines":
         fail("missing_evidence", details={"evidenceIds": [evidence.id]})
     start, end = locator.get("startLine"), locator.get("endLine")
     lines = version.content.splitlines()
@@ -155,6 +162,13 @@ def command(db, actor, repository, envelope):
         fail("invalid_input")
     if view.mode != "active" or context.resolution == "superseded":
         fail("historical_context")
+    from .pipeline_models import ReviewViewBinding, Selection, SelectionContext, Snapshot
+    binding = db.get(ReviewViewBinding, view.id)
+    if binding:
+        selected = db.get(Selection, binding.selection_id)
+        retained = db.get(Snapshot, binding.snapshot_id)
+        if selected.snapshot_version != retained.snapshot_version:
+            fail("snapshot_conflict", 409, {"currentSnapshotVersion": selected.snapshot_version})
     if context.projection_version != data.expectedProjectionVersion:
         fail("stale_projection", 409, {"currentProjectionVersion": context.projection_version})
     revision = scoped(db, AssertionRevision, context.assertion_revision_id, repository.id)
@@ -257,10 +271,28 @@ def command(db, actor, repository, envelope):
             "successorViewId": successor_view.id, "replacement": replacement.model_dump()})
         events.append(event.id)
         context.resolution, context.successor_context_id = "superseded", successor.id
+        from .pipeline_models import Activity, RevisionOrigin
+        db.add(Activity(id=event.id, repository_id=repository.id, document={
+            "activityId": event.id, "methodId": "manual-correction-v1", "agent": {"kind": "practitioner", "id": actor.id},
+            "inputVersionIds": [source.id, target.id], "configurationId": None, "recordedAt": event.recorded_at,
+            "limitations": successor_revision.limitations, "reason": data.reason}))
+        db.flush()
+        db.add(RevisionOrigin(revision_id=successor_revision.id, activity_id=event.id))
 
     context.projection_version += 1
     repository.snapshot_version += 1
+    memberships = list(db.scalars(select(SelectionContext).where(SelectionContext.context_id == context.id)))
+    for membership in memberships:
+        selected = db.get(Selection, membership.selection_id)
+        selected.snapshot_version += 1
+        if successor and not db.get(SelectionContext, (selected.id, successor.id)):
+            db.add(SelectionContext(selection_id=selected.id, context_id=successor.id))
     db.flush()
+    if successor and binding:
+        from .pipeline import make_snapshot
+        selected = db.get(Selection, binding.selection_id)
+        retained = make_snapshot(db, selected)
+        db.add(ReviewViewBinding(view_id=successor_view.id, selection_id=selected.id, snapshot_id=retained.id))
     works = list(db.scalars(select(FollowUp).where(FollowUp.context_id == context.id).order_by(FollowUp.id)))
     result = {"eventIds": events, "projection": projection(context), "followUps": [follow_up(work) for work in works]}
     if successor:
@@ -285,6 +317,12 @@ def history(db, repository_id, view_id, context_id, cursor, page_size):
         high_water, after = page.high_water, page.after_sequence
     else:
         high_water = db.scalar(select(func.max(ReviewEvent.sequence)).where(ReviewEvent.context_id == context_id)) or 0
+        from .pipeline_models import ReviewViewBinding, Snapshot
+        binding = db.get(ReviewViewBinding, view_id)
+        if binding:
+            retained = db.get(Snapshot, binding.snapshot_id)
+            item = next(row for row in retained.document["assertions"] if row["projection"]["contextId"] == context_id)
+            high_water = item["historySequence"]
         after = 0
     events = list(db.scalars(select(ReviewEvent).where(ReviewEvent.context_id == context_id,
                   ReviewEvent.sequence > after, ReviewEvent.sequence <= high_water)

@@ -37,6 +37,9 @@ MESSAGES = {
     "unavailable": "Persistence is unavailable. Retry with the same request identity.",
     "rate_limited": "Too many login attempts. Try again later.",
     "limit_exceeded": "The request exceeds an operating limit.",
+    "revision_unavailable": "The requested revision is not available in the accepted inventory.",
+    "snapshot_conflict": "The selected snapshot changed. Refresh the selected context.",
+    "record_conflict": "The authored record changed. Refresh its current version.",
 }
 
 

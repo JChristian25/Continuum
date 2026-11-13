@@ -19,8 +19,8 @@ the later processing tasks; do not mark the whole change implemented.
 
 ## 3. Source processing prerequisites and implementation
 
-- [ ] 3.1 Settle authorized Healthchecks acquisition, exact revisions, immutable inventory and independent outcomes; verify a reproducible input manifest without reading another checkout (A-INPUT, C-09a).
-- [ ] 3.2 Settle the versioned discovery/support profile and job limits, then implement capture and independent automatic/manual candidate results; verify incomplete coverage and immutable source provenance (A-DISCOVERY, C-01c, C-02a/b, C-04a/b).
+- [x] 3.1 Settle authorized Healthchecks acquisition, exact revisions, immutable inventory and independent outcomes; verify a reproducible input manifest without reading another checkout (A-INPUT, C-09a).
+- [x] 3.2 Settle the versioned discovery/support profile and job limits, then implement capture and independent automatic/manual candidate results; verify incomplete coverage and immutable source provenance (A-DISCOVERY, C-01c, C-02a/b, C-04a/b).
 - [ ] 3.3 Implement selected-revision comparison and one-hop revalidation; verify deleted endpoints, stale/unconfirmed separation, retained history and retry behavior (C-06a/b, C-07c/d/e).
 
 ## 4. Access and integration

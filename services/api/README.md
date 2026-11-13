@@ -4,6 +4,13 @@ FastAPI and PostgreSQL implement the first versioned-review service boundary.
 The React application still uses synthetic browser data. It is not connected to
 this API, and its personas do not authenticate service requests.
 
+Continuation on 2026-11-13 added accepted Healthchecks acquisition and a
+database-backed capture/discovery pipeline, authored records and manual
+candidates. See [bounded source processing](PROCESSING.md) for the current
+workflow and additional verification. The sections below retain the first
+review-service baseline; the processing guide supersedes its statements that
+capture/discovery and snapshots are unimplemented.
+
 Implementation was requested on 2026-11-13, when the user selected FastAPI,
 PostgreSQL, provisioned accounts and server-side sessions. The preserved design
 draft and remaining work are in

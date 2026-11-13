@@ -41,7 +41,7 @@ measured research results or approved Healthchecks outcomes.
 - Records/events/source bytes are retained; no cleanup or retention migration is
   implemented by this slice. Storage capacity must be settled before a release.
 
-## Remaining boundaries
+## Remaining boundaries at initial implementation start
 
 A-INPUT remains open: no Healthchecks source has been acquired, and no exact
 revision pair or immutable inventory has been accepted. File capture, discovery,
@@ -56,3 +56,38 @@ SCHEMA-02 operations return no success placeholder. PostgreSQL integration tests
 source checks, browser/session checks and real-project evidence are separate
 verification boundaries. See services/api/README.md for observed commands and
 limits once that implementation lands.
+
+## Source-processing continuation, 2026-11-13
+
+The user accepted HC-UPSTREAM-2026-11-13-P1 by replying "alright, commit then
+continue development", then explicitly selected the separately frozen P-08
+profile. The proposed manifest/profile remain retained unchanged. Separate
+input/profile acceptance records bind their exact SHA-256 values and scope.
+
+A-INPUT's bounded acquisition and predeclared input expectations are settled for
+this package. Eighteen exact upstream blobs were acquired and independently
+verified; no clone, upstream execution or dependency installation occurred.
+A-DISCOVERY now selects lexical-file-v1 under HC-LEXICAL-2026-11-13-P1. Additional
+weak candidates are retained; no quality calibration or automatic confirmation
+is implied.
+
+The service now supports registered exact inputs/profiles, repository selections,
+durable capture/discovery admission, fenced leased publication, immutable source
+and activity provenance, snapshot-bound review, authored record versions and
+manual candidates/terminal successors. Operation admission is not completion.
+Manual captures cannot modify prior automatic result membership. The 1,024-ID
+review-evidence cap accommodates the accepted profile's 512 two-ended matches.
+
+Observed verification: 104 backend tests passed, then an additional embedded
+worker TCP test passed separately. The standalone reports reproduced unchanged
+on all four frozen revisions, including the predeclared UP-07 candidate at C0.
+Use services/api/PROCESSING.md and healthchecks-processing-verification.json for
+exact evidence boundaries. Tests use isolated synthetic accounts with real
+accepted source; no semantic practitioner judgments or research results are
+claimed.
+
+Still pending: selected-revision comparison and incoming revalidation; complete
+knowledge-access/search/graph/completion/export operations; frontend service
+integration and browser verification; reproducible release/guided-task evidence.
+The original proposed contracts and earlier verification artifacts remain
+inspectable. No existing user data was migrated and no deployment occurred.

@@ -1,0 +1,14 @@
+{
+  "schemaVersion": "discovery-acceptance-0.1.0",
+  "id": "HC-LEXICAL-2026-11-13-A1",
+  "acceptedOn": "2026-11-13",
+  "basis": "User selected: Use the proposed P-08 profile (recommended)",
+  "profileId": "HC-LEXICAL-2026-11-13-P1",
+  "profileSha256": "eeea88c56462a0f90c4f38ee1027bd214bc429cc64fecc0bb1b67bd29ca3fc75",
+  "manifestSha256": "57fe399e8f70706748f22307c272b9c612c703b1fac036477fb00d6c304e7b37",
+  "methodId": "lexical-file-v1",
+  "independentExpectationId": "UP-07",
+  "expectedOutcome": "An unconfirmed automatic lexical candidate from the C0 email document to the C0 SMTP handler, retaining the failure token and exact-version evidence",
+  "humanConfirmation": "Required separately; acceptance does not confirm discovered relationships",
+  "researchAccuracyClaim": false
+}

@@ -1,5 +1,5 @@
 from typing import Annotated, Literal
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator, model_validator
 
 Id = Annotated[str, StringConstraints(min_length=1, max_length=80)]
 Note = Annotated[str, StringConstraints(min_length=1, max_length=8000, pattern=r"\S")]
@@ -7,6 +7,13 @@ Note = Annotated[str, StringConstraints(min_length=1, max_length=8000, pattern=r
 
 class Strict(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
+
+    @field_validator("*")
+    @classmethod
+    def reject_nul(cls, value):
+        if isinstance(value, str) and "\x00" in value:
+            raise ValueError("NUL characters are not accepted")
+        return value
 
 
 class Login(Strict):
@@ -21,7 +28,7 @@ class Envelope(Strict):
     requestId: Id
     repositoryId: Id
     viewId: Id
-    command: Literal["record_judgment", "reverse_judgment", "correct_assertion", "open_follow_up", "resolve_follow_up"]
+    command: Literal["record_judgment", "reverse_judgment", "correct_assertion", "open_follow_up", "resolve_follow_up", "capture_files", "discover_candidates", "capture_record", "revise_record", "capture_candidate"]
     input: dict
 
 
@@ -44,7 +51,7 @@ class NewFollowUp(Strict):
 class Judgment(ContextInput):
     decision: Literal["confirm", "reject", "reconfirm", "retire"]
     reason: Note
-    reviewedEvidenceIds: list[Id] = Field(max_length=100)
+    reviewedEvidenceIds: list[Id] = Field(max_length=1024)
     contentConcern: Note | None
     followUpDisposition: Annotated[NoFollowUp | NewFollowUp, Field(discriminator="kind")]
 
@@ -77,7 +84,7 @@ class Replacement(Strict):
     targetArtifactId: Id
     sourceVersionId: Id
     targetVersionId: Id
-    evidenceIds: list[Id] = Field(min_length=1, max_length=100)
+    evidenceIds: list[Id] = Field(min_length=1, max_length=1024)
 
     @model_validator(mode="after")
     def unique_evidence(self):

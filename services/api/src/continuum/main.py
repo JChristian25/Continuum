@@ -1,6 +1,9 @@
 import secrets
 import time
 import uuid
+import json
+from contextlib import asynccontextmanager
+from threading import Event, Thread
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
@@ -10,18 +13,38 @@ from sqlalchemy import select, text
 from sqlalchemy.exc import SQLAlchemyError
 
 from .config import Settings
+from .acquisition import AcquisitionError
 from .db import make_engine, session_factory
-from .models import Artifact, ArtifactVersion, AssertionRevision, Evidence, ReviewContext, SecurityAudit, Session, View
-from .review import assertion_data, command, history, projection, readable_evidence, scoped
+from .models import Artifact, ArtifactVersion, AssertionRevision, Evidence, FollowUp, ReviewContext, SecurityAudit, Session, View
+from .review import assertion_data, command, follow_up, history, projection, readable_evidence, scoped
 from .schemas import Envelope, Login
+from .pipeline import admit, query
+from .pipeline_schemas import QueryEnvelope
+from .pipeline_models import ReviewViewBinding, Selection, Snapshot
+from .pipeline_models import Activity, EvidenceOrigin, RevisionOrigin
+from .capture import execute as capture_command
 from .security import check_csrf, cookie, current_actor, digest, error, fail, login_attempt, repository_access, utc
 
 
-def create_app(settings=None, engine=None):
+def create_app(settings=None, engine=None, *, worker_enabled=True):
     settings = settings or Settings.from_env()
     engine = engine or make_engine(settings.database_url)
     factory = session_factory(engine)
-    app = FastAPI(title="Continuum review API", version="0.1.0")
+    @asynccontextmanager
+    async def lifespan(app):
+        from .worker import worker_loop
+        stop = Event()
+        worker = Thread(target=worker_loop, args=(factory, stop), daemon=True, name="continuum-worker")
+        if worker_enabled:
+            worker.start()
+        try:
+            yield
+        finally:
+            stop.set()
+            if worker_enabled:
+                worker.join(timeout=5)
+
+    app = FastAPI(title="Continuum review API", version="0.1.0", lifespan=lifespan)
     app.state.engine, app.state.settings = engine, settings
 
     @app.middleware("http")
@@ -55,6 +78,9 @@ def create_app(settings=None, engine=None):
                             "error": error("invalid_input", {"fields": []})})
 
     @app.exception_handler(SQLAlchemyError)
+    @app.exception_handler(AcquisitionError)
+    @app.exception_handler(OSError)
+    @app.exception_handler(json.JSONDecodeError)
     async def unavailable(request, exc):
         return JSONResponse(status_code=503, content={"schemaVersion": "0.1.0", "requestId": request.state.request_id, "error": error("unavailable")})
 
@@ -140,8 +166,22 @@ def create_app(settings=None, engine=None):
         with factory.begin() as db:
             actor, _ = current_actor(db, request, settings, write=True)
             repository = repository_access(db, actor, body.repositoryId, write=True)
-            response = command(db, actor, repository, body)
+            if body.command in {"capture_files", "discover_candidates"}:
+                response = admit(db, actor, repository, body)
+            elif body.command in {"capture_record", "revise_record", "capture_candidate"}:
+                response = capture_command(db, actor, repository, body)
+            else:
+                response = command(db, actor, repository, body)
         return response
+
+    @app.post("/api/v1/queries")
+    def execute_query(request: Request, body: QueryEnvelope):
+        request.state.request_id = body.requestId
+        with factory.begin() as db:
+            actor, _ = current_actor(db, request, settings, write=True)
+            repository = repository_access(db, actor, body.repositoryId)
+            result = query(db, repository, body)
+        return {"schemaVersion": "0.1.0", "requestId": body.requestId, "result": result}
 
     @app.get("/api/v1/repositories/{repository_id}/contexts/{context_id}")
     def read_context(repository_id: str, context_id: str, request: Request, viewId: str):
@@ -152,10 +192,21 @@ def create_app(settings=None, engine=None):
             view = scoped(db, View, viewId, repository_id)
             if view.context_id != context.id:
                 fail("invalid_input")
+            binding = db.get(ReviewViewBinding, view.id)
+            if binding:
+                retained = db.get(Snapshot, binding.snapshot_id)
+                selected = db.get(Selection, binding.selection_id)
+                item = next(row for row in retained.document["assertions"] if row["projection"]["contextId"] == context.id)
+                mode = "historical" if view.mode == "historical" or selected.snapshot_version != retained.snapshot_version or context.resolution == "superseded" else "active"
+                return {"viewId": view.id, "mode": mode, **item,
+                        "followUps": [work for work in retained.document["followUps"] if work["contextId"] == context.id]}
             revision = scoped(db, AssertionRevision, context.assertion_revision_id, repository_id)
             evidence = [readable_evidence(db, scoped(db, Evidence, identity, repository_id)) for identity in revision.evidence_ids]
+            origin = db.get(RevisionOrigin, revision.id)
             return {"viewId": view.id, "mode": "historical" if context.resolution == "superseded" else view.mode,
-                    "projection": projection(context), "assertion": assertion_data(db, revision), "evidence": evidence}
+                    "projection": projection(context), "assertion": assertion_data(db, revision), "evidence": evidence,
+                    "provenance": db.get(Activity, origin.activity_id).document if origin else None,
+                    "followUps": [follow_up(work) for work in db.scalars(select(FollowUp).where(FollowUp.context_id == context.id).order_by(FollowUp.id))]}
 
     @app.get("/api/v1/repositories/{repository_id}/versions/{version_id}")
     def read_version(repository_id: str, version_id: str, request: Request):
@@ -175,7 +226,9 @@ def create_app(settings=None, engine=None):
             actor, _ = current_actor(db, request, settings)
             repository_access(db, actor, repository_id)
             evidence = scoped(db, Evidence, evidence_id, repository_id)
-            return readable_evidence(db, evidence, include_excerpt=True)
+            origin = db.get(EvidenceOrigin, evidence.id)
+            return {**readable_evidence(db, evidence, include_excerpt=True),
+                    "provenance": db.get(Activity, origin.activity_id).document if origin else None}
 
     @app.get("/api/v1/repositories/{repository_id}/contexts/{context_id}/history")
     def read_history(repository_id: str, context_id: str, request: Request, viewId: str,

@@ -1,0 +1,133 @@
+{
+  "schemaVersion": "processing-verification-0.1.0",
+  "observedOn": "2026-11-13",
+  "checkpointCommit": "e3381c4b3fb0e2c4c3707c9f9e1a9bb445539a8e",
+  "buildIdentity": "tested source-file SHA-256 map after checkpoint",
+  "manifestSha256": "57fe399e8f70706748f22307c272b9c612c703b1fac036477fb00d6c304e7b37",
+  "profileSha256": "eeea88c56462a0f90c4f38ee1027bd214bc429cc64fecc0bb1b67bd29ca3fc75",
+  "inputAcceptance": "healthchecks-input-acceptance.json",
+  "profileAcceptance": "discovery-profile-acceptance.json",
+  "earlierAcquisitionResultSha256": "820be0add4297168c29d642398d581632bfc2a8b803bffa6e45f7d3df2b98e93",
+  "earlierAcquisitionImplementationArchive": "outputs/healthchecks-processing/history/31d74e22667f5a46039df83ebb74711d0897a637d12b1d9679202db9f38cad15/acquisition.py",
+  "sourceAcquisition": "18 declared blobs verified and revalidated; original receipt retained",
+  "standaloneReportsReproducedByteForByte": true,
+  "standaloneReports": [
+    {
+      "revisionLabel": "codeBase",
+      "commitId": "0f78e117eadb59a01dd51e09344479fa3eeb4187",
+      "report": "outputs/healthchecks-discovery/57fe399e8f70706748f22307c272b9c612c703b1fac036477fb00d6c304e7b37/eeea88c56462a0f90c4f38ee1027bd214bc429cc64fecc0bb1b67bd29ca3fc75/0f78e117eadb59a01dd51e09344479fa3eeb4187.json",
+      "reportSha256": "f7e294a845564d2e9b5ac42ec26d62cba79d11156e0930d2e22ceffe0c7c6555",
+      "candidateCount": 19,
+      "status": "complete",
+      "independentCheck": {
+        "id": "UP-07",
+        "passed": true,
+        "applicable": true,
+        "manualCaptureUsed": false
+      }
+    },
+    {
+      "revisionLabel": "codeTarget",
+      "commitId": "c62d6648d81e1aebc65f80bddc72f165fba7320b",
+      "report": "outputs/healthchecks-discovery/57fe399e8f70706748f22307c272b9c612c703b1fac036477fb00d6c304e7b37/eeea88c56462a0f90c4f38ee1027bd214bc429cc64fecc0bb1b67bd29ca3fc75/c62d6648d81e1aebc65f80bddc72f165fba7320b.json",
+      "reportSha256": "f75a361324b0c68418b4ece25df9823d8cdc61ee57933608a127321d5ce29549",
+      "candidateCount": 19,
+      "status": "complete",
+      "independentCheck": {
+        "id": "UP-07",
+        "passed": null,
+        "applicable": false,
+        "manualCaptureUsed": false
+      }
+    },
+    {
+      "revisionLabel": "docsBase",
+      "commitId": "4d6db613da927840414750344172c35846358997",
+      "report": "outputs/healthchecks-discovery/57fe399e8f70706748f22307c272b9c612c703b1fac036477fb00d6c304e7b37/eeea88c56462a0f90c4f38ee1027bd214bc429cc64fecc0bb1b67bd29ca3fc75/4d6db613da927840414750344172c35846358997.json",
+      "reportSha256": "d297dae8d0044430def9ee5e2aa9286f4fab05c057d45445388a28836b859af6",
+      "candidateCount": 19,
+      "status": "complete",
+      "independentCheck": {
+        "id": "UP-07",
+        "passed": null,
+        "applicable": false,
+        "manualCaptureUsed": false
+      }
+    },
+    {
+      "revisionLabel": "docsTarget",
+      "commitId": "3cfd32e56dd4113e89bb37589dc3407f54b97d77",
+      "report": "outputs/healthchecks-discovery/57fe399e8f70706748f22307c272b9c612c703b1fac036477fb00d6c304e7b37/eeea88c56462a0f90c4f38ee1027bd214bc429cc64fecc0bb1b67bd29ca3fc75/3cfd32e56dd4113e89bb37589dc3407f54b97d77.json",
+      "reportSha256": "025cae1cf5d88e0a907017141d528bd911a7890755d4dda6ee3a66fc00a5d78a",
+      "candidateCount": 19,
+      "status": "complete",
+      "independentCheck": {
+        "id": "UP-07",
+        "passed": null,
+        "applicable": false,
+        "manualCaptureUsed": false
+      }
+    }
+  ],
+  "sourceFileSha256": {
+    "services/api/src/continuum/__init__.py": "187dd94c012febe1afbbcdb5fdb1e4c2e7c0143aadeac21a65175d7c39c37b62",
+    "services/api/src/continuum/acquisition.py": "937d0a973e17ead109869c395d74c6f59964602cd98ca6bb1eb1bc5aea651c69",
+    "services/api/src/continuum/admin.py": "52e7f421b1a8b1b9d6c60a49078a8ca2f1ce5d9f7ab7997162ea8a71185865da",
+    "services/api/src/continuum/capture.py": "41d635000f1636e77968138a6a14633beb161944615928743fda2a32f5dd9c2c",
+    "services/api/src/continuum/config.py": "20cf2b227034bb0eb7a984bcc0ea1467ab330d4aae490b56a3e5c016bc51047b",
+    "services/api/src/continuum/db.py": "0590fbee53a13f8388478586a21c107e0eb6d508932d40f1fe781d85efd7dab5",
+    "services/api/src/continuum/discovery.py": "70af126cc4d80b812a8f9ee3abb2d4b86216a585d970deaaba4900ee522b3474",
+    "services/api/src/continuum/main.py": "c12b84ad8c1973b9325089f8794abcfcfb0e318d74f160067d6aa2c46b25ee0c",
+    "services/api/src/continuum/models.py": "836710f1b790c63f618f3de3bcb40b481b6f5bb01c043f485c9b5364f34448fd",
+    "services/api/src/continuum/pipeline.py": "7e2a6148d53185edac6253fea78f82ecf2d5b5fe20a39f4bd463bd91342487aa",
+    "services/api/src/continuum/pipeline_models.py": "0a8f7f6a37d60582747b4e60cf578b632a33d42782ec00e6156c3f0f0e3c81be",
+    "services/api/src/continuum/pipeline_schemas.py": "13d2bbf37a1c37f62fcabca50fbb66bda04341424660583041133804f3becd5b",
+    "services/api/src/continuum/review.py": "14b0082b43e73b4b19e18c066b79c0366bd789a2fefa960bf3bcc2db68341783",
+    "services/api/src/continuum/schemas.py": "973155b82f6f9617fdbb47dd98c4946ce1d92fea02f30c6462e05e19d73826a6",
+    "services/api/src/continuum/security.py": "cb740b962ad1f901f87797da61bef1c38690a6dfe3c8f29c3cd166ef1fe251bf",
+    "services/api/src/continuum/worker.py": "1c908001018166d76903ba76e3eeff73a72f10c0df75ebe1751baa9f8df2e1ad"
+  },
+  "testFileSha256": {
+    "services/api/tests/conftest.py": "c5684201678a7aac5af80d74d205b60666e5e1cbc1fb39dfb3b79d6df1f8b5f5",
+    "services/api/tests/test_acquisition.py": "44c031fe5d1b7ac28e1e5335fb0a1b17b24b511ef46c18d1a9580693c834b3d5",
+    "services/api/tests/test_admin.py": "077bc90dbfaff563390a2a60702a78974c19ef757a04377c4830c605e145c01a",
+    "services/api/tests/test_capture.py": "3665036460b7085e550ea2aecce600017ac508e062486f34e514770dba75a73b",
+    "services/api/tests/test_discovery.py": "dd2932ad7c86b8216d20eeafadccf51a2465e8730b6488b85f42313bfc61d030",
+    "services/api/tests/test_pipeline.py": "a24f2b47880c0300091480450b414fcfa4a6f664fa96d733340234815631c9d9",
+    "services/api/tests/test_process.py": "86ac10d9cd226c9c37fe1724d0045aaf75efbbc35ca0a3bf6d849e3f89d46462",
+    "services/api/tests/test_review.py": "4433009e23b4aa1b88479ef92a5a418a513110ac5bfe663747ffc46adfce8e3b"
+  },
+  "verification": {
+    "fullBackendSuite": {
+      "passed": 104,
+      "failed": 0
+    },
+    "subsequentlyAddedEmbeddedWorkerTcpTest": {
+      "passed": 1,
+      "failed": 0
+    },
+    "postPortabilityChangeTargetedCaptureTest": {
+      "passed": 1,
+      "failed": 0
+    },
+    "currentFrontendWorkflowTests": {
+      "passed": 5,
+      "failed": 0
+    },
+    "dependencyConsistency": "passed",
+    "serviceCaptureDiscovery": "verified in isolated PostgreSQL with accepted real source and synthetic service accounts",
+    "manualAutomaticSeparation": "verified",
+    "authoredVersionHistory": "verified",
+    "workerPublicationGuards": "verified",
+    "selectedRevisionComparison": "not_implemented",
+    "frontendAdapter": "not_implemented",
+    "browserSessionUx": "not_run",
+    "upstreamCodeOrTests": "not_run",
+    "deployment": "not_run"
+  },
+  "limitations": [
+    "Lexical candidates are unconfirmed and are not semantic precision/recall evidence.",
+    "No genuine practitioner judgments, participant administration or research outcome is claimed.",
+    "The frontend remains synthetic; the complete continuity cycle is not implemented."
+  ]
+}

@@ -1,5 +1,6 @@
 import argparse
 import getpass
+from pathlib import Path
 
 from sqlalchemy import select
 
@@ -13,6 +14,16 @@ def main():
     parser = argparse.ArgumentParser(description="Local Continuum operator tool; no public account or role API.")
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("init-db", help="Create the initial additive schema; never resets existing data")
+    commands.add_parser("worker-once", help="Process at most one durable queued/expired operation")
+    register = commands.add_parser("register-input", help="Register an acquired accepted input; acquires no new source")
+    register.add_argument("repository_id")
+    register.add_argument("manifest", type=Path)
+    register.add_argument("acceptance", type=Path)
+    profile = commands.add_parser("register-profile", help="Register a separately accepted discovery profile")
+    profile.add_argument("repository_id")
+    profile.add_argument("inventory_id")
+    profile.add_argument("profile", type=Path)
+    profile.add_argument("acceptance", type=Path)
     create = commands.add_parser("create-account", help="Provision an individually named account; password is prompted")
     create.add_argument("login")
     create.add_argument("display_name")
@@ -31,6 +42,10 @@ def main():
     if args.command == "init-db":
         initialize(engine)
         print("Initial schema is present. No records were removed.")
+        return
+    if args.command == "worker-once":
+        from .worker import worker_once
+        print("Processed one operation." if worker_once(session_factory(engine)) else "No eligible work was published.")
         return
     password_hash = None
     if args.command in {"create-account", "reset-password"}:
@@ -57,6 +72,16 @@ def main():
             db.add(repository)
             db.flush()
             print("Created repository identity", repository.id)
+        elif args.command in {"register-input", "register-profile"}:
+            from .pipeline import register_input, register_profile
+            if not db.get(Repository, args.repository_id):
+                parser.error("Repository not found")
+            if args.command == "register-input":
+                registered = register_input(db, args.repository_id, args.manifest, args.acceptance)
+            else:
+                registered = register_profile(db, args.repository_id, args.inventory_id, args.profile, args.acceptance)
+            db.add(SecurityAudit(subject_actor_id=None, recorded_at=utc(), action=args.command.replace("-", "_"), outcome="success"))
+            print("Registered", registered.id)
         else:
             actor = db.scalar(select(Account).where(Account.login == args.login.strip().casefold()).with_for_update())
             if actor is None:

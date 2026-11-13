@@ -70,7 +70,7 @@ def setup():
                         assertion_revision_id="revision" + suffix, mode="active"))
         db.add(View(id="historical", repository_id="repo", context_id="context1", assertion_revision_id="revision1", mode="historical"))
     settings = Settings(url, origin="https://test")
-    app = create_app(settings, engine)
+    app = create_app(settings, engine, worker_enabled=False)
     with TestClient(app, base_url="https://test", raise_server_exceptions=False) as client:
         yield {"client": client, "app": app, "engine": engine, "db": factory, "password": password, "schema": schema}
     engine.dispose()

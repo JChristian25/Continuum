@@ -1,0 +1,86 @@
+{
+  "schemaVersion": "discovery-profile-0.1.0",
+  "id": "HC-LEXICAL-2026-11-13-P1",
+  "methodId": "lexical-file-v1",
+  "status": "proposed_not_accepted",
+  "basis": "P-08, with explicit lexical, evidence and operating boundaries",
+  "manifestSha256": "57fe399e8f70706748f22307c272b9c612c703b1fac036477fb00d6c304e7b37",
+  "language": "Python",
+  "documentFormats": ["Markdown", "plain-text"],
+  "scope": "file",
+  "relationType": "documents",
+  "direction": "document_to_code",
+  "codeIndex": {
+    "identifiers": "Python tokenize.NAME tokens, excluding the frozen reserved words before splitting",
+    "commentsAndStringLiterals": "not indexed as identifiers",
+    "filenameStems": true,
+    "firstIdentifierSpan": "earliest source line, then column, then original token text",
+    "filenameOnlyEvidence": "exact version path field; never invent a source-line match",
+    "parseFailure": "partial scope with affected path and reason; never complete no-match"
+  },
+  "tokenization": {
+    "alphabet": "ASCII letters and digits",
+    "splitAcronymBoundaryRegex": "([A-Z])([A-Z][a-z])",
+    "splitLowerToUpperBoundaryRegex": "([a-z0-9])([A-Z])",
+    "splitOrder": ["acronym boundary", "lowercase-or-digit to uppercase boundary", "non-ASCII-alphanumeric separators"],
+    "normalization": "lowercase after splitting",
+    "minimumLength": 4,
+    "pythonReservedWords": ["False", "None", "True", "and", "as", "assert", "async", "await", "break", "class", "continue", "def", "del", "elif", "else", "except", "finally", "for", "from", "global", "if", "import", "in", "is", "lambda", "nonlocal", "not", "or", "pass", "raise", "return", "try", "while", "with", "yield"],
+    "stopWords": ["this", "that", "with", "from", "have", "will", "your", "into", "return", "returns", "true", "false", "none", "code", "file"],
+    "unicodeLimitation": "Non-ASCII identifier semantics are not analyzed; disclose this limitation"
+  },
+  "documentation": {
+    "processing": "literal lines of strict UTF-8 text, including raw Markdown and fenced examples",
+    "templateRendering": false,
+    "executeExamples": false,
+    "followLinks": false,
+    "explicitPaths": "case-sensitive repository-relative .py paths that exactly match selected inventory entries",
+    "relativeToDocumentDirectory": false,
+    "unresolvedPath": "retain path, document line and reason; do not fabricate a code endpoint"
+  },
+  "matching": {
+    "rules": ["explicit repository-relative path", "at least one retained token shared with the code index"],
+    "aggregation": "one candidate per directed document/code pair at exact selected endpoint versions; retain distinct rule/token/line evidence",
+    "ordering": "document path, code path, document line, rule, token, code line and column",
+    "requiredEvidence": "exact document line plus matching code identifier span or exact path-field evidence",
+    "confirmation": "always requires a separate authorized human judgment",
+    "confidenceProbability": null,
+    "manualCapture": "separate origin and results; cannot repair an automatic miss",
+    "coChange": "disabled for this initial profile",
+    "futureRevisionInput": "prohibited"
+  },
+  "limits": {
+    "maximumFileBytes": 1048576,
+    "maximumUniqueInputBytes": 4194304,
+    "maximumPaths": 10,
+    "maximumDocumentLinesPerFile": 20000,
+    "maximumCandidates": 128,
+    "maximumEvidenceItemsPerCandidate": 512,
+    "maximumPageSize": 100,
+    "maximumAttemptSeconds": 60,
+    "maximumOperationSeconds": 300,
+    "workerConcurrency": 1,
+    "leaseSeconds": 30,
+    "heartbeatSeconds": 10,
+    "maximumAttempts": 3,
+    "exceededLimit": "explicit partial/failed scope with named limit; no silent truncation or complete no-impact result"
+  },
+  "independentExpectation": {
+    "id": "UP-07",
+    "baseline": "codeBase",
+    "documentPath": "templates/docs/email.md",
+    "codePath": "hc/api/management/commands/smtpd.py",
+    "retainedToken": "failure",
+    "codeIdentifier": "failure_kw",
+    "expected": "unconfirmed automatic lexical candidate with exact-version evidence",
+    "additionalCandidates": "retain and disclose; do not tune them away to satisfy the example",
+    "status": "conditional on acceptance before execution; no engine run has occurred"
+  },
+  "limitations": [
+    "Lexical overlap proposes candidates; it does not establish semantic correctness.",
+    "File-level matching does not extract or resolve a full semantic program graph.",
+    "Raw templates are not rendered and external documentation is not fetched.",
+    "The declared sample is not complete Healthchecks project coverage.",
+    "Operating defaults are engineering choices, not measured performance results."
+  ]
+}

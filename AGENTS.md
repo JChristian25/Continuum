@@ -20,6 +20,8 @@ On 2026-11-13, the user issued that new implementation instruction ("go build co
 
 Healthchecks is the accepted future test project, with Python as the selected language and Markdown/plain-text document inputs at file scope. Plain text was explicitly added by the user during the latest-manuscript reconciliation. Exact revisions, allowed acquisition, inventory and expected outcomes must be settled before integration. No other local checkout is authorized as an evidence source.
 
+On 2026-11-13 the user accepted the bounded Healthchecks package and separately selected its frozen P-08 profile. The exact input/profile acceptance records and processing verification are under `openspec/changes/establish-versioned-continuity-core/`; use those records rather than inferring approval from a proposed file's existence. Only the declared four commits and ten paths/eighteen blobs are acquired under this package. Retained source is inside ignored `inputs/healthchecks/`; current processing/API boundaries are documented in `services/api/PROCESSING.md`. This does not authorize another local checkout, upstream execution, broader acquisition, migration, deployment or claims that revision revalidation/frontend integration are complete.
+
 ## Design and writing
 
 Preserve `PRODUCT.md`, `DESIGN.md` and the current frontend appearance. Write plain, neutral prose using Humanizer's editorial principles. Use gstack as a review method when available, but never claim a review or integration passed without observed evidence. Do not let a workflow broaden the user's authorization.

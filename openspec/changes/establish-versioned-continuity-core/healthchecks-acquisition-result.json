@@ -1,0 +1,135 @@
+{
+  "schemaVersion": "verification-0.1.0",
+  "status": "source_acquisition_verified",
+  "implementationFile": "services/api/src/continuum/acquisition.py",
+  "implementationSha256": "31d74e22667f5a46039df83ebb74711d0897a637d12b1d9679202db9f38cad15",
+  "acquisitionReceipt": {
+    "schemaVersion": "acquisition-0.1.0",
+    "status": "acquired",
+    "manifestId": "HC-UPSTREAM-2026-11-13-P1",
+    "manifestSha256": "57fe399e8f70706748f22307c272b9c612c703b1fac036477fb00d6c304e7b37",
+    "acceptanceId": "HC-UPSTREAM-2026-11-13-A1",
+    "acceptanceSha256": "029e94245311fd1f45bf464255bb616a2e662c4053fd118a807e36fbf7def33b",
+    "repositoryId": 38067078,
+    "repositoryFullName": "healthchecks/healthchecks",
+    "acquiredAt": "2026-11-13T12:33:58.564966Z",
+    "methodId": "github-rest-immutable-objects-v1",
+    "objects": [
+      {
+        "blobId": "00b7286d35fbc478598e0c272951201a17110eb6",
+        "sizeBytes": 7719,
+        "contentSha256": "54202a54100e8b31acd3a69c61d62d300e3b7ea49361e77bc9fff8266363b27a"
+      },
+      {
+        "blobId": "22e67c326282ca1ba9efeb99883075f153a84225",
+        "sizeBytes": 2673,
+        "contentSha256": "2953666baa50db56fce7008a603b36c55d6b45fec3be84da0746ed5bbf5e7351"
+      },
+      {
+        "blobId": "37a0405e1ebb3e3dd24a57cea86c140300ca2047",
+        "sizeBytes": 1454,
+        "contentSha256": "cab0d620dfcc677bdf92649456e588377fbc0eaa1219fd9ed227710e71891701"
+      },
+      {
+        "blobId": "3897d7ec18c448b3a44c6dab27e342f998c7e4fe",
+        "sizeBytes": 13083,
+        "contentSha256": "4402b31d0ae781a8d0cff41305ac483883747c9a49ba1b22851933251efe8872"
+      },
+      {
+        "blobId": "46b0db8fd60684b3b846c41974db6652602ad3c5",
+        "sizeBytes": 651,
+        "contentSha256": "bcb9d89fd999dd7711f95c8d0dcbed659e2eb41a61a356a00f18110e2a23b81b"
+      },
+      {
+        "blobId": "6b2a70eba7b0be1df686145425b2af77e722eb0d",
+        "sizeBytes": 6140,
+        "contentSha256": "42d74fa22ef0c91c4c4718981b5e6f68ad1f41a312f441583075c474fbcd6ab5"
+      },
+      {
+        "blobId": "7d6de64630650193ad18f834d9c3b38c07f96c5c",
+        "sizeBytes": 51074,
+        "contentSha256": "0d17143091ad580b572de149b3335dca51f1d28065de3fd39a089447750c0c59"
+      },
+      {
+        "blobId": "96baf06e3589a9d3bebd6f1e6f164470b5d81435",
+        "sizeBytes": 15312,
+        "contentSha256": "6f8b238040c2dcbe0f28ba1ee6aa22d7e2b234a04fcfb50bd15fea6c63aa9c05"
+      },
+      {
+        "blobId": "986ec2dcb3fa0586d6adbad91f993be8e182739a",
+        "sizeBytes": 5335,
+        "contentSha256": "29dc8f817233692d34e3cee0f44123a6f7b7dfb181f0980f8c6a5266d15ac497"
+      },
+      {
+        "blobId": "a47f91cd230922b84c90580ac6cfbe6e86560923",
+        "sizeBytes": 30913,
+        "contentSha256": "cbaaf30e8124faf3214a3e852c365007f72da04794187b259bb65b814b961647"
+      },
+      {
+        "blobId": "a7a42bc8da026429fe68b6f605690637c18b6f62",
+        "sizeBytes": 258,
+        "contentSha256": "14f4ed88a7b8845b9b8edb52c3991e690978c2fdf099401ef4d37d2eed9b1036"
+      },
+      {
+        "blobId": "acb329c1d6fe387b773210ef7324a0b3f366911c",
+        "sizeBytes": 30239,
+        "contentSha256": "a071870383e1c50edcd4d62e86a777ad2cf52f798ba256598fd06a4a3defa9f8"
+      },
+      {
+        "blobId": "d15434991c429c84d9d64f1334e821db3c3bdc8a",
+        "sizeBytes": 51247,
+        "contentSha256": "896209d98a0db2a853c5058f7a3b5cb7f8378a59fc169a676920a438373aeef7"
+      },
+      {
+        "blobId": "d83dd3de77059349edd8b704b6c711cdb765f9cf",
+        "sizeBytes": 1644,
+        "contentSha256": "839e8869dd61548cdc49c4745771cc0c603d6eb3fda1500af6bbb7f910394823"
+      },
+      {
+        "blobId": "e9aba3e67290ecf73162a55191a3876e6111d919",
+        "sizeBytes": 19042,
+        "contentSha256": "7d03a1ad852de256695f46b50fa3fb22dd3389a1c71684449f941716d411cb23"
+      },
+      {
+        "blobId": "edbc86f45b94de02bd7e0a083ff9ddac5049170c",
+        "sizeBytes": 30769,
+        "contentSha256": "c337f03ee7c5bcfa901e2bc84741f5c56f5c45372dd687a13c6b45f0cdcf605b"
+      },
+      {
+        "blobId": "f07d3b34211e80b8a18b6f7b1922d703487222a2",
+        "sizeBytes": 11525,
+        "contentSha256": "92ac3293322177365a45c9765894f134ceac56f14dc4023d5953668657ceafd9"
+      },
+      {
+        "blobId": "fe1919ab4547c115a0d45569273b3f4db709db10",
+        "sizeBytes": 5268,
+        "contentSha256": "51f33d5fcebdc5b59dc9fc4f3648d8e865b18f12caab39e2fc1da7f9ee2a74f3"
+      }
+    ],
+    "selectedPathCount": 10,
+    "revisionCount": 4,
+    "coverage": {
+      "sourceAcquisition": "complete_for_selected_inventory",
+      "applicationCapture": "not_run",
+      "extraction": "not_run",
+      "discovery": "not_run",
+      "comparison": "not_run"
+    },
+    "limitations": [
+      "Only the accepted file inventory was acquired.",
+      "No upstream code or tests were executed.",
+      "Acquisition is not application integration."
+    ]
+  },
+  "verification": {
+    "gitBlobIdentity": true,
+    "contentSha256": true,
+    "strictUtf8": true,
+    "manifestAndAcceptanceDigests": true,
+    "unitTests": 21,
+    "applicationCapture": "not_run",
+    "discovery": "not_run",
+    "comparison": "not_run",
+    "frontendIntegration": "not_run"
+  }
+}

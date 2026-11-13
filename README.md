@@ -19,7 +19,7 @@ An integrated software knowledge continuity research prototype.
 </div>
 
 > [!IMPORTANT]
-> **Work in progress.** Continuum is under active specification and development as part of an ongoing thesis. The frontend demonstrates workflows with synthetic data. The first FastAPI/PostgreSQL review service has separate integration tests; frontend integration and real repository processing remain unfinished.
+> **Work in progress.** Continuum is under active specification and development as part of an ongoing thesis. The frontend demonstrates workflows with synthetic data. The FastAPI/PostgreSQL service has bounded real-source capture/discovery and review tests; frontend integration and the complete continuity cycle remain unfinished.
 
 ## Overview
 
@@ -36,7 +36,7 @@ These outcomes describe the proposed system. See the current status below for im
 
 ## Proposed system
 
-The diagrams below summarize the [active continuity proposal](openspec/changes/establish-versioned-continuity-core/proposal.md). They describe the intended complete system. FastAPI, PostgreSQL and server-side sessions were selected for implementation; discovery and real-input decisions remain open. See the [review-service guide](services/api/README.md) for the implemented subset and evidence.
+The diagrams below summarize the [active continuity proposal](openspec/changes/establish-versioned-continuity-core/proposal.md). They describe the intended complete system. FastAPI, PostgreSQL and server-side sessions were selected for implementation; the bounded Healthchecks input and frozen lexical discovery profile have also been accepted. See the [processing guide](services/api/PROCESSING.md) for the implemented subset and evidence.
 
 ### How the parts fit together
 
@@ -64,11 +64,11 @@ The project supports the thesis's development and evaluation work. It remains a 
 
 ## Current status
 
-Implementation began on 2026-11-13. The React 19 / Vite 8 frontend still uses synthetic fixtures and browser storage. A separate FastAPI/PostgreSQL review service now implements sessions, repository permissions, exact-version reads, transactional judgments, correction, reversal, follow-up and retained history. Its 43 PostgreSQL tests include API-process restart and concurrent/failed-write cases. The frontend is not yet connected to it; real repository processing remains unimplemented. See [setup, API and verification boundaries](services/api/README.md).
+Implementation began on 2026-11-13. The React 19 / Vite 8 frontend still uses synthetic fixtures and browser storage. The FastAPI/PostgreSQL service supports accountable review plus bounded Healthchecks acquisition, file capture, candidate discovery, authored records and manual candidates. The 104-test backend suite passed, followed by a separate embedded-worker TCP test. The frontend remains unconnected; incoming revision comparison/revalidation and the remaining knowledge-access operations are unfinished. See [source-processing setup and evidence](services/api/PROCESSING.md) and the [initial review-service guide](services/api/README.md).
 
-The complete continuity cycle also requires artifact capture, candidate discovery, selected Git revision comparisons, revalidation, snapshots and knowledge access. Those remaining capabilities are tracked in the [implementation tasks](openspec/changes/establish-versioned-continuity-core/tasks.md); the review-service subset does not complete the full cycle.
+The complete continuity cycle still requires selected Git revision comparisons, incoming revalidation, complete knowledge access and frontend integration. Remaining work is tracked in the [implementation tasks](openspec/changes/establish-versioned-continuity-core/tasks.md); the working backend subset does not complete the full cycle.
 
-Healthchecks is the accepted future demonstration input, with Python as its selected code language and Markdown/plain-text documents at file scope. Source acquisition, exact revisions, inventory and expected outcomes remain prerequisites. This does not select Continuum's backend language or database.
+Healthchecks is the accepted demonstration input, with Python and Markdown/plain-text documents at file scope. Its [bounded input package](openspec/changes/establish-versioned-continuity-core/healthchecks-input-proposal.md) and separate frozen discovery profile were accepted; eighteen declared blobs have been acquired and verified. Scoped processing tests use those real bytes with isolated synthetic service users. This does not establish a completed demonstration, full-project coverage or semantic discovery accuracy.
 
 ## Repository layout
 
