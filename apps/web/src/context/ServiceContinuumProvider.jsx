@@ -164,6 +164,7 @@ export default function ServiceContinuumProvider({ children }) {
     operation, checkOperation: async () => {
       try { const result = await api.query(operation.repositoryId, 'read_operation', { operationId: operation.operationId });
         const next = { ...operation, ...result }; persist({ ...drafts.current, $operation: next }); setOperation(next);
+        if (selection?.repositoryId === operation.repositoryId) await loadWorkspace(selection);
       } catch (e) { report(e); }
     },
     changeSelection: chosen => { if (!lock.current) loadWorkspace(chosen); },

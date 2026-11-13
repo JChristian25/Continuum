@@ -25,9 +25,8 @@ def port():
         return listener.getsockname()[1]
 
 
-def test_real_frontend_session_snapshot_and_review(captured):
-    _, queued = submit(captured, 'discover_candidates')
-    assert run_operation(captured['db'], queued['result']['operationId'])
+def test_real_frontend_session_snapshot_and_review(pipeline):
+    captured = pipeline
     choice = {**captured['selection'], 'targetRevision': {'objectAlgorithm': 'sha1', 'commitId': 'c62d6648d81e1aebc65f80bddc72f165fba7320b'}}
     selected = ask(captured, captured['headers'], 'select_context', choice)
     target = {**captured, 'selection': choice, 'selected': selected}
@@ -36,7 +35,7 @@ def test_real_frontend_session_snapshot_and_review(captured):
     web_port, api_port = port(), port()
     origin = f'http://127.0.0.1:{web_port}'
     settings = Settings(str(captured['engine'].url.render_as_string(hide_password=False)), origin=origin, local_http=True)
-    app = create_app(settings, captured['engine'], worker_enabled=False)
+    app = create_app(settings, captured['engine'], worker_enabled=True)
     server = uvicorn.Server(uvicorn.Config(app, host='127.0.0.1', port=api_port, log_level='error'))
     thread = Thread(target=server.run, daemon=True)
     thread.start()
@@ -58,13 +57,13 @@ def test_real_frontend_session_snapshot_and_review(captured):
             else:
                 raise AssertionError('Isolated frontend/API did not start')
             result = subprocess.run([shutil.which('node'), str(WORKSPACE / 'apps/web/tests/service-browser.mjs')],
-                input=json.dumps({'url': origin, 'password': captured['password']}), text=True, capture_output=True, timeout=120)
+                input=json.dumps({'url': origin, 'password': captured['password']}), text=True, capture_output=True, timeout=240)
             assert result.returncode == 0, result.stdout + result.stderr
             evidence = json.loads(result.stdout.strip())
             assert evidence['passed']
             (output / 'browser-result.json').write_text(json.dumps(evidence, indent=2))
             with captured['db']() as db:
-                assert db.scalar(select(func.count()).select_from(ReviewEvent).where(ReviewEvent.type == 'judgment')) == 1
+                assert db.scalar(select(func.count()).select_from(ReviewEvent).where(ReviewEvent.type == 'judgment')) == 19
         finally:
             vite.terminate()
             vite.wait(timeout=10)

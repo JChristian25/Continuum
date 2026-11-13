@@ -1,7 +1,22 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ContinuumApi, ServiceError } from './serviceApi.js';
-import { DraftStore, draftKey, judgmentInput, chooseSelection } from './serviceModel.js';
+import { DraftStore, draftKey, judgmentInput, chooseSelection, optionalReason, reasonLabel } from './serviceModel.js';
+
+test('only initial candidates allow absent reason and drafts remain verbatim', () => {
+  const detail = { mode: 'active', projection: { kind: 'initial', comparisonId: null, validity: 'candidate', resolution: 'open' }, evidence: [{ id: 'e' }] };
+  const draft = { decision: 'confirm', reason: '  ', inspected: true, contentConcern: '', followUpKind: 'none' };
+  assert.equal(optionalReason(detail, 'confirm'), true);
+  assert.equal(judgmentInput(detail, draft).reason, null);
+  assert.equal(draft.reason, '  ');
+  assert.equal(judgmentInput(detail, { ...draft, reason: '  My evidence.  ' }).reason, '  My evidence.  ');
+  assert.equal(judgmentInput(detail, { ...draft, decision: 'reject', inspected: false }).reason, null);
+  assert.throws(() => judgmentInput(detail, { ...draft, inspected: false }), /Inspect/);
+  assert.throws(() => judgmentInput({ ...detail, projection: { ...detail.projection, kind: 'incoming' } }, draft), /reason/);
+  assert.equal(reasonLabel(null), 'No reason provided');
+  assert.equal(reasonLabel('  '), 'No reason provided');
+  assert.equal(reasonLabel('  Text  '), '  Text  ');
+});
 
 test('service errors retain uncertainty without exposing a synthetic fallback', async () => {
   const api = new ContinuumApi(async () => { throw new TypeError('offline'); });

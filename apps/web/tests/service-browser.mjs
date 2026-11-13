@@ -1,5 +1,6 @@
 import { chromium, expect } from '@playwright/test';
 import { fileURLToPath } from 'node:url';
+import { readFile } from 'node:fs/promises';
 let input = '';
 for await (const chunk of process.stdin) input += chunk;
 const { url, password } = JSON.parse(input);
@@ -19,6 +20,35 @@ try {
   await page.getByLabel('Password', { exact: true }).fill(password);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.locator('.service-live-state').filter({ hasText: 'active' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Repository progress' })).toContainText('not started');
+  await page.getByRole('button', { name: 'Capture or inspect sources' }).click();
+  // Discovery cannot silently succeed before capture.
+  await page.getByRole('button', { name: 'Discover unconfirmed candidates', exact: true }).click();
+  await expect.poll(async () => {
+    await page.getByRole('button', { name: 'Check processing status', exact: true }).click();
+    return page.locator('.inline-notice').filter({ hasText: 'Operation ' }).innerText();
+  }, { timeout: 20000 }).toContain('failed');
+  await page.getByRole('button', { name: 'Workspace', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Repository progress' })).toContainText('failed');
+  await page.screenshot({ path: fileURLToPath(new URL('../../../outputs/frontend-integration/progress-failure-desktop.png', import.meta.url)), fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: fileURLToPath(new URL('../../../outputs/frontend-integration/progress-failure-mobile.png', import.meta.url)), fullPage: true });
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.getByRole('button', { name: 'Capture or inspect sources' }).click();
+  await page.getByRole('button', { name: 'Capture accepted files', exact: true }).click();
+  await expect.poll(async () => {
+    await page.getByRole('button', { name: 'Check processing status', exact: true }).click();
+    return page.locator('.inline-notice').filter({ hasText: 'Operation ' }).innerText();
+  }, { timeout: 20000 }).toContain('complete');
+  await page.getByRole('button', { name: 'Workspace', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Repository progress' })).toContainText('complete');
+  await page.getByRole('button', { name: 'Run discovery or inspect results' }).click();
+  await page.getByRole('button', { name: 'Discover unconfirmed candidates', exact: true }).click();
+  await expect.poll(async () => {
+    await page.getByRole('button', { name: 'Check processing status', exact: true }).click();
+    return page.locator('.inline-notice').filter({ hasText: 'Operation ' }).innerText();
+  }, { timeout: 20000 }).toMatch(/complete|partial/);
+  await page.getByRole('button', { name: 'Workspace', exact: true }).click();
   await expect.poll(async () => (await page.locator('.focus-brief').boundingBox()).height).toBeGreaterThan(150);
   await expect(page.locator('.service-row')).toHaveCount(0);
   await page.screenshot({ path: fileURLToPath(new URL('../../../outputs/frontend-integration/workspace.png', import.meta.url)), fullPage: true });
@@ -35,7 +65,7 @@ try {
   await page.getByRole('tab', { name: 'review', exact: true }).click();
   await page.getByRole('combobox', { name: 'Relationship judgment' }).click();
   await page.getByRole('option', { name: 'confirm', exact: true }).click();
-  await page.getByLabel('Reason', { exact: true }).fill('Isolated browser verification of exact-source review; not a research assessment.');
+  await page.getByLabel(/^Reason(?: \(optional\))?$/, { exact: true }).fill('Isolated browser verification of exact-source review; not a research assessment.');
   await page.getByRole('checkbox', { name: 'I inspected the exact sources and recorded evidence.' }).check();
   // Draft survives leaving the context and a browser reload.
   await page.getByRole('button', { name: 'Close inspector' }).click();
@@ -45,7 +75,7 @@ try {
   await page.locator('.service-row').first().click();
   await expect(page.getByRole('heading', { name: 'Recorded evidence' })).toBeVisible();
   await page.getByRole('tab', { name: 'review', exact: true }).click();
-  await expect.poll(() => page.getByRole('textbox', { name: 'Reason', exact: true }).inputValue()).toContain('Isolated browser verification');
+  await expect.poll(() => page.getByRole('textbox', { name: /^Reason(?: \(optional\))?$/, exact: true }).inputValue()).toContain('Isolated browser verification');
   await expect(page.getByRole('combobox', { name: 'Relationship judgment' })).toHaveText('confirm');
   // Another successful operation makes the displayed projection stale.
   const session = await context.request.get(`${url}/api/v1/auth/session`).then(r => r.json());
@@ -57,7 +87,7 @@ try {
   await page.getByRole('button', { name: 'Save judgment', exact: true }).click();
   await expect(page.getByRole('alert')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Retry retained request' })).toHaveCount(0);
-  await expect(page.getByRole('textbox', { name: 'Reason', exact: true })).toHaveValue('Isolated browser verification of exact-source review; not a research assessment.');
+  await expect(page.getByRole('textbox', { name: /^Reason(?: \(optional\))?$/, exact: true })).toHaveValue('Isolated browser verification of exact-source review; not a research assessment.');
   await page.getByRole('button', { name: 'Refresh', exact: true }).click();
   await page.locator('.service-row').first().click();
   await expect(page.getByRole('heading', { name: 'Recorded evidence' })).toBeVisible();
@@ -81,6 +111,38 @@ try {
   await page.getByRole('tab', { name: 'history', exact: true }).click();
   await expect(page.locator('.service-inspector')).toContainText('Isolated browser verification');
   await page.getByRole('button', { name: 'Close inspector' }).click();
+  await page.locator('.service-row').filter({ hasText: 'candidate' }).first().click();
+  await expect(page.getByRole('heading', { name: 'Recorded evidence' })).toBeVisible();
+  await page.getByRole('tab', { name: 'review', exact: true }).click();
+  await page.getByRole('combobox', { name: 'Relationship judgment' }).click();
+  await page.getByRole('option', { name: 'confirm', exact: true }).click();
+  await expect(page.getByLabel('Reason (optional)', { exact: true })).toHaveValue('');
+  await page.getByRole('checkbox', { name: 'I inspected the exact sources and recorded evidence.' }).check();
+  await page.getByRole('button', { name: 'Save judgment', exact: true }).click();
+  await expect(page.locator('.service-row').filter({ hasText: 'confirmed' })).toHaveCount(2);
+  await page.locator('.service-row').filter({ hasText: 'confirmed' }).nth(1).click();
+  await expect(page.getByRole('heading', { name: 'Recorded evidence' })).toBeVisible();
+  await page.getByRole('tab', { name: 'history', exact: true }).click();
+  await expect(page.locator('.service-inspector')).toContainText('No reason provided');
+  await page.screenshot({ path: fileURLToPath(new URL('../../../outputs/frontend-integration/reason-free-history.png', import.meta.url)), fullPage: true });
+  await page.getByRole('button', { name: 'Close inspector' }).click();
+  await page.locator('.service-row').filter({ hasText: 'candidate' }).first().click();
+  await expect(page.getByRole('heading', { name: 'Recorded evidence' })).toBeVisible();
+  await page.getByRole('tab', { name: 'review', exact: true }).click();
+  await page.getByRole('combobox', { name: 'Relationship judgment' }).click();
+  await page.getByRole('option', { name: 'reject', exact: true }).click();
+  await expect(page.getByLabel('Reason (optional)', { exact: true })).toHaveValue('');
+  await page.getByRole('button', { name: 'Save judgment', exact: true }).click();
+  await expect(page.locator('.service-row').filter({ hasText: 'rejected' })).toHaveCount(1);
+  // Reopen the selected context after save and inspect its retained absence state.
+  await page.getByRole('button', { name: 'Workspace', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Repository progress' })).toContainText('reviewed');
+  await page.screenshot({ path: fileURLToPath(new URL('../../../outputs/frontend-integration/progress-desktop.png', import.meta.url)), fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: fileURLToPath(new URL('../../../outputs/frontend-integration/progress-mobile.png', import.meta.url)), fullPage: true });
+  if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)) throw new Error('Progress overflows mobile');
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.getByRole('button', { name: 'Review relationships', exact: true }).click();
   // Retained snapshots are readable and cannot accept a judgment.
   await page.getByText('Revision & snapshot details', { exact: true }).click();
   const retained = page.getByRole('combobox', { name: 'Retained snapshot' });
@@ -151,6 +213,46 @@ try {
   await page.locator('.react-flow__edge-interaction').click({ force: true });
   await expect(page.locator('.service-inspector')).toContainText('Updated captured requirement');
   await page.getByRole('button', { name: 'Close inspector' }).click();
+  // Finish the baseline through separate exact-context UI judgments, then compare again.
+  await page.getByRole('button', { name: 'Workspace', exact: true }).click();
+  await page.getByRole('combobox', { name: 'Selected revision' }).click();
+  await page.getByRole('option').filter({ hasText: '0f78e11' }).click();
+  await page.getByRole('button', { name: 'Review relationships', exact: true }).click();
+  await expect(page.locator('.service-row')).toHaveCount(19);
+  let remaining = await page.locator('.service-row').filter({ hasText: 'candidate' }).count();
+  while (remaining) {
+    await page.locator('.service-row').filter({ hasText: 'candidate' }).first().click();
+    await expect(page.getByRole('heading', { name: 'Recorded evidence' })).toBeVisible();
+    await page.getByRole('tab', { name: 'review', exact: true }).click();
+    await page.getByRole('combobox', { name: 'Relationship judgment' }).click();
+    await page.getByRole('option', { name: 'reject', exact: true }).click();
+    await page.getByRole('button', { name: 'Save judgment', exact: true }).click();
+    await expect(page.locator('.service-row').filter({ hasText: 'candidate' })).toHaveCount(--remaining);
+  }
+  await page.getByRole('button', { name: 'Review summary', exact: true }).click();
+  await page.getByRole('checkbox', { name: 'I acknowledge the disclosed coverage and method limitations.' }).check();
+  await page.getByRole('button', { name: 'Record review completion', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Review completion recorded', exact: true })).toBeVisible();
+  const exportedResponse = page.waitForResponse(response => response.url().endsWith('/api/v1/commands') && response.request().postDataJSON()?.command === 'export_snapshot');
+  await page.getByRole('button', { name: 'Prepare JSON export', exact: true }).click();
+  const exportId = (await (await exportedResponse).json()).result.operationId;
+  const exportSession = await (await page.request.get(`${url}/api/v1/auth/session`)).json();
+  await expect.poll(async () => {
+    const response = await page.request.post(`${url}/api/v1/queries`, { headers: { Origin: url, 'X-CSRF-Token': exportSession.csrfToken }, data: { schemaVersion: '0.1.0', requestId: crypto.randomUUID(), repositoryId: 'repo', query: 'read_export', input: { operationId: exportId } } });
+    return (await response.json()).result.status;
+  }, { timeout: 20000 }).toBe('complete');
+  const downloadEvent = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Check export & download', exact: true }).click();
+  const downloaded = await downloadEvent;
+  const exportPath = fileURLToPath(new URL('../../../outputs/frontend-integration/review-export.json', import.meta.url));
+  await downloaded.saveAs(exportPath);
+  const exportedJson = JSON.parse(await readFile(exportPath, 'utf8'));
+  if (!exportedJson.judgments.some(j => j.effectiveEvent?.reasonStatus === 'not_provided' && j.effectiveEvent.reason === null)) throw new Error('Export lost absent rationale');
+  await page.getByRole('combobox', { name: 'Selected revision' }).click();
+  await page.getByRole('option').filter({ hasText: 'c62d664' }).click();
+  await page.getByText('Compare revisions', { exact: true }).click();
+  await page.getByRole('button', { name: 'Compare and review impact' }).click();
+  await expect(page.getByText(/changed paths · .* affected relationships/)).toBeVisible();
   await page.getByRole('button', { name: 'Account', exact: true }).click();
   await page.getByRole('button', { name: 'Sign out', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Welcome back to Continuum.' })).toBeVisible();
@@ -178,5 +280,5 @@ try {
   await expect(demo.getByLabel('Demo email', { exact: true })).toBeVisible();
   await demoContext.close();
   if (errors.length) throw new Error(errors.join('\n'));
-  console.log(JSON.stringify({ passed: true, cases: ['cookie login', 'demo isolation', 'real snapshot', 'exact sources', 'durable draft', 'stale projection preserves draft', 'lost response identical retry', 'persisted judgment and history', 'typed manual requirement link', 'record revision revalidation', 'prior evidence read-only', 'server content search', 'retained historical read-only', 'file explorer', 'viewer read-only', 'logout', 'offline fails closed'], pageErrors: errors }));
+  console.log(JSON.stringify({ passed: true, cases: ['first-load capture and discovery', 'reason-free confirmation and rejection', 'desktop/mobile progress', 'cookie login', 'demo isolation', 'real snapshot', 'exact sources', 'durable draft', 'stale projection preserves draft', 'lost response identical retry', 'persisted judgment and history', 'typed manual requirement link', 'record revision revalidation', 'prior evidence read-only', 'server content search', 'retained historical read-only', 'file explorer', 'viewer read-only', 'logout', 'offline fails closed'], pageErrors: errors }));
 } finally { await browser.close(); }

@@ -39,15 +39,20 @@ export const draftKey = (selection, row) => JSON.stringify([
 
 export const emptyDraft = () => ({ decision: '', reason: '', contentConcern: '', followUpKind: 'none', followUpNote: '', independentNote: '', inspected: false });
 
+export const optionalReason = (detail, decision) => detail?.projection.kind === 'initial'
+  && !detail.projection.comparisonId && detail.projection.validity === 'candidate'
+  && detail.projection.resolution === 'open' && ['confirm', 'reject'].includes(decision);
+export const reasonLabel = reason => typeof reason === 'string' && reason.trim() ? reason : 'No reason provided';
+
 export function judgmentInput(detail, draft) {
   const projection = detail.projection;
   if (detail.mode !== 'active') throw new Error('This is a retained historical view. Refresh the current workspace to write.');
   if (!permittedDecisions(projection).includes(draft.decision)) throw new Error('Choose an available relationship judgment.');
-  if (!draft.reason.trim()) throw new Error('Add a reason for the next reviewer.');
+  if (!optionalReason(detail, draft.decision) && !draft.reason.trim()) throw new Error('Add a reason for the next reviewer.');
   if (['confirm', 'reconfirm'].includes(draft.decision) && !draft.inspected) throw new Error('Inspect the exact sources and evidence before confirming.');
   if (draft.followUpKind !== 'none' && !draft.followUpNote.trim()) throw new Error('Describe the independent follow-up work.');
   return { contextId: projection.contextId, assertionRevisionId: projection.assertionRevisionId,
-    expectedProjectionVersion: projection.projectionVersion, decision: draft.decision, reason: draft.reason,
+    expectedProjectionVersion: projection.projectionVersion, decision: draft.decision, reason: draft.reason.trim() ? draft.reason : null,
     reviewedEvidenceIds: detail.evidence.map(item => item.id), contentConcern: draft.contentConcern.trim() ? draft.contentConcern : null,
     followUpDisposition: draft.followUpKind === 'none' ? { kind: 'none' } : { kind: 'open', workKind: draft.followUpKind, note: draft.followUpNote },
   };
