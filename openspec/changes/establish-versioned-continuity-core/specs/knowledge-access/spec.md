@@ -32,6 +32,11 @@ The system SHALL let practitioners search accessible supported records within an
 - **THEN** the result distinguishes no match within searched scope from incomplete coverage
 - **AND** it does not claim that the project contains no relevant knowledge
 
+#### Scenario: Search pages retain the selected snapshot
+- **WHEN** records change after the first page of a search result is retrieved
+- **THEN** subsequent pages retain the original query and exact-version snapshot
+- **AND** changing query scope or snapshot requires a new result sequence
+
 ### Requirement: C-08c Graph-based evidence inspection
 The system SHALL let practitioners navigate a displayed supported relationship to its assertion evidence and retained rationale.
 
@@ -39,6 +44,11 @@ The system SHALL let practitioners navigate a displayed supported relationship t
 - **WHEN** a practitioner selects a displayed relationship between supported artifacts
 - **THEN** its exact endpoint versions, evidence, review state and available decision rationale are inspectable
 - **AND** a candidate is distinguishable from confirmed support
+
+#### Scenario: Unresolved endpoint in a graph scope
+- **WHEN** a selected graph neighborhood contains a relationship whose incoming endpoint is missing or unresolved
+- **THEN** the result discloses that unresolved review context and limitation
+- **AND** omitting an undrawable edge does not establish that the scope has no relationship or pending work
 
 ### Requirement: C-08d Explicit current and historical views
 The system SHALL identify whether displayed knowledge belongs to the selected current context or an earlier retained context.

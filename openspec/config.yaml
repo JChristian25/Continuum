@@ -9,9 +9,11 @@ context: |
   Current implementation: React 19 / Vite 8, JavaScript/JSX, synthetic fixture data,
   browser localStorage/sessionStorage, Node built-in workflow tests.
   No connected backend or real repository processing is verified.
-  Current authorization is OpenSpec setup and specification work only.
-  Do not implement product code, ingest/clone a repository, start services,
-  change package dependencies, deploy, or archive unimplemented requirements.
+  On 2026-11-13 the user authorized implementation and selected FastAPI,
+  PostgreSQL, provisioned accounts and server-side sessions. Follow the active
+  implementation.md and tasks.md for implemented and pending boundaries.
+  Do not ingest/clone external source, migrate existing data, deploy, or archive
+  unimplemented requirements without the corresponding explicit scope.
   Preserve PRODUCT.md and DESIGN.md and the current visual design.
   Existing specs/ documents are research context and engineering proposals;
   extract focused behavior from them rather than bulk-converting them.
@@ -55,7 +57,7 @@ rules:
 operations:
   apply:
     guidance:
-      - Current authorization is specs only; wait for a new explicit implementation request.
+      - Implementation was requested on 2026-11-13; follow implementation.md and preserve unresolved source-acquisition gates.
   archive:
     guidance:
       - Never merge proposed backend behavior into current specs before implementation and verification.

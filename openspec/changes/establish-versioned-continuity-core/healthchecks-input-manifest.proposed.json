@@ -1,0 +1,614 @@
+{
+  "schemaVersion": "proposal-0.1.0",
+  "id": "HC-UPSTREAM-2026-11-13-P1",
+  "status": "proposed_not_accepted",
+  "reviewDate": "2026-11-13",
+  "authorization": {
+    "publicReadOnlyProposal": true,
+    "localAcquisition": false,
+    "ingestion": false,
+    "execution": false,
+    "integration": false
+  },
+  "repository": {
+    "githubId": 38067078,
+    "fullName": "healthchecks/healthchecks",
+    "url": "https://github.com/healthchecks/healthchecks",
+    "visibilityObserved": "public",
+    "defaultBranchObserved": "master",
+    "defaultBranchIsInputIdentity": false
+  },
+  "revisions": {
+    "codeBase": {
+      "objectAlgorithm": "sha1",
+      "commitId": "0f78e117eadb59a01dd51e09344479fa3eeb4187",
+      "treeId": "4ce49058cc13978c847a596c29ad1433ff00c974",
+      "parentIds": [
+        "86405c028e31503a0db10b0751fd1b48047b0af8"
+      ],
+      "authorDate": "2025-11-24T08:31:35Z",
+      "committerDate": "2025-11-26T14:00:16Z",
+      "commitUrl": "https://github.com/healthchecks/healthchecks/commit/0f78e117eadb59a01dd51e09344479fa3eeb4187",
+      "treeMetadataUrl": "https://api.github.com/repos/healthchecks/healthchecks/git/trees/4ce49058cc13978c847a596c29ad1433ff00c974?recursive=1",
+      "treeTruncated": false
+    },
+    "codeTarget": {
+      "objectAlgorithm": "sha1",
+      "commitId": "c62d6648d81e1aebc65f80bddc72f165fba7320b",
+      "treeId": "accdba0056d900bd3058da4a0e99f8747b802a4f",
+      "parentIds": [
+        "0f78e117eadb59a01dd51e09344479fa3eeb4187"
+      ],
+      "authorDate": "2025-11-24T15:59:23Z",
+      "committerDate": "2025-11-26T14:00:20Z",
+      "commitUrl": "https://github.com/healthchecks/healthchecks/commit/c62d6648d81e1aebc65f80bddc72f165fba7320b",
+      "treeMetadataUrl": "https://api.github.com/repos/healthchecks/healthchecks/git/trees/accdba0056d900bd3058da4a0e99f8747b802a4f?recursive=1",
+      "treeTruncated": false
+    },
+    "docsBase": {
+      "objectAlgorithm": "sha1",
+      "commitId": "4d6db613da927840414750344172c35846358997",
+      "treeId": "00c2bebea1549087a050444387537a615e69d134",
+      "parentIds": [
+        "fbd704b53e67f29e18a7f0d989b61071339cafeb"
+      ],
+      "authorDate": "2025-11-25T10:41:21Z",
+      "committerDate": "2025-11-26T14:00:50Z",
+      "commitUrl": "https://github.com/healthchecks/healthchecks/commit/4d6db613da927840414750344172c35846358997",
+      "treeMetadataUrl": "https://api.github.com/repos/healthchecks/healthchecks/git/trees/00c2bebea1549087a050444387537a615e69d134?recursive=1",
+      "treeTruncated": false
+    },
+    "docsTarget": {
+      "objectAlgorithm": "sha1",
+      "commitId": "3cfd32e56dd4113e89bb37589dc3407f54b97d77",
+      "treeId": "75b5a3f70a0a497bebaaa6b97d22fe8620f67f66",
+      "parentIds": [
+        "4d6db613da927840414750344172c35846358997"
+      ],
+      "authorDate": "2025-11-26T11:38:37Z",
+      "committerDate": "2025-11-26T14:01:28Z",
+      "commitUrl": "https://github.com/healthchecks/healthchecks/commit/3cfd32e56dd4113e89bb37589dc3407f54b97d77",
+      "treeMetadataUrl": "https://api.github.com/repos/healthchecks/healthchecks/git/trees/75b5a3f70a0a497bebaaa6b97d22fe8620f67f66?recursive=1",
+      "treeTruncated": false
+    }
+  },
+  "comparisons": [
+    {
+      "id": "HC-UP-CODE-01",
+      "base": "0f78e117eadb59a01dd51e09344479fa3eeb4187",
+      "target": "c62d6648d81e1aebc65f80bddc72f165fba7320b",
+      "status": "ahead",
+      "totalCommits": 1,
+      "aheadBy": 1,
+      "behindBy": 0,
+      "mergeBase": "0f78e117eadb59a01dd51e09344479fa3eeb4187",
+      "files": [
+        {
+          "path": "hc/api/management/commands/smtpd.py",
+          "status": "modified",
+          "blobId": "986ec2dcb3fa0586d6adbad91f993be8e182739a",
+          "selected": true
+        },
+        {
+          "path": "hc/api/tests/test_ping.py",
+          "status": "modified",
+          "blobId": "e9aba3e67290ecf73162a55191a3876e6111d919",
+          "selected": true
+        },
+        {
+          "path": "hc/api/tests/test_smtpd.py",
+          "status": "modified",
+          "blobId": "3897d7ec18c448b3a44c6dab27e342f998c7e4fe",
+          "selected": true
+        },
+        {
+          "path": "hc/api/views.py",
+          "status": "modified",
+          "blobId": "edbc86f45b94de02bd7e0a083ff9ddac5049170c",
+          "selected": true
+        },
+        {
+          "path": "hc/lib/string.py",
+          "status": "modified",
+          "blobId": "d83dd3de77059349edd8b704b6c711cdb765f9cf",
+          "selected": true
+        }
+      ]
+    },
+    {
+      "id": "HC-UP-DOC-01",
+      "base": "4d6db613da927840414750344172c35846358997",
+      "target": "3cfd32e56dd4113e89bb37589dc3407f54b97d77",
+      "status": "ahead",
+      "totalCommits": 1,
+      "aheadBy": 1,
+      "behindBy": 0,
+      "mergeBase": "4d6db613da927840414750344172c35846358997",
+      "files": [
+        {
+          "path": "static/img/docs/filtering_rules.png",
+          "status": "modified",
+          "blobId": "57f69afa02e31b98b144bc42b3df24e585e2dea5",
+          "selected": false
+        },
+        {
+          "path": "templates/docs/configuring_checks.html-fragment",
+          "status": "modified",
+          "blobId": "f3cb6d6a0f987ef5228b8ee9b31af00644bfbe85",
+          "selected": false
+        },
+        {
+          "path": "templates/docs/configuring_checks.md",
+          "status": "modified",
+          "blobId": "00b7286d35fbc478598e0c272951201a17110eb6",
+          "selected": true
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "selectedPaths": 10,
+    "pythonPaths": 7,
+    "markdownPaths": 2,
+    "plainTextPaths": 1,
+    "revisionPathBindings": 40,
+    "uniqueBlobs": 18,
+    "totalBindingBytes": 518814,
+    "uniqueBlobBytes": 284346
+  },
+  "acquisitionProposal": {
+    "method": "immutable GitHub REST commit/tree/blob reads after explicit approval",
+    "sourceHosts": [
+      "api.github.com"
+    ],
+    "destination": "inputs/healthchecks/<accepted-manifest-sha256>/objects/<blob-id>",
+    "allowedModes": [
+      "100644"
+    ],
+    "symlinks": "reject",
+    "submodules": "reject",
+    "followImports": false,
+    "followDocumentationLinks": false,
+    "renderTemplates": false,
+    "executeSource": false,
+    "installUpstreamDependencies": false,
+    "fetchBranchTips": false,
+    "contentEncoding": "UTF-8 strict after raw-byte identity verification",
+    "fileBytesMaximum": 1048576,
+    "totalUniqueBlobBytesMaximum": 4194304,
+    "retainRawBytes": true,
+    "recordContentSha256": true
+  },
+  "entries": [
+    {
+      "path": "hc/api/views.py",
+      "kind": "code",
+      "format": "Python",
+      "revisions": {
+        "codeBase": {
+          "commit": "0f78e117eadb59a01dd51e09344479fa3eeb4187",
+          "blobId": "acb329c1d6fe387b773210ef7324a0b3f366911c",
+          "sizeBytes": 30239,
+          "mode": "100644",
+          "type": "blob",
+          "contentSha256": null,
+          "acquisitionStatus": "not_locally_acquired"
+        },
+        "codeTarget": {
+          "commit": "c62d6648d81e1aebc65f80bddc72f165fba7320b",
+          "blobId": "edbc86f45b94de02bd7e0a083ff9ddac5049170c",
+          "sizeBytes": 30769,
+          "mode": "100644",
+          "type": "blob",
+          "contentSha256": null,
+          "acquisitionStatus": "not_locally_acquired"
+        },
+        "docsBase": {
+          "commit": "4d6db613da927840414750344172c35846358997",
+          "blobId": "a47f91cd230922b84c90580ac6cfbe6e86560923",
+          "sizeBytes": 30913,
+          "mode": "100644",
+          "type": "blob",
+          "contentSha256": null,
+          "acquisitionStatus": "not_locally_acquired"
+        },
+        "docsTarget": {
+          "commit": "3cfd32e56dd4113e89bb37589dc3407f54b97d77",
+          "blobId": "a47f91cd230922b84c90580ac6cfbe6e86560923",
+          "sizeBytes": 30913,
+          "mode": "100644",
+          "type": "blob",
+          "contentSha256": null,
+          "acquisitionStatus": "not_locally_acquired"
+        }
+      }
+    },
+    {
+      "path": "hc/api/management/commands/smtpd.py",
+      "kind": "code",
+      "format": "Python",
+      "revisions": {
+        "codeBase": {
+          "commit": "0f78e117eadb59a01dd51e09344479fa3eeb4187",
+          "blobId": "fe1919ab4547c115a0d45569273b3f4db709db10",
+          "sizeBytes": 5268,
+          "mode": "100644",
+          "type": "blob",
+          "contentSha256": null,
+          "acquisitionStatus": "not_locally_acquired"
+        },
+        "codeTarget": {
+          "commit": "c62d6648d81e1aebc65f80bddc72f165fba7320b",
+          "blobId": "986ec2dcb3fa0586d6adbad91f993be8e182739a",
+          "sizeBytes": 5335,
+          "mode": "100644",
+          "type": "blob",
+          "contentSha256": null,
+          "acquisitionStatus": "not_locally_acquired"
+        },
+        "docsBase": {
+          "commit": "4d6db613da927840414750344172c35846358997",
+          "blobId": "986ec2dcb3fa0586d6adbad91f993be8e182739a",
+          "sizeBytes": 5335,
+          "mode": "100644",
+          "type": "blob",
+          "contentSha256": null,
+          "acquisitionStatus": "not_locally_acquired"
+        },
+        "docsTarget": {
+          "commit": "3cfd32e56dd4113e89bb37589dc3407f54b97d77",
+          "blobId": "986ec2dcb3fa0586d6adbad91f993be8e182739a",
+          "sizeBytes": 5335,
+          "mode": "100644",
+          "type": "blob",
+          "contentSha256": null,
+          "acquisitionStatus": "not_locally_acquired"
+        }
+      }
+    },
+    {
+      "path": "hc/lib/string.py",
+      "kind": "code",
+      "format": "Python",
+      "revisions": {
+        "codeBase": {
+          "commit": "0f78e117eadb59a01dd51e09344479fa3eeb4187",
+          "blobId": "37a0405e1ebb3e3dd24a57cea86c140300ca2047",
+          "sizeBytes": 1454,
+          "mode": "100644",
+          "type": "blob",
+          "contentSha256": null,
+          "acquisitionStatus": "not_locally_acquired"
+        },
+        "codeTarget": {
+          "commit": "c62d6648d81e1aebc65f80bddc72f165fba7320b",
+          "blobId": "d83dd3de77059349edd8b704b6c711cdb765f9cf",
+          "sizeBytes": 1644,
+          "mode": "100644",
+          "type": "blob",
+          "contentSha256": null,
+          "acquisitionStatus": "not_locally_acquired"
+        },
+        "docsBase": {
+          "commit": "4d6db613da927840414750344172c35846358997",
+          "blobId": "d83dd3de77059349edd8b704b6c711cdb765f9cf",
+          "sizeBytes": 1644,
+          "mode": "100644",
+          "type": "blob",
+          "contentSha256": null,
+          "acquisitionStatus": "not_locally_acquired"
+        },
+        "docsTarget": {
+          "commit": "3cfd32e56dd4113e89bb37589dc3407f54b97d77",
+          "blobId": "d83dd3de77059349edd8b704b6c711cdb765f9cf",
+          "sizeBytes": 1644,
+          "mode": "100644",
+          "type": "blob",
+          "contentSha256": null,
+          "acquisitionStatus": "not_locally_acquired"
+        }
+      }
+    },
+    {
+      "path": "hc/api/models.py",
+      "kind": "code",
+      "format": "Python",
+      "revisions": {
+        "codeBase": {
+          "commit": "0f78e117eadb59a01dd51e09344479fa3eeb4187",
+          "blobId": "7d6de64630650193ad18f834d9c3b38c07f96c5c",
+          "sizeBytes": 51074,
+          "mode": "100644",
+          "type": "blob",
+          "contentSha256": null,
+          "acquisitionStatus": "not_locally_acquired"
+        },
+        "codeTarget": {
+          "commit": "c62d6648d81e1aebc65f80bddc72f165fba7320b",
+          "blobId": "7d6de64630650193ad18f834d9c3b38c07f96c5c",
+          "sizeBytes": 51074,
+          "mode": "100644",
+          "type": "blob",
+          "contentSha256": null,
+          "acquisitionStatus": "not_locally_acquired"
+        },
+        "docsBase": {
+          "commit": "4d6db613da927840414750344172c35846358997",
+          "blobId": "d15434991c429c84d9d64f1334e821db3c3bdc8a",
+          "sizeBytes": 51247,
+          "mode": "100644",
+          "type": "blob",
+          "contentSha256": null,
+          "acquisitionStatus": "not_locally_acquired"
+        },
+        "docsTarget": {
+          "commit": "3cfd32e56dd4113e89bb37589dc3407f54b97d77",
+          "blobId": "d15434991c429c84d9d64f1334e821db3c3bdc8a",
+          "sizeBytes": 51247,
+          "mode": "100644",
+          "type": "blob",
+          "contentSha256": null,
+          "acquisitionStatus": "not_locally_acquired"
+        }
+      }
+    },
+    {
+      "path": "hc/api/tests/test_ping.py",
+      "kind": "code",
+      "format": "Python",
+      "revisions": {
+        "codeBase": {
+          "commit": "0f78e117eadb59a01dd51e09344479fa3eeb4187",
+          "blobId": "96baf06e3589a9d3bebd6f1e6f164470b5d81435",
+          "sizeBytes": 15312,
+          "mode": "100644",
+          "type": "blob",
+          "contentSha256": null,
+          "acquisitionStatus": "not_locally_acquired"
+        },
+        "codeTarget": {
+          "commit": "c62d6648d81e1aebc65f80bddc72f165fba7320b",
+          "blobId": "e9aba3e67290ecf73162a55191a3876e6111d919",
+          "sizeBytes": 19042,
+          "mode": "100644",
+          "type": "blob",
+          "contentSha256": null,
+          "acquisitionStatus": "not_locally_acquired"
+        },
+        "docsBase": {
+          "commit": "4d6db613da927840414750344172c35846358997",
+          "blobId": "e9aba3e67290ecf73162a55191a3876e6111d919",
+          "sizeBytes": 19042,
+          "mode": "100644",
+          "type": "blob",
+          "contentSha256": null,
+          "acquisitionStatus": "not_locally_acquired"
+        },
+        "docsTarget": {
+          "commit": "3cfd32e56dd4113e89bb37589dc3407f54b97d77",
+          "blobId": "e9aba3e67290ecf73162a55191a3876e6111d919",
+          "sizeBytes": 19042,
+          "mode": "100644",
+          "type": "blob",
+          "contentSha256": null,
+          "acquisitionStatus": "not_locally_acquired"
+        }
+      }
+    },
+    {
+      "path": "hc/api/tests/test_smtpd.py",
+      "kind": "code",
+      "format": "Python",
+      "revisions": {
+        "codeBase": {
+          "commit": "0f78e117eadb59a01dd51e09344479fa3eeb4187",
+          "blobId": "f07d3b34211e80b8a18b6f7b1922d703487222a2",
+          "sizeBytes": 11525,
+          "mode": "100644",
+          "type": "blob",
+          "contentSha256": null,
+          "acquisitionStatus": "not_locally_acquired"
+        },
+        "codeTarget": {
+          "commit": "c62d6648d81e1aebc65f80bddc72f165fba7320b",
+          "blobId": "3897d7ec18c448b3a44c6dab27e342f998c7e4fe",
+          "sizeBytes": 13083,
+          "mode": "100644",
+          "type": "blob",
+          "contentSha256": null,
+          "acquisitionStatus": "not_locally_acquired"
+        },
+        "docsBase": {
+          "commit": "4d6db613da927840414750344172c35846358997",
+          "blobId": "3897d7ec18c448b3a44c6dab27e342f998c7e4fe",
+          "sizeBytes": 13083,
+          "mode": "100644",
+          "type": "blob",
+          "contentSha256": null,
+          "acquisitionStatus": "not_locally_acquired"
+        },
+        "docsTarget": {
+          "commit": "3cfd32e56dd4113e89bb37589dc3407f54b97d77",
+          "blobId": "3897d7ec18c448b3a44c6dab27e342f998c7e4fe",
+          "sizeBytes": 13083,
+          "mode": "100644",
+          "type": "blob",
+          "contentSha256": null,
+          "acquisitionStatus": "not_locally_acquired"
+        }
+      }
+    },
+    {
+      "path": "hc/lib/urls.py",
+      "kind": "code",
+      "format": "Python",
+      "revisions": {
+        "codeBase": {
+          "commit": "0f78e117eadb59a01dd51e09344479fa3eeb4187",
+          "blobId": "46b0db8fd60684b3b846c41974db6652602ad3c5",
+          "sizeBytes": 651,
+          "mode": "100644",
+          "type": "blob",
+          "contentSha256": null,
+          "acquisitionStatus": "not_locally_acquired"
+        },
+        "codeTarget": {
+          "commit": "c62d6648d81e1aebc65f80bddc72f165fba7320b",
+          "blobId": "46b0db8fd60684b3b846c41974db6652602ad3c5",
+          "sizeBytes": 651,
+          "mode": "100644",
+          "type": "blob",
+          "contentSha256": null,
+          "acquisitionStatus": "not_locally_acquired"
+        },
+        "docsBase": {
+          "commit": "4d6db613da927840414750344172c35846358997",
+          "blobId": "46b0db8fd60684b3b846c41974db6652602ad3c5",
+          "sizeBytes": 651,
+          "mode": "100644",
+          "type": "blob",
+          "contentSha256": null,
+          "acquisitionStatus": "not_locally_acquired"
+        },
+        "docsTarget": {
+          "commit": "3cfd32e56dd4113e89bb37589dc3407f54b97d77",
+          "blobId": "46b0db8fd60684b3b846c41974db6652602ad3c5",
+          "sizeBytes": 651,
+          "mode": "100644",
+          "type": "blob",
+          "contentSha256": null,
+          "acquisitionStatus": "not_locally_acquired"
+        }
+      }
+    },
+    {
+      "path": "templates/docs/configuring_checks.md",
+      "kind": "document",
+      "format": "Markdown",
+      "revisions": {
+        "codeBase": {
+          "commit": "0f78e117eadb59a01dd51e09344479fa3eeb4187",
+          "blobId": "6b2a70eba7b0be1df686145425b2af77e722eb0d",
+          "sizeBytes": 6140,
+          "mode": "100644",
+          "type": "blob",
+          "contentSha256": null,
+          "acquisitionStatus": "not_locally_acquired"
+        },
+        "codeTarget": {
+          "commit": "c62d6648d81e1aebc65f80bddc72f165fba7320b",
+          "blobId": "6b2a70eba7b0be1df686145425b2af77e722eb0d",
+          "sizeBytes": 6140,
+          "mode": "100644",
+          "type": "blob",
+          "contentSha256": null,
+          "acquisitionStatus": "not_locally_acquired"
+        },
+        "docsBase": {
+          "commit": "4d6db613da927840414750344172c35846358997",
+          "blobId": "6b2a70eba7b0be1df686145425b2af77e722eb0d",
+          "sizeBytes": 6140,
+          "mode": "100644",
+          "type": "blob",
+          "contentSha256": null,
+          "acquisitionStatus": "not_locally_acquired"
+        },
+        "docsTarget": {
+          "commit": "3cfd32e56dd4113e89bb37589dc3407f54b97d77",
+          "blobId": "00b7286d35fbc478598e0c272951201a17110eb6",
+          "sizeBytes": 7719,
+          "mode": "100644",
+          "type": "blob",
+          "contentSha256": null,
+          "acquisitionStatus": "not_locally_acquired"
+        }
+      }
+    },
+    {
+      "path": "templates/docs/email.md",
+      "kind": "document",
+      "format": "Markdown",
+      "revisions": {
+        "codeBase": {
+          "commit": "0f78e117eadb59a01dd51e09344479fa3eeb4187",
+          "blobId": "22e67c326282ca1ba9efeb99883075f153a84225",
+          "sizeBytes": 2673,
+          "mode": "100644",
+          "type": "blob",
+          "contentSha256": null,
+          "acquisitionStatus": "not_locally_acquired"
+        },
+        "codeTarget": {
+          "commit": "c62d6648d81e1aebc65f80bddc72f165fba7320b",
+          "blobId": "22e67c326282ca1ba9efeb99883075f153a84225",
+          "sizeBytes": 2673,
+          "mode": "100644",
+          "type": "blob",
+          "contentSha256": null,
+          "acquisitionStatus": "not_locally_acquired"
+        },
+        "docsBase": {
+          "commit": "4d6db613da927840414750344172c35846358997",
+          "blobId": "22e67c326282ca1ba9efeb99883075f153a84225",
+          "sizeBytes": 2673,
+          "mode": "100644",
+          "type": "blob",
+          "contentSha256": null,
+          "acquisitionStatus": "not_locally_acquired"
+        },
+        "docsTarget": {
+          "commit": "3cfd32e56dd4113e89bb37589dc3407f54b97d77",
+          "blobId": "22e67c326282ca1ba9efeb99883075f153a84225",
+          "sizeBytes": 2673,
+          "mode": "100644",
+          "type": "blob",
+          "contentSha256": null,
+          "acquisitionStatus": "not_locally_acquired"
+        }
+      }
+    },
+    {
+      "path": "templates/front/snippets/python_requests_payload.txt",
+      "kind": "document",
+      "format": "plain-text",
+      "revisions": {
+        "codeBase": {
+          "commit": "0f78e117eadb59a01dd51e09344479fa3eeb4187",
+          "blobId": "a7a42bc8da026429fe68b6f605690637c18b6f62",
+          "sizeBytes": 258,
+          "mode": "100644",
+          "type": "blob",
+          "contentSha256": null,
+          "acquisitionStatus": "not_locally_acquired"
+        },
+        "codeTarget": {
+          "commit": "c62d6648d81e1aebc65f80bddc72f165fba7320b",
+          "blobId": "a7a42bc8da026429fe68b6f605690637c18b6f62",
+          "sizeBytes": 258,
+          "mode": "100644",
+          "type": "blob",
+          "contentSha256": null,
+          "acquisitionStatus": "not_locally_acquired"
+        },
+        "docsBase": {
+          "commit": "4d6db613da927840414750344172c35846358997",
+          "blobId": "a7a42bc8da026429fe68b6f605690637c18b6f62",
+          "sizeBytes": 258,
+          "mode": "100644",
+          "type": "blob",
+          "contentSha256": null,
+          "acquisitionStatus": "not_locally_acquired"
+        },
+        "docsTarget": {
+          "commit": "3cfd32e56dd4113e89bb37589dc3407f54b97d77",
+          "blobId": "a7a42bc8da026429fe68b6f605690637c18b6f62",
+          "sizeBytes": 258,
+          "mode": "100644",
+          "type": "blob",
+          "contentSha256": null,
+          "acquisitionStatus": "not_locally_acquired"
+        }
+      }
+    }
+  ]
+}

@@ -14,6 +14,11 @@ The system SHALL retain an artifact identity, kind and source location for every
 - **THEN** the artifact record identifies its repository, kind and repository-relative path
 - **AND** later relationships reference that artifact identity
 
+#### Scenario: Capture request exceeds authorized input
+- **WHEN** a capture request supplies an undeclared local root, remote source or file outside the authorized immutable inventory
+- **THEN** the request is rejected without acquiring that source
+- **AND** a registered repository or manifest is not treated as permission to inspect unrelated inputs
+
 ### Requirement: C-01b Immutable source versions
 The system SHALL preserve each captured artifact version independently of later source changes.
 
@@ -34,6 +39,16 @@ The system SHALL retain structured requirements and decisions as attributed, ver
 - **WHEN** an authorized practitioner captures a requirement or decision with content and an available source reference
 - **THEN** the record preserves its kind, author and version
 - **AND** authorship alone does not confirm a relationship to the referenced artifact
+
+#### Scenario: Authored source is absent
+- **WHEN** an authorized practitioner captures a structured record without an external source
+- **THEN** the record retains its attributed authorship and explicit source-absence reason
+- **AND** no external source or approval is invented
+
+#### Scenario: Revise an authored record
+- **WHEN** an authorized practitioner revises a record against its expected current version
+- **THEN** a new immutable version retains the earlier version and revision reason
+- **AND** assertions reviewed against the earlier version are not silently retargeted
 
 ### Requirement: C-03a Inspectable evidence anchors
 The system SHALL identify the exact artifact version and source location supporting each retained evidence item.
@@ -59,6 +74,11 @@ The system SHALL report processing support separately for ingestion, extraction,
 - **WHEN** a declared operating limit or inaccessible input prevents complete processing
 - **THEN** the result identifies incomplete scope and its reason
 - **AND** missing results do not establish that the affected artifacts have no relationships or impacts
+
+#### Scenario: An accepted capture operation finishes partially
+- **WHEN** a capture operation publishes supported entries but cannot process other declared inputs
+- **THEN** its result identifies the successfully published scope and incomplete functions separately
+- **AND** each published entry has consistent identity, version and provenance without partial records or duplicate retry results
 
 #### Scenario: Inspect the support matrix
 - **WHEN** a practitioner inspects support for the selected release inventory

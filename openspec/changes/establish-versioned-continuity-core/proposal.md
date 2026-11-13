@@ -1,5 +1,7 @@
 # Proposal
 
+Implementation status (2026-11-13): the later user instruction authorizes the build and selects FastAPI/PostgreSQL with provisioned accounts and server-side sessions. [implementation.md](implementation.md) records that decision and the initial service boundary; [tasks.md](tasks.md) retains unfinished work. Planning-only statements below describe this proposal's original stage, not a completed continuity system.
+
 ## Why
 
 Continuum's frontend demonstrates review with synthetic records, but a real continuity cycle needs exact source versions, inspectable relationship evidence and retained human decisions. Define that cycle before selecting or building its backend so the existing UI can later use a consistent contract.
@@ -27,7 +29,7 @@ None. The existing `frontend-demo` describes the observed synthetic UI and remai
 
 ## Impact
 
-This proposal will eventually require backend records and commands that do not exist in the frontend. Backend framework, storage, trusted identity and deployment are open. No application dependency or runtime file is changed by this planning step.
+This proposal will eventually require backend records and commands that do not exist in the frontend. STACK-01 and AUTH-01 in design.md propose FastAPI/PostgreSQL and provisioned named accounts with server-held sessions and repository roles, with alternatives and verification gates. These are unaccepted design recommendations, not installed capabilities; deployment and exact compatibility remain open. No application dependency or runtime file is changed by this planning step.
 
 Source context: `specs/requirements.md` C-01 through C-10 and HC-01 through HC-08/HC-02D, plus `specs/continuity-contract.md` and `specs/acceptance-plan.md`. The accepted future test-project identity is Healthchecks; exact source acquisition, revisions and inventory remain open. The user explicitly included plain text in the proposed core during the latest-manuscript reconciliation. Candidate discovery is not verified against it.
 

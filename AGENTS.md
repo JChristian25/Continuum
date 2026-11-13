@@ -6,6 +6,8 @@ This directory is the only implementation source of truth for the working Contin
 
 The current stage is specification development. User approval covers OpenSpec setup and planning documents. Do not implement application features, replace the UI, ingest or clone repositories, start services, migrate data, deploy, initialize Git or remove existing files without a new instruction that authorizes that work.
 
+On 2026-11-13, the user issued that new implementation instruction ("go build continuum") and selected FastAPI + PostgreSQL with provisioned accounts and server-side sessions. The initial review-service implementation and remaining boundaries are recorded in `openspec/changes/establish-versioned-continuity-core/implementation.md` and `tasks.md`. The earlier planning-stage statement above is retained as history; it does not block this authorized build. Source-acquisition gates, the sole-checkout rule, preservation of the frontend appearance and separate deployment/migration authorization still apply. Backend setup and observed tests are documented in `services/api/README.md`; do not infer frontend integration or Healthchecks verification from them.
+
 ## Specifications
 
 - Use `openspec/specs/` for observed current behavior.

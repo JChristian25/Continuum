@@ -19,7 +19,7 @@ An integrated software knowledge continuity research prototype.
 </div>
 
 > [!IMPORTANT]
-> **Work in progress.** Continuum is under active specification and development as part of an ongoing thesis. Features, requirements and technical decisions may change. The current frontend demonstrates workflows with synthetic data; the proposed backend and real repository processing are not yet verified.
+> **Work in progress.** Continuum is under active specification and development as part of an ongoing thesis. The frontend demonstrates workflows with synthetic data. The first FastAPI/PostgreSQL review service has separate integration tests; frontend integration and real repository processing remain unfinished.
 
 ## Overview
 
@@ -36,7 +36,7 @@ These outcomes describe the proposed system. See the current status below for im
 
 ## Proposed system
 
-The diagrams below summarize the [active continuity proposal](openspec/changes/establish-versioned-continuity-core/proposal.md). They describe intended behavior, not a connected or verified backend. Framework, storage, authentication and discovery-method choices remain open.
+The diagrams below summarize the [active continuity proposal](openspec/changes/establish-versioned-continuity-core/proposal.md). They describe the intended complete system. FastAPI, PostgreSQL and server-side sessions were selected for implementation; discovery and real-input decisions remain open. See the [review-service guide](services/api/README.md) for the implemented subset and evidence.
 
 ### How the parts fit together
 
@@ -64,9 +64,9 @@ The project supports the thesis's development and evaluation work. It remains a 
 
 ## Current status
 
-The project is in specification development. The existing application is a React 19 / Vite 8 frontend using synthetic fixtures and browser storage. A connected backend and real repository processing have not been verified.
+Implementation began on 2026-11-13. The React 19 / Vite 8 frontend still uses synthetic fixtures and browser storage. A separate FastAPI/PostgreSQL review service now implements sessions, repository permissions, exact-version reads, transactional judgments, correction, reversal, follow-up and retained history. Its 43 PostgreSQL tests include API-process restart and concurrent/failed-write cases. The frontend is not yet connected to it; real repository processing remains unimplemented. See [setup, API and verification boundaries](services/api/README.md).
 
-The proposed continuity cycle covers artifact capture, evidence-backed relationship candidates, authorized review with rationale, selected Git revision comparisons, revalidation and access to current and historical context. These are proposed capabilities, not completed implementation.
+The complete continuity cycle also requires artifact capture, candidate discovery, selected Git revision comparisons, revalidation, snapshots and knowledge access. Those remaining capabilities are tracked in the [implementation tasks](openspec/changes/establish-versioned-continuity-core/tasks.md); the review-service subset does not complete the full cycle.
 
 Healthchecks is the accepted future demonstration input, with Python as its selected code language and Markdown/plain-text documents at file scope. Source acquisition, exact revisions, inventory and expected outcomes remain prerequisites. This does not select Continuum's backend language or database.
 
@@ -75,6 +75,7 @@ Healthchecks is the accepted future demonstration input, with Python as its sele
 ```text
 .
 ├── apps/web/          # Existing React/Vite frontend, package files and lockfiles
+├── services/api/      # FastAPI/PostgreSQL review service and isolated integration tests
 ├── docs/              # Logo, system diagrams and repository guidance
 ├── openspec/          # Observed behavior and proposed capability changes
 ├── specs/             # Research context, traceability and review evidence
@@ -88,7 +89,7 @@ Healthchecks is the accepted future demonstration input, with Python as its sele
 
 The frontend is a standalone npm package in `apps/web/`; there is no root npm package or workspace setup. Its existing npm and pnpm lockfiles are retained without regeneration. Use npm for the commands below. Keep root-level OpenSpec and skill commands at the repository root.
 
-A future backend may live under `services/api/` once its stack and implementation are authorized. No backend scaffold is created by this organization. See [repository layout and migration notes](docs/repository-layout.md).
+The authorized backend lives under `services/api/`, with its own virtual environment, dependency lock and PostgreSQL setup. See the [service guide](services/api/README.md). Earlier [repository layout and migration notes](docs/repository-layout.md) describe the planning baseline; no browser-data migration has been performed.
 
 ## Project guide
 

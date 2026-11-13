@@ -1,0 +1,100 @@
+from typing import Annotated, Literal
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
+
+Id = Annotated[str, StringConstraints(min_length=1, max_length=80)]
+Note = Annotated[str, StringConstraints(min_length=1, max_length=8000, pattern=r"\S")]
+
+
+class Strict(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+
+class Login(Strict):
+    schemaVersion: Literal["0.1.0"]
+    requestId: Id
+    login: Annotated[str, StringConstraints(min_length=1, max_length=120)]
+    password: Annotated[str, StringConstraints(min_length=1, max_length=128)]
+
+
+class Envelope(Strict):
+    schemaVersion: Literal["0.1.0"]
+    requestId: Id
+    repositoryId: Id
+    viewId: Id
+    command: Literal["record_judgment", "reverse_judgment", "correct_assertion", "open_follow_up", "resolve_follow_up"]
+    input: dict
+
+
+class ContextInput(Strict):
+    contextId: Id
+    assertionRevisionId: Id
+    expectedProjectionVersion: int = Field(ge=0)
+
+
+class NoFollowUp(Strict):
+    kind: Literal["none"]
+
+
+class NewFollowUp(Strict):
+    kind: Literal["open"]
+    workKind: Literal["code_update", "documentation_update"]
+    note: Note
+
+
+class Judgment(ContextInput):
+    decision: Literal["confirm", "reject", "reconfirm", "retire"]
+    reason: Note
+    reviewedEvidenceIds: list[Id] = Field(max_length=100)
+    contentConcern: Note | None
+    followUpDisposition: Annotated[NoFollowUp | NewFollowUp, Field(discriminator="kind")]
+
+    @model_validator(mode="after")
+    def unique_evidence(self):
+        if len(set(self.reviewedEvidenceIds)) != len(self.reviewedEvidenceIds):
+            raise ValueError("Evidence IDs must be unique")
+        return self
+
+
+class Reversal(ContextInput):
+    eventId: Id
+    reason: Note
+
+
+class OpenFollowUp(ContextInput):
+    workKind: Literal["code_update", "documentation_update"]
+    note: Note
+    relatedJudgmentEventId: Id | None
+
+
+class ResolveFollowUp(ContextInput):
+    followUpId: Id
+    verificationNote: Note
+
+
+class Replacement(Strict):
+    type: Literal["documents"]
+    sourceArtifactId: Id
+    targetArtifactId: Id
+    sourceVersionId: Id
+    targetVersionId: Id
+    evidenceIds: list[Id] = Field(min_length=1, max_length=100)
+
+    @model_validator(mode="after")
+    def unique_evidence(self):
+        if len(set(self.evidenceIds)) != len(self.evidenceIds):
+            raise ValueError("Evidence IDs must be unique")
+        return self
+
+
+class Correction(ContextInput):
+    reason: Note
+    replacement: Replacement
+
+
+INPUT_TYPES = {
+    "record_judgment": Judgment,
+    "reverse_judgment": Reversal,
+    "correct_assertion": Correction,
+    "open_follow_up": OpenFollowUp,
+    "resolve_follow_up": ResolveFollowUp,
+}

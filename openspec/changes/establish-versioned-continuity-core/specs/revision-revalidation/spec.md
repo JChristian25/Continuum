@@ -55,6 +55,11 @@ The system SHALL distinguish a new changed-version review context from earlier c
 - **THEN** the new context remains an unconfirmed candidate
 - **AND** it is not represented as a stale previously confirmed link
 
+#### Scenario: Inspect base history during incoming review
+- **WHEN** a comparison presents an earlier confirmation beside the incoming review context
+- **THEN** the base view is identified as historical and the incoming view names its own exact revision and evidence
+- **AND** a write through the base historical view cannot confirm the incoming context
+
 ### Requirement: C-07d Explicit unresolved change context
 The system SHALL report uncertainty when supported evidence cannot establish endpoint continuity or anchor relevance after a change.
 
@@ -62,6 +67,11 @@ The system SHALL report uncertainty when supported evidence cannot establish end
 - **WHEN** an endpoint is deleted or its identity across a move cannot be established by the declared support policy
 - **THEN** the review context identifies the deleted or unresolved endpoint and its limitation
 - **AND** the system does not invent a valid replacement relationship
+
+#### Scenario: Missing incoming version cannot be confirmed
+- **WHEN** a changed context has a missing or unresolved incoming endpoint version or required evidence
+- **THEN** confirmation is rejected without substituting the earlier endpoint or current branch content
+- **AND** an authorized retirement with a reason can still retain that absence and the earlier source references
 
 ### Requirement: C-07e Revalidation preserves earlier context
 The system SHALL record a new version-specific decision when a reviewer reconfirms, corrects or retires an affected relationship.
@@ -75,6 +85,11 @@ The system SHALL record a new version-specific decision when a reviewer reconfir
 - **WHEN** an authorized reviewer retires an affected relationship with a recorded reason for its incoming version context
 - **THEN** that context is retired and contributes no current confirmed support
 - **AND** its earlier confirmation, evidence, actor and reason remain separately retrievable
+
+#### Scenario: Comparison does not revive a retired claim
+- **WHEN** later comparison processing encounters an assertion whose preceding context was retired
+- **THEN** the retired claim is not automatically restored as confirmed or stale support
+- **AND** a proposed successor remains separate from the retained retirement
 
 #### Scenario: Repeat comparison processing
 - **WHEN** the same comparison attempt is retried for unchanged inputs
@@ -100,6 +115,21 @@ The system SHALL associate cycle completion and exported results with the select
 - **WHEN** a practitioner exports the selected review snapshot
 - **THEN** its repository, revision identities, judgments, follow-up state and limitations match that snapshot
 - **AND** synthetic fixture labels are not presented as real-project evidence
+
+#### Scenario: Completion races with new work
+- **WHEN** a completion request targets a stale snapshot or unsettled processing can still publish review work for that selection
+- **THEN** the request returns a conflict without a new completion record
+- **AND** later completion requires an explicitly selected current settled snapshot
+
+#### Scenario: Review is complete while follow-up remains open
+- **WHEN** all pending relationship reviews in the current settled snapshot are resolved but independent follow-up remains open
+- **THEN** review completion retains the open follow-up and explicitly acknowledged processing limitations
+- **AND** completion does not assert corrected content or complete relationship discovery
+
+#### Scenario: Export historical or incomplete review
+- **WHEN** an authorized practitioner exports a retained historical snapshot or an incomplete review snapshot
+- **THEN** the export preserves that snapshot's exact identities, judgments, completion state, provenance and limitations
+- **AND** export does not grant write authority over historical records or change when later current work changes
 
 ### Requirement: C-09b Demonstration release disclosure
 The demonstration release record SHALL identify its software version, configuration, selected language and formats, dependencies, operating requirements, support matrix and known limitations.
