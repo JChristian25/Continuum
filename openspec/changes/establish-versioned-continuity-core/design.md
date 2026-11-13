@@ -511,3 +511,40 @@ Official sources checked read-only on 2026-11-11 informed these proposals. They 
 - [OWASP session management](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html), [password storage](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html), and [CSRF guidance](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html) support the session, password-hash and synchronizer-token mechanisms. The selected durations and provisioning model remain this proposal's choices.
 
 A-STACK and A-AUTH now have concrete recommendations and alternatives; both remain proposed, with compatibility, policy acceptance and live verification outstanding. A-LIMITS, A-DISCOVERY and A-INPUT remain open. No implementation tasks, backend packages, database instances, accounts, services or deployment changes were created. Next planning work is to settle operating/authentication limits and discovery configuration, then the authorized Healthchecks input manifest, before approving a bounded implementation design.
+
+## Implementation continuation: reuse decisions, 2026-11-14
+
+The preceding planning statements describe their original stage. The user later
+authorized implementation, selected FastAPI/PostgreSQL with provisioned accounts
+and server sessions, accepted the bounded input and frozen discovery profile,
+and requested Git-based change detection and reuse of existing software. Exact
+acceptances and earlier observations remain in this change's records.
+
+Native Git `diff --no-index --no-renames` compares temporary copies of retained
+bytes with external drivers/text conversion disabled. No upstream checkout or
+new acquisition is needed. SHA-256 remains an integrity check. Record version
+changes are explicit domain events. Incoming review preserves prior snapshots,
+claims and exact evidence rather than treating a Git diff as a semantic decision.
+
+The implementation reuses Pydantic, SQLAlchemy/PostgreSQL, existing authority locks,
+receipt handling, durable jobs and retained result pages. Literal Unicode search
+uses the standard library within explicit snapshot bounds. Typed graph navigation
+uses the existing React Flow/ELK frontend. These decisions require no new backend
+or frontend dependency. The frozen discovery configuration is unchanged.
+
+Correction replacement payloads may provide validated `newEvidence` line anchors
+as well as retained evidence IDs. Anchors must belong to exact selected endpoint
+versions. A correction creates an unconfirmed successor; it never implicitly
+judges changed evidence. The manual relation vocabulary remains documents,
+implements and motivates with their existing kind constraints.
+
+An already published comparison is immutable and can be reopened after later
+baseline decisions. A new comparison against an outdated affected projection
+fails with snapshot_conflict. This preserves both serial transaction orders
+without rewriting a frozen incoming context or reviving a terminal baseline.
+
+`services/api/CONTINUITY.md` records connected behavior, operating limits and
+verification commands. The development release hashes dirty source bytes as well
+as recording the base Git commit; its archive and source-drift check distinguish
+a verified build from later edits. Practitioner evaluation, deployment and live
+schema migration remain separate activities.

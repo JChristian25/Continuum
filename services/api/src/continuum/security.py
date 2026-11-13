@@ -24,6 +24,9 @@ def utc(timestamp=None):
 
 
 MESSAGES = {
+    "pending_review": "Resolve the selected snapshot's pending relationship reviews before completing the cycle.",
+    "processing_active": "Processing can still publish review work for this selection.",
+    "change_detection_unavailable": "Native Git change detection could not complete; no comparison was published.",
     "unauthenticated": "A current authenticated session is required.",
     "forbidden": "This request is not authorized.",
     "not_found": "The requested record was not found.",

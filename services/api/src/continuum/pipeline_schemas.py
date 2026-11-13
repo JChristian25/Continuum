@@ -1,3 +1,4 @@
+from .relations import RelationType
 from typing import Literal
 
 from pydantic import Field, model_validator
@@ -37,7 +38,7 @@ class QueryEnvelope(Strict):
     schemaVersion: Literal["0.1.0"]
     requestId: Id
     repositoryId: Id
-    query: Literal["select_context", "read_snapshot", "read_workspace", "list_snapshots", "open_review_view", "read_operation", "read_capture_results", "read_discovery_results", "read_activity"]
+    query: Literal["select_context", "read_snapshot", "read_workspace", "list_snapshots", "open_review_view", "read_operation", "read_capture_results", "read_discovery_results", "read_activity", "search_records", "read_graph", "read_assertion", "read_export", "read_release_record"]
     input: dict
 
 
@@ -133,7 +134,7 @@ class ReviseRecord(RecordInput):
 
 class CaptureCandidate(Strict):
     targetRevision: CommitRef
-    type: Literal["documents"]
+    type: RelationType
     sourceArtifactId: Id
     targetArtifactId: Id
     sourceVersionId: Id
@@ -151,3 +152,7 @@ class CaptureCandidate(Strict):
 
 class ActivityInput(Strict):
     activityId: Id
+
+
+class ReleaseInput(Strict):
+    releaseRecordId: Id

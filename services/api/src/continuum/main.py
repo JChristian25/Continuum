@@ -200,8 +200,11 @@ def create_app(settings=None, engine=None, *, worker_enabled=True):
         request.state.request_id = body.requestId
         with factory.begin() as db:
             actor, _ = current_actor(db, request, settings, write=True)
-            repository = repository_access(db, actor, body.repositoryId, write=True)
-            if body.command == "compare_revisions":
+            repository = repository_access(db, actor, body.repositoryId, write=body.command != "export_snapshot")
+            if body.command in {"complete_cycle", "export_snapshot"}:
+                from .cycle import execute as cycle_command
+                response = cycle_command(db, actor, repository, body)
+            elif body.command == "compare_revisions":
                 response = compare(db, actor, repository, body)
             elif body.command in {"capture_files", "discover_candidates"}:
                 response = admit(db, actor, repository, body)

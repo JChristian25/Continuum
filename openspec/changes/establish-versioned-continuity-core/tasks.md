@@ -2,8 +2,9 @@
 
 Implementation was requested and the stack selected on 2026-11-13. See
 implementation.md for the initial file boundary and operating defaults.
-Unresolved discovery and Healthchecks inputs remain explicit prerequisites for
-the later processing tasks; do not mark the whole change implemented.
+Discovery and Healthchecks prerequisites were settled by the separately recorded
+input/profile acceptances. Earlier implementation limits below are retained as
+stage history; the dated completion entry identifies the verified continuation.
 
 ## 1. Persistence and identity
 
@@ -21,13 +22,13 @@ the later processing tasks; do not mark the whole change implemented.
 
 - [x] 3.1 Settle authorized Healthchecks acquisition, exact revisions, immutable inventory and independent outcomes; verify a reproducible input manifest without reading another checkout (A-INPUT, C-09a).
 - [x] 3.2 Settle the versioned discovery/support profile and job limits, then implement capture and independent automatic/manual candidate results; verify incomplete coverage and immutable source provenance (A-DISCOVERY, C-01c, C-02a/b, C-04a/b).
-- [ ] 3.3 Implement selected-revision comparison and one-hop revalidation; verify deleted endpoints, stale/unconfirmed separation, retained history and retry behavior (C-06a/b, C-07c/d/e).
+- [x] 3.3 Implement selected-revision comparison and one-hop revalidation; verify deleted endpoints, stale/unconfirmed separation, retained history and retry behavior (C-06a/b, C-07c/d/e).
 
 ## 4. Access and integration
 
-- [ ] 4.1 Implement retained snapshots, search, graph, completion and export with safe pagination; verify snapshot consistency, access isolation and unsettled-work conflicts (C-03c, C-08b/c/d, C-10b).
+- [x] 4.1 Implement retained snapshots, search, graph, completion and export with safe pagination; verify snapshot consistency, access isolation and unsettled-work conflicts (C-03c, C-08b/c/d, C-10b).
 - [x] 4.2 Connect the existing frontend through a separately tested service adapter, preserving appearance and context-keyed drafts; verify browser login, uncertain delivery, conflicts, historical reads and service/demo isolation (AU-03, T-17/19/20).
-- [ ] 4.3 Prepare the reproducible release record and guided task evidence using accepted inputs; report source, PostgreSQL, browser and real-project results separately (C-09a/b, HC-01 through HC-08).
+- [x] 4.3 Prepare the reproducible release record and guided task evidence using accepted inputs; report source, PostgreSQL, browser and real-project results separately (C-09a/b, HC-01 through HC-08).
 
 ## Workflow follow-up
 
@@ -41,3 +42,13 @@ Task 3.3 continuation: bounded compare_revisions API and frontend entry are now
 implemented; exact captured snapshots, stale/candidate separation, equal commits,
 history retention and retry deduplication are tested. Deletion/rename, chaining,
 full revalidation and race gates remain open; see implementation.md.
+
+Completion, 2026-11-14: tasks 3.3, 4.1 and 4.3 are verified within the accepted
+bounded scope. The 132-test PostgreSQL/backend suite (including the authenticated
+browser flow), 11 frontend tests, separate layout/library browser checks, build,
+dependency check and strict OpenSpec validation pass. The development release is
+`continuity-core-76663ead5b7f9117f99a4654`; see services/api/RELEASE.json and
+services/api/CONTINUITY.md. Deletion is a synthetic isolated boundary fixture;
+the guided rehearsal is automated development evidence, not practitioner results.
+All 12 tracked tasks are complete. Review before spec synchronization/archive;
+no archive, deployment or live schema migration was performed.

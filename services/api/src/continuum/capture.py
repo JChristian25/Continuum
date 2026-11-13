@@ -1,3 +1,4 @@
+from .relations import validate_relation
 import json
 
 from sqlalchemy import select
@@ -84,10 +85,11 @@ def capture_candidate(db, actor, repository, selection, data):
     target = scoped(db, ArtifactVersion, data.targetVersionId, repository.id)
     source_artifact = scoped(db, Artifact, data.sourceArtifactId, repository.id)
     target_artifact = scoped(db, Artifact, data.targetArtifactId, repository.id)
-    if source.artifact_id != source_artifact.id or target.artifact_id != target_artifact.id or source_artifact.kind != "document" or target_artifact.kind != "code":
+    if source.artifact_id != source_artifact.id or target.artifact_id != target_artifact.id:
         fail("invalid_input")
+    validate_relation(data.type, source_artifact, target_artifact)
     for version in [source, target]:
-        member = db.get(SelectionArtifact, (selection.id, version.artifact_id))
+        member = db.get(SelectionArtifact, (selection.id, version.artifact_id)) or db.get(SelectedRecord, (selection.id, version.artifact_id))
         if member is None or member.version_id != version.id:
             fail("invalid_input", details={"fields": ["sourceVersionId", "targetVersionId"]})
     anchors = []
@@ -173,10 +175,19 @@ def execute(db, actor, repository, envelope):
     if view.mode != "active":
         fail("historical_context")
     selection = scoped(db, Selection, view.selection_id, repository.id)
+    from .pipeline import make_snapshot
+    baseline = make_snapshot(db, selection) if envelope.command == 'revise_record' else None
     result = (capture_candidate(db, actor, repository, selection, data) if envelope.command == "capture_candidate"
               else capture_record(db, actor, repository, selection, data, envelope.command == "revise_record"))
     selection.snapshot_version += 1
     repository.snapshot_version += 1
+    if baseline and any(data.artifactId in {item['assertion']['source']['artifactId'], item['assertion']['target']['artifactId']} for item in baseline.document['assertions']):
+        from .comparison import compare
+        from .schemas import Envelope
+        db.flush()
+        target_snapshot = make_snapshot(db, selection)
+        comparison = compare(db, actor, repository, Envelope(schemaVersion='0.1.0', requestId=stable('record-revalidation', envelope.requestId), repositoryId=repository.id, viewId=view.id, command='compare_revisions', input={'baseSnapshotId': baseline.id, 'targetSnapshotId': target_snapshot.id}))
+        result = {**result, 'selection': comparison['result']['selection'], 'comparisonId': comparison['result']['comparisonId']}
     response = {"schemaVersion": "0.1.0", "requestId": envelope.requestId, "result": result}
     db.add(Receipt(actor_id=actor.id, repository_id=repository.id, command=envelope.command,
                    request_id=envelope.requestId, input_digest=fingerprint, result=response))

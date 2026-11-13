@@ -197,3 +197,13 @@ See the tracked `healthchecks-processing-verification.json` for source/profile
 identities, output digests, tested source-file hashes and verification boundaries.
 No selected-revision comparison, incoming revalidation, release demonstration or
 participant administration was performed. Those remain separate tasks.
+
+
+## Later continuity implementation
+
+The dated results and exclusions above describe the earlier implementation
+stage. See [CONTINUITY.md](CONTINUITY.md) for the later native Git comparison,
+typed record links, incoming review, snapshot search/graph, completion and export.
+[RELEASE.json](RELEASE.json) records the observed current development checks and
+source identity. No deployment, live schema migration or practitioner results
+are established by that continuation.

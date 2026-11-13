@@ -1,3 +1,4 @@
+from .relations import validate_relation
 import json
 from fastapi import HTTPException
 from sqlalchemy import func, select
@@ -238,8 +239,31 @@ def command(db, actor, repository, envelope):
         target_artifact = scoped(db, Artifact, replacement.targetArtifactId, repository.id)
         if source.artifact_id != source_artifact.id or target.artifact_id != target_artifact.id:
             fail("invalid_input")
-        if source_artifact.kind != "document" or target_artifact.kind != "code":
-            fail("invalid_input", details={"fields": ["replacement"]})
+        validate_relation(replacement.type, source_artifact, target_artifact)
+        if binding:
+            from .pipeline_models import SelectedRecord, SelectionArtifact
+            for version in [source, target]:
+                member = db.get(SelectionArtifact, (binding.selection_id, version.artifact_id)) or db.get(SelectedRecord, (binding.selection_id, version.artifact_id))
+                if member is None or member.version_id != version.id:
+                    fail("invalid_input", details={"fields": ["replacement"]})
+        if replacement.newEvidence:
+            from .pipeline_schemas import CandidateAnchor
+            from .capture import anchor
+            from .pipeline import stable
+            supplied = [CandidateAnchor.model_validate(item) for item in replacement.newEvidence]
+            if len({item.model_dump_json() for item in supplied}) != len(supplied):
+                fail('invalid_input')
+            ids = list(replacement.evidenceIds)
+            for item in supplied:
+                if item.artifactVersionId not in {source.id, target.id}:
+                    fail('invalid_input')
+                version, excerpt_digest = anchor(db, repository.id, item.artifactVersionId, item.locator.model_dump())
+                identity = stable('correction-evidence', repository.id, version.id, item.locator.model_dump(), excerpt_digest)
+                if not db.get(Evidence, identity):
+                    db.add(Evidence(id=identity, repository_id=repository.id, artifact_version_id=version.id, locator=item.locator.model_dump(), method_id='manual-correction-v1', excerpt_digest=excerpt_digest))
+                    db.flush()
+                ids.append(identity)
+            replacement.evidenceIds = sorted(set(ids))
         old_assertion = scoped(db, Assertion, revision.assertion_id, repository.id)
         same = (old_assertion.type == replacement.type and old_assertion.source_artifact_id == source_artifact.id
                 and old_assertion.target_artifact_id == target_artifact.id)

@@ -205,3 +205,13 @@ claims. No gstack review or completed release is claimed.
 Implementation references: [FastAPI testing](https://fastapi.tiangolo.com/tutorial/testing/),
 [SQLAlchemy transactions](https://docs.sqlalchemy.org/en/20/orm/session_transaction.html),
 and [Psycopg installation](https://www.psycopg.org/psycopg3/docs/basic/install.html).
+
+
+## Later continuity implementation
+
+The dated results and exclusions above describe the earlier implementation
+stage. See [CONTINUITY.md](CONTINUITY.md) for the later native Git comparison,
+typed record links, incoming review, snapshot search/graph, completion and export.
+[RELEASE.json](RELEASE.json) records the observed current development checks and
+source identity. No deployment, live schema migration or practitioner results
+are established by that continuation.

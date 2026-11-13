@@ -6,10 +6,11 @@ context: |
   project as its backend, source of truth, or evidence baseline.
   Frontend package and its lockfiles/configuration live under apps/web/.
   Run frontend npm commands with npm --prefix apps/web from the repository root.
-  Current implementation: React 19 / Vite 8, JavaScript/JSX, synthetic fixture data,
-  browser localStorage/sessionStorage, Node built-in workflow tests.
-  The separate FastAPI/PostgreSQL review and bounded capture/discovery service
-  has automated/API verification. The frontend remains synthetic and unconnected.
+  Current implementation: React 19 / Vite 8, JavaScript/JSX, connected FastAPI/
+  PostgreSQL service, provisioned accounts and server sessions. Synthetic data
+  is available only through explicit ?mode=demo; errors never fall back to it.
+  Current development evidence and remaining boundaries are recorded in
+  services/api/CONTINUITY.md and the active change implementation.md.
   On 2026-11-13 the user authorized implementation and selected FastAPI,
   PostgreSQL, provisioned accounts and server-side sessions. Follow the active
   implementation.md and tasks.md for implemented and pending boundaries.
@@ -26,11 +27,11 @@ context: |
   are now bounded by healthchecks-input-acceptance.json and the separate frozen
   discovery-profile-acceptance.json in the active change. Use their exact scope;
   do not infer broader acquisition or read other local checkouts.
-  Latest manuscript source: specs/manuscript-source.md (MS-2026-11-09).
-  The user authorized read-only access to the exact PDF identified there.
-  Scoped core/method/readiness reconciliation is recorded in
-  specs/manuscript-reconciliation.md. Full schema/design decisions and actual
-  implementation verification remain pending.
+  The previously registered highlighted manuscript is unavailable at its exact
+  path. The user separately supplied Chapter 1 - 3.pdf; the current audit,
+  source hash and checked anchors are in outputs/manuscript-audit/.
+  Preserve older manuscript records as earlier evidence; do not claim an
+  unavailable source was rechecked. Implementation is not practitioner evaluation.
   The thesis supplied in the planning chat bounds the core and extensions;
   traceability anchors already recorded in specs/requirements.md are references,
   not proof of implementation or independent accuracy/productivity gains.

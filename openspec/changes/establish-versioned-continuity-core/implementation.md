@@ -161,3 +161,49 @@ fixture, and full deletion/rename, comparison chaining, reconfirmation/retiremen
 and race verification are not complete. Tasks 4.1 and 4.3 also remain open. No
 new upstream acquisition, schema migration, deployment or practitioner judgment
 was performed.
+
+
+## Authorized continuity completion, 2026-11-13
+
+The user authorized implementing the manuscript conformance findings and explicitly requested Git for change detection and reuse of existing software. Continue tasks 3.3, 4.1 and 4.3 without replacing the current UI or expanding accepted upstream acquisition. The current review source is the separately supplied 106-page `Chapter 1 - 3.pdf`, SHA-256 `531d260782300d8814ae9bca14c71c5406beae8b03c89720f4ec8accffb25eba`; the earlier highlighted file is unavailable at its recorded path. The read-only audit is under `outputs/manuscript-audit/`.
+
+Implementation decisions: use installed Git's `diff --no-index` on exact retained snapshot bytes, with external diff/text conversion disabled and no rename inference. No nested Git repository or external checkout is required. Reuse the existing relation vocabulary (`documents`: document to code; `implements`: code to requirement; `motivates`: decision to code), schema validation, SQLAlchemy/PostgreSQL transactions, worker and retained result-page records. Automatic discovery remains the accepted frozen document-to-code lexical profile; additional typed relationships are explicit manual claims. Retain requirements/decisions through incoming selections and freeze prior decision context. Search is bounded lexical search over retained source and rationale; no new vector/LLM dependency is required. Use the same snapshot and permission boundaries for typed neighborhoods, completion and JSON export. No live schema migration, database reset, deployment or practitioner-result claim is authorized by this continuation.
+
+## Observed completion, 2026-11-14
+
+The authorized continuation is implemented. Native Git compares retained files;
+typed manual claims and record versions enter exact-context review. Incoming
+comparisons can be chained and preserve baseline ancestry. Earlier evidence is
+read-only and unresolved anchors cannot be confirmed by substitution. Correction
+can supply validated replacement anchors and requires a separate judgment.
+Server snapshot search and typed graph neighborhoods retain bound pagination.
+Completion conflicts with pending review or active processing; JSON exports use
+the existing durable worker and remain frozen to the selected snapshot. The UI
+connects these operations without replacing the repaired visual design.
+
+Observed final verification: 132 PostgreSQL/backend/integration tests passed in
+278.68 seconds, including real TCP/browser login and the expanded continuity
+flow; 11 frontend tests passed. Separate library/demo and synthetic service-layout
+browser checks passed at desktop/mobile sizes with no page errors. Production
+build, lint, Python dependency check, strict OpenSpec validation and diff whitespace
+check passed. Existing Starlette TestClient deprecation, demo effect lint and large
+optional bundle warnings remain. The mechanical UI source scan found no regex
+findings; that scan is not a complete accessibility assessment.
+
+The release `continuity-core-76663ead5b7f9117f99a4654` is recorded in
+services/api/RELEASE.json and its immutable releases/ archive. Its source hashes
+matched the final working-tree bytes on generation; the base Git commit alone
+does not identify this dirty-tree build. The record embeds observed verification,
+input/profile acceptance and automated guided-task proof. The active local API
+was restarted on 8787 with existing data/session tables, and both direct health
+and the localhost:5173 frontend proxy returned ok. No schema setup was rerun.
+
+This supersedes the earlier unfinished-task notes for tasks 3.3, 4.1 and 4.3.
+Deletion handling uses a synthetic isolated retained snapshot because the accepted
+upstream package contains no deletion case. The automated guided task retained an
+earlier confirmation and reason, marked incoming evidence stale, then retired it
+when incoming anchors were unresolved. Separate tests cover reconfirmation guards,
+correction with new exact evidence, terminal decisions and concurrent comparison.
+No semantic accuracy, productivity or practitioner usability findings are claimed.
+No additional acquisition, deployment, live migration or user-data reset occurred.
+See services/api/CONTINUITY.md and services/api/GUIDED-TASKS.md for reproduction.

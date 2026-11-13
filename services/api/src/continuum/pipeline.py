@@ -107,6 +107,9 @@ def operation_data(operation, selection):
 
 def make_snapshot(db, selection):
     _, _, manifest, profile = registered_inputs(db, selection.repository_id, selection.inventory_id, selection.configuration_id)
+    retained = db.scalar(select(Snapshot).where(Snapshot.selection_id == selection.id, Snapshot.snapshot_version == selection.snapshot_version).order_by(Snapshot.id))
+    if retained is not None:
+        return retained
     eligible = len(manifest["entries"])
     context_ids = list(db.scalars(select(SelectionContext.context_id).where(SelectionContext.selection_id == selection.id)))
     contexts = list(db.scalars(select(ReviewContext).where(ReviewContext.id.in_(context_ids)).order_by(ReviewContext.id))) if context_ids else []
@@ -126,11 +129,15 @@ def make_snapshot(db, selection):
                          "processedCount": 0, "excludedCount": None,
                          "limitations": ["No complete processing claim for this function in this snapshot."]})
     limitations = {"Bounded Healthchecks input; not complete project coverage.",
-                   "Server search, graph traversal and export are not implemented in this service boundary."}
+                   "Search is literal within retained captured scope; graph access is typed and one-hop only."}
     for operation in operations:
         limitations.update(operation.limitations)
         for item in operation.coverage:
             coverage = [current for current in coverage if current["function"] != item["function"]] + [item]
+    for function in ['search', 'graph']:
+        coverage = [c for c in coverage if c['function'] != function] + [{'function': function, 'status': 'partial', 'eligibleCount': None, 'processedCount': len(versions) if function == 'search' else len(contexts), 'excludedCount': None, 'limitations': ['Selected captured scope only; no semantic or transitive completeness claim.']}]
+    if selection.base_revision:
+        coverage = [c for c in coverage if c['function'] != 'change_handling'] + [{'function': 'change_handling', 'status': 'partial', 'eligibleCount': len(versions), 'processedCount': len(versions), 'excludedCount': None, 'limitations': ['Native Git on retained bytes and direct typed endpoint impact; no rename inference.']}]
     limitations.update(profile["limitations"])
     header = {"id": new_id(), "selection": selection_data(selection), "snapshotVersion": selection.snapshot_version,
         "provenance": "real", "contextVersions": [{"contextId": row.id, "projectionVersion": row.projection_version} for row in contexts],
@@ -188,11 +195,23 @@ def admit(db, actor, repository, envelope):
 
 
 def query(db, repository, envelope):
+    from .access import search, graph, read_assertion, SearchInput, GraphInput, AssertionInput
+    if envelope.query in {"search_records", "read_graph", "read_assertion"}:
+        model, function = {"search_records": (SearchInput, search), "read_graph": (GraphInput, graph), "read_assertion": (AssertionInput, read_assertion)}[envelope.query]
+        return function(db, repository, model.model_validate(envelope.input))
+    if envelope.query == "read_release_record":
+        from .release import read_record
+        from .pipeline_schemas import ReleaseInput
+        return read_record(ReleaseInput.model_validate(envelope.input).releaseRecordId)
+    if envelope.query == "read_export":
+        from .cycle import read_export
+        return read_export(db, repository, OperationInput.model_validate(envelope.input).operationId)
     if envelope.query == "read_workspace":
         data = WorkspaceInput.model_validate(envelope.input)
         snapshot = scoped(db, Snapshot, data.snapshotId, repository.id)
         selection = scoped(db, Selection, snapshot.selection_id, repository.id)
-        return {**snapshot.document, "currentSnapshotVersion": selection.snapshot_version,
+        from .cycle import completion
+        return {**snapshot.document, "completion": completion(db, snapshot), "currentSnapshotVersion": selection.snapshot_version,
                 "mode": "active" if selection.snapshot_version == snapshot.snapshot_version else "historical"}
     if envelope.query == "list_snapshots":
         data = SnapshotListInput.model_validate(envelope.input)

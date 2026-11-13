@@ -94,14 +94,17 @@ history, historical reads, viewer restrictions, source browsing, logout and
 offline failure. Desktop and mobile snapshots were inspected; the dashboard card retains its content height without viewport overflow. The summary is generated at
 `outputs/frontend-integration/browser-result.json` (ignored).
 
-## Remaining work
+## Continuity continuation, 2026-11-14
 
-A bounded first comparison is now available through Compare revisions: select an initial target revision, expand Compare revisions, select a baseline and submit. Both inventories must already be captured. The comparison retains exact snapshots, reports changed paths and queues directly affected nonterminal assertions; confirmed base claims become stale and unconfirmed claims remain candidates. Retries preserve decisions. Renames are not inferred, and moved or missing anchors cannot be confirmed by substitution.
+The original first-comparison limits above are superseded by the implemented
+continuation in [CONTINUITY.md](CONTINUITY.md). The existing UI now connects
+chained revision comparisons, manual typed candidates/successors, corrections
+with optional new evidence anchors, authored-record revision, prior read-only
+decision inspection, further history pages, server snapshot content/rationale
+search, typed one-hop graph navigation, completion and queued JSON export.
 
-Task 3.3 remains open for full deletion/rename, chaining, retirement/reconfirmation and concurrency verification. This integration does not yet complete the revalidation workflow or implement
-server-side search/graph traversal, cycle completion/export, UI assertion correction,
-manual candidate/successor forms, authored-record revision forms or guided research
-evaluation. The service already supports some of those write commands, but their
-availability in the API does not establish a connected frontend workflow. History
-shows its first 50 retained events; further pages remain available through the API.
-These limits keep the complete continuity change open.
+The complete current verification and build identity are recorded in
+[RELEASE.json](RELEASE.json). [GUIDED-TASKS.md](GUIDED-TASKS.md) separates the
+automated accepted-input rehearsal from the still-unperformed practitioner study.
+Existing local user data is preserved. Deployment, HTTPS acceptance and schema
+migration remain separate authorized activities.

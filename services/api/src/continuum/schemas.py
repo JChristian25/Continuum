@@ -1,3 +1,4 @@
+from .relations import RelationType
 from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator, model_validator
 
@@ -28,7 +29,7 @@ class Envelope(Strict):
     requestId: Id
     repositoryId: Id
     viewId: Id
-    command: Literal["compare_revisions", "record_judgment", "reverse_judgment", "correct_assertion", "open_follow_up", "resolve_follow_up", "capture_files", "discover_candidates", "capture_record", "revise_record", "capture_candidate"]
+    command: Literal["compare_revisions", "record_judgment", "reverse_judgment", "correct_assertion", "open_follow_up", "resolve_follow_up", "capture_files", "discover_candidates", "capture_record", "revise_record", "capture_candidate", "complete_cycle", "export_snapshot"]
     input: dict
 
 
@@ -79,15 +80,18 @@ class ResolveFollowUp(ContextInput):
 
 
 class Replacement(Strict):
-    type: Literal["documents"]
+    type: RelationType
     sourceArtifactId: Id
     targetArtifactId: Id
     sourceVersionId: Id
     targetVersionId: Id
-    evidenceIds: list[Id] = Field(min_length=1, max_length=1024)
+    evidenceIds: list[Id] = Field(default_factory=list, max_length=1024)
+    newEvidence: list[dict] = Field(default_factory=list, max_length=1024)
 
     @model_validator(mode="after")
     def unique_evidence(self):
+        if not self.evidenceIds and not self.newEvidence:
+            raise ValueError("Correction requires existing or newly anchored evidence")
         if len(set(self.evidenceIds)) != len(self.evidenceIds):
             raise ValueError("Evidence IDs must be unique")
         return self

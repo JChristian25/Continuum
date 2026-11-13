@@ -23,7 +23,7 @@ def authority(db, operation_id):
                                          Grant.repository_id == initial.repository_id).with_for_update())
     repository = db.scalar(select(Repository).where(Repository.id == initial.repository_id).with_for_update())
     operation = db.scalar(select(Operation).where(Operation.id == operation_id).with_for_update().execution_options(populate_existing=True))
-    permitted = actor is not None and actor.enabled and grant is not None and grant.role == "reviewer"
+    permitted = actor is not None and actor.enabled and grant is not None and (grant.role == "reviewer" or operation.kind == "export" and grant.role == "viewer")
     return actor, repository, operation, db.get(Selection, operation.selection_id), permitted
 
 
@@ -31,6 +31,8 @@ def failed(operation, selection, repository, reason):
     operation.status = "failed"
     operation.lease_until = 0
     operation.limitations = [reason]
+    if operation.kind == "export":
+        return
     selection.snapshot_version += 1
     repository.snapshot_version += 1
     operation.published_version = selection.snapshot_version
@@ -198,6 +200,13 @@ def publish(factory, claimed, sources, generated=None):
         if not permitted or operation.lease_until <= now or operation.deadline_at <= now:
             failed(operation, selection, repository, "Processing authority or lease expired before publication.")
             return False
+        if operation.kind == "export":
+            from .cycle import publish_export
+            lease_until = operation.lease_until
+            publish_export(db, operation)
+            if lease_until <= int(time.time()) or operation.deadline_at <= int(time.time()):
+                raise AcquisitionError("Export lease expired during publication")
+            return True
         if selection.snapshot_version != operation.selection_version:
             failed(operation, selection, repository, "Selected context changed during processing; publication was not applied.")
             return False
@@ -233,6 +242,8 @@ def run_operation(factory, operation_id):
         return renew(factory, claimed)
 
     try:
+        if claimed["kind"] == "export":
+            return publish(factory, claimed, [])
         label = next(label for label, value in claimed["manifest"]["revisions"].items() if value["commitId"] == claimed["commitId"])
         _, sources = load_sources(claimed["manifestPath"], claimed["acceptancePath"], label)
         if not pulse():

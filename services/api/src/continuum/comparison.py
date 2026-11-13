@@ -1,8 +1,9 @@
 """Bounded path-identity comparison of retained, accepted file snapshots."""
 import json
 
+from .git_changes import compare_files
 from .models import ArtifactVersion, AssertionRevision, Evidence, Receipt, ReviewContext
-from .pipeline_models import Activity, RevisionOrigin, Selection, SelectionArtifact, SelectionContext, Snapshot, RepositoryView
+from .pipeline_models import Activity, RevisionOrigin, Selection, SelectionArtifact, SelectionContext, Snapshot, RepositoryView, SelectedRecord
 from .pipeline import registered_inputs, selection_data, stable
 from .review import scoped
 from .schemas import Id, Strict
@@ -28,29 +29,59 @@ def compare(db, actor, repository, envelope):
     target = scoped(db, Snapshot, data.targetSnapshotId, repository.id)
     before = scoped(db, Selection, base.selection_id, repository.id)
     after = scoped(db, Selection, target.selection_id, repository.id)
-    if view.selection_id != after.id or view.mode != 'active' or before.base_revision or after.base_revision:
+    if view.selection_id != after.id or view.mode != 'active':
         fail('invalid_input')
     if before.inventory_id != after.inventory_id or before.configuration_id != after.configuration_id:
         fail('invalid_input')
     _, _, manifest, _ = registered_inputs(db, repository.id, after.inventory_id, after.configuration_id)
     files = lambda snapshot: {a['artifactId']: a for a in snapshot.document['artifacts'] if a['identity'].get('kind') == 'file'}
     old, new = files(base), files(target)
-    if len(old) != len(manifest['entries']) or len(new) != len(manifest['entries']):
+    captured = lambda snapshot: next((c for c in snapshot.document['snapshot']['coverage'] if c['function'] == 'ingestion'), {})
+    if any(captured(s).get('status') != 'complete' or captured(s).get('processedCount') != len(f) or captured(s).get('eligibleCount') != len(f) for s, f in [(base, old), (target, new)]):
         fail('revision_unavailable', details={'reason': 'Capture both accepted inventories before comparing.'})
     # Read and verify retained bytes, rather than comparing labels or a current branch.
     for row in [*old.values(), *new.values()]:
         version = scoped(db, ArtifactVersion, row['versionId'], repository.id)
         if digest(version.content) != version.digest:
             fail('missing_evidence')
-    changes = []
-    changed = set()
-    for identity in sorted(old.keys() | new.keys()):
-        a, b = old.get(identity), new.get(identity)
-        if a and b and a['contentDigest'] == b['contentDigest']:
-            continue
-        changed.add(identity)
-        changes.append({'path': (b or a)['path'], 'kind': 'added' if a is None else 'deleted' if b is None else 'modified',
-                        'baseVersionId': a['versionId'] if a else None, 'targetVersionId': b['versionId'] if b else None})
+    versions = {}
+    for row in [*old.values(), *new.values()]:
+        versions[row['versionId']] = scoped(db, ArtifactVersion, row['versionId'], repository.id)
+    changes, technology = compare_files(
+        {row['path']: versions[row['versionId']].content for row in old.values()},
+        {row['path']: versions[row['versionId']].content for row in new.values()})
+    by_path = {row['path']: row for row in [*old.values(), *new.values()]}
+    changed = {by_path[row['path']]['artifactId'] for row in changes}
+    for row in changes:
+        artifact_id = by_path[row['path']]['artifactId']
+        row.update(baseVersionId=old.get(artifact_id, {}).get('versionId'), targetVersionId=new.get(artifact_id, {}).get('versionId'))
+    # Authored records keep their exact selected version unless the target explicitly selected a newer one.
+    records = {a['artifactId']: a for a in base.document['artifacts'] if a['identity'].get('kind') == 'record'}
+    records.update({a['artifactId']: a for a in target.document['artifacts'] if a['identity'].get('kind') == 'record'})
+    for artifact_id, row in records.items():
+        previous = next((a for a in base.document['artifacts'] if a['artifactId'] == artifact_id), None)
+        if previous and previous['versionId'] != row['versionId']:
+            changed.add(artifact_id)
+            changes.append({'path': row['path'], 'kind': 'record_modified', 'baseVersionId': previous['versionId'], 'targetVersionId': row['versionId'], 'artifactKind': row['kind']})
+    for row in records.values():
+        version = scoped(db, ArtifactVersion, row['versionId'], repository.id)
+        if version.artifact_id != row['artifactId'] or digest(version.content) != version.digest:
+            fail('missing_evidence')
+    incoming_versions = {**new, **records}
+    # A comparison's parent snapshot retains unchanged claims omitted from its direct-impact queue.
+    lineage, seen = [], set()
+    cursor = base
+    while cursor.id not in seen:
+        seen.add(cursor.id)
+        lineage.append(cursor)
+        parent = (cursor.document.get('comparison') or {}).get('baseSnapshotId')
+        if not parent:
+            break
+        cursor = scoped(db, Snapshot, parent, repository.id)
+    claims = {}
+    for ancestor in reversed(lineage):
+        for item in ancestor.document['assertions']:
+            claims[item['assertion']['assertionId']] = item
     identity = stable('comparison-v1', repository.id, before.id, base.snapshot_version, after.id, target.snapshot_version)
     selected = db.get(Selection, identity)
     if selected is None:
@@ -59,23 +90,28 @@ def compare(db, actor, repository, envelope):
         db.add(selected); db.flush()
         for row in new.values():
             db.add(SelectionArtifact(selection_id=identity, artifact_id=row['artifactId'], version_id=row['versionId']))
-        limitations = ['Accepted file inventory only; path identity, no rename inference or transitive propagation.',
+        for row in records.values():
+            db.add(SelectedRecord(selection_id=identity, artifact_id=row['artifactId'], version_id=row['versionId']))
+        limitations = ['Accepted file inventory only; native Git comparison, path identity, no rename inference or transitive propagation.',
                         'Only directly affected nonterminal base assertions are queued; unchanged assertions are not revalidated.',
                         'Line evidence transfers only when the same line range retains the exact excerpt digest.']
-        document = {'activityId': identity, 'methodId': 'direct-path-comparison-v1', 'agent': {'kind': 'system', 'id': 'continuum'},
+        document = {'activityId': identity, 'methodId': 'git-retained-path-comparison-v1', 'technology': technology, 'agent': {'kind': 'system', 'id': 'continuum'},
                     'initiatedByActorId': actor.id, 'recordedAt': utc(), 'baseSnapshotId': base.id, 'targetSnapshotId': target.id,
                     'baseRevision': before.target_revision, 'targetRevision': after.target_revision, 'changes': changes,
                     'limitations': limitations, 'impacts': []}
         origins = []
-        for item in base.document['assertions']:
+        for item in claims.values():
             a, p = item['assertion'], item['projection']
             if p['resolution'] == 'superseded' or p['validity'] in {'rejected', 'retired'}:
                 continue
             if not {a['source']['artifactId'], a['target']['artifactId']} & changed:
                 continue
+            current = scoped(db, ReviewContext, p['contextId'], repository.id)
+            if current.projection_version != p['projectionVersion']:
+                fail('snapshot_conflict', 409, {'currentSnapshotVersion': before.snapshot_version})
             endpoints = []
             for endpoint in [a['source'], a['target']]:
-                incoming = new.get(endpoint['artifactId'])
+                incoming = incoming_versions.get(endpoint['artifactId'])
                 endpoints.append({'artifactId': endpoint['artifactId'], 'versionId': incoming['versionId'] if incoming else None,
                     'availability': 'available' if incoming else 'missing', 'reason': None if incoming else 'Path absent in the selected target inventory; no replacement inferred.',
                     'priorVersionId': endpoint.get('versionId')})
@@ -83,7 +119,7 @@ def compare(db, actor, repository, envelope):
             for original in item['evidence']:
                 prior_evidence = scoped(db, Evidence, original['id'], repository.id)
                 old_version = scoped(db, ArtifactVersion, prior_evidence.artifact_version_id, repository.id)
-                incoming = new.get(old_version.artifact_id)
+                incoming = incoming_versions.get(old_version.artifact_id)
                 version = scoped(db, ArtifactVersion, incoming['versionId'], repository.id) if incoming else old_version
                 locator, excerpt = prior_evidence.locator, None
                 if incoming and locator.get('kind') == 'field':
@@ -110,7 +146,7 @@ def compare(db, actor, repository, envelope):
             db.add(SelectionContext(selection_id=identity, context_id=cid))
             origins.append(RevisionOrigin(revision_id=rid, activity_id=identity))
             document['impacts'].append({'contextId': cid, 'baseContextId': p['contextId'], 'assertionRevisionId': rid,
-                                        'reason': 'A registered documents endpoint changed under exact path identity.'})
+                                        'reason': 'A registered ' + a['type'] + ' endpoint changed under exact identity.'})
         # The activity must exist before origin foreign keys flush.
         db.add(Activity(id=identity, repository_id=repository.id, document=document)); db.flush()
         db.add_all(origins); db.flush()
