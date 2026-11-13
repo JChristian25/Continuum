@@ -1,9 +1,9 @@
 {
-  "id": "continuity-core-76663ead5b7f9117f99a4654",
+  "id": "continuity-core-3f8c30c489788952005d6141",
   "softwareVersion": "0.1.0",
-  "buildId": "76663ead5b7f9117f99a4654b1b14096a1e2f052c0a938dc4ce8e541789c21fe",
-  "baseCommit": "00866bf3bec9ccc37df9d00351dc7569e02ae314",
-  "recordedAt": "2026-11-13T16:31:38.733459Z",
+  "buildId": "3f8c30c489788952005d6141f266e06f8b3df4e25d8d43d6badb8d906ecb6a12",
+  "baseCommit": "22ac9833dc85a0308da7f4df3003f4000283989c",
+  "recordedAt": "2026-11-13T17:42:09.888758Z",
   "configurationId": "HC-LEXICAL-2026-11-13-P1",
   "language": "Python",
   "documentFormats": [
@@ -33,8 +33,8 @@
     "apps/web/src/components/Inspector.jsx": "08f7182d78a5ecc7deebd8a0cf8da749ffe2675cfe760a2046aa956ea0b81f15",
     "apps/web/src/components/RecordIntentModal.jsx": "6b5d72eadb9b333d36770082ecd925f371446fd18b94ea7728c37be5362e3e4e",
     "apps/web/src/components/ReviewSummary.jsx": "c5f8ebb4af0d0d6875a74b7fdcb65ffc9f6005c56139132cd96b854b34b36497",
-    "apps/web/src/components/service.css": "56fb5384d1424b9762b5ca8d76fdb4c75157763f3093ae3ce87326a33afab30c",
-    "apps/web/src/components/ServiceApp.jsx": "1b03ee9f63d62e33b0a7292899c1d4e46f57a6389676b7b8b129da74a036a575",
+    "apps/web/src/components/service.css": "d3d657515aa52869acd131626312124caf2b39f219848ef7ade01d638a7ced0e",
+    "apps/web/src/components/ServiceApp.jsx": "63f001049adbe47ec3e6afab11664d08cc15a28561fe9fc869fa28c973713189",
     "apps/web/src/components/ServiceTools.jsx": "c218ba3c7e763513591ff950b69aa2c4d88dabe3a9d73fcc285d88b8bdabde33",
     "apps/web/src/components/Shell.jsx": "9cfacef0b9f9ac5a6335e8c26fc57803706b385686b57b2b8bd3fc2f5bfd477e",
     "apps/web/src/components/Toast.jsx": "4f4b6f475d25412e302af43781269ab8e54ba26bb5ee42c20f5ce0cf9a82954f",
@@ -56,12 +56,12 @@
     "apps/web/src/context/ContinuumBase.js": "5d96ba7e81a35311d91929c089710166dbfb8e1e76c017464d81be62d9bf5a04",
     "apps/web/src/context/ContinuumContext.jsx": "1f66564eb38ec374548953aad97a257542420a197221817df5ae9449e2faff41",
     "apps/web/src/context/DemoContinuumProvider.jsx": "49cafaf20ffa432c219b186aeeecb83c4c7836dc2635dc09af62d111d9f95f92",
-    "apps/web/src/context/ServiceContinuumProvider.jsx": "df6dd958e3cc35fec20b8d48d28bfab886615269b190844bd8069ff37d6a2c1c",
+    "apps/web/src/context/ServiceContinuumProvider.jsx": "4c53bd9f64e21229dc09e32e73a3cf9168b703997e885df8de50fe78ebfc187b",
     "apps/web/src/data/helpers.js": "2546af85cf4438bf27a05a3169dc4d356d0749731dd66803b5034f63e6e45339",
     "apps/web/src/data/repoFiles.js": "0289e807313287fa10cc72dfd30459093f8f9462a39fa43d777142d9a58951c2",
-    "apps/web/src/data/service.test.js": "15f72ebadc645687cd05d247f08866b78649d82882ffb4bc0823801ebc9772e9",
+    "apps/web/src/data/service.test.js": "1757e838aade911621f03fc65b35058f1403e5a58fedcad8019d04b34a7c9361",
     "apps/web/src/data/serviceApi.js": "51f459003a0d39894c30dfdb1d2b9bea0b14e5a80acb730f275b590040281583",
-    "apps/web/src/data/serviceModel.js": "c9503dcc28f78eec6d24de7ee12c9fa3329a9637aece0d7722afbb8eff4221ba",
+    "apps/web/src/data/serviceModel.js": "30c6a211f3b2c3168a8feafadd43aa54f36177dc1749cacc47cc8d02cb2e4e2e",
     "apps/web/src/data/state.js": "4dfa506ac58b46ef2a886cdce86df7387ab70915cfbcf22110256f7e756720a8",
     "apps/web/src/data/workflow.js": "a579ec50ff0c57cc77a23a3945d1c0d997ad8333e001664580c953e07c7cf661",
     "apps/web/src/data/workflow.test.js": "e472e9a6474636b236bea575ee798fad3aaf20707699dba08999984885eef721",
@@ -70,7 +70,7 @@
     "apps/web/src/lib/utils.js": "5c3b48f48299afa215a3748779d7c19e9db1b3e3687dcd656cc72cc135d2aba7",
     "apps/web/src/main.jsx": "fbaa1e2672c348eed0f0844b36ff0b86dc583b3aebbeffb42a79db6ed33121bc",
     "apps/web/src/redesign.css": "97e6f3e7d139c22ff09c68968516a0768c7a69457019993bfd2f61c2ace5098c",
-    "apps/web/tests/service-browser.mjs": "51ad10879313bf994bca34bea8d300cda9acf2d7d4200bbe3e6c6f40078b0e5f",
+    "apps/web/tests/service-browser.mjs": "60ed2c65773f378a6ca32b5b89a981e90d246b0ae9bd3119171c98f249771e1a",
     "apps/web/tests/service-layout-browser.mjs": "b96ac11863cc33fa55a394c648a19b46f524e170017ecbc24071e49b8764a6de",
     "apps/web/tests/service-layout.fixture.jsx": "398f55eab5cffd6e6acfd224a829fb34611e5ce3e59c34483045a9a325abf5a7",
     "apps/web/tests/service-layout.html": "90bf830f98d523c0151d5f45e4ba150a2dfe4b5f2ca5170b4e2094706de6763e",
@@ -79,26 +79,27 @@
     "services/api/pyproject.toml": "488020d3e659495dea3337f5bcb2c3dbc3b1b74ae8dbd19c50d93f418dadf56f",
     "services/api/requirements.lock": "ebc12a9d0ebcbb40f05b354cf870c4a781946582c88972c26aa064107e3d9415",
     "services/api/src/continuum/__init__.py": "187dd94c012febe1afbbcdb5fdb1e4c2e7c0143aadeac21a65175d7c39c37b62",
-    "services/api/src/continuum/access.py": "4a86fd51b8f87b3c04db44b4fb9b4752bfe5e7173071f464f42624de0182d423",
+    "services/api/src/continuum/access.py": "08c17ceb1997cbb1252250543e360c2d393a99eb20c03205554ad20cd43dbacc",
     "services/api/src/continuum/acquisition.py": "937d0a973e17ead109869c395d74c6f59964602cd98ca6bb1eb1bc5aea651c69",
     "services/api/src/continuum/admin.py": "52e7f421b1a8b1b9d6c60a49078a8ca2f1ce5d9f7ab7997162ea8a71185865da",
     "services/api/src/continuum/capture.py": "5e63f5b2bd3518defd4e1804fc39f92cb7b3a489870249874a5050a67e2d209c",
     "services/api/src/continuum/comparison.py": "ecb7afdbfff7041c3af4dd300dfd1b3eb0a68ee68ac60887589325df7d7abd09",
     "services/api/src/continuum/config.py": "20cf2b227034bb0eb7a984bcc0ea1467ab330d4aae490b56a3e5c016bc51047b",
-    "services/api/src/continuum/cycle.py": "b1703fb989fbefb5445aebe9a3fb465069106f0e4c1d48ea72fccbb4c286e6d8",
+    "services/api/src/continuum/cycle.py": "ce53a9186db6d608fa78c05cdd954e504bbf8c63a572b158f0eb9f6b60ac604a",
     "services/api/src/continuum/db.py": "0590fbee53a13f8388478586a21c107e0eb6d508932d40f1fe781d85efd7dab5",
     "services/api/src/continuum/discovery.py": "70af126cc4d80b812a8f9ee3abb2d4b86216a585d970deaaba4900ee522b3474",
     "services/api/src/continuum/git_changes.py": "2c4abb34540ea0c9f5520d66265c078150b87393e0c11a0fc63f335dca71131e",
     "services/api/src/continuum/local_setup.py": "4f5b0dccaf98596bbe4de70843375b1e4b95266b33e868fba8e940a1b498f0cc",
     "services/api/src/continuum/main.py": "661c4e914c03a13a0df498f3b1dc5ba101d1d714f9c020091147e8a18804fada",
-    "services/api/src/continuum/models.py": "836710f1b790c63f618f3de3bcb40b481b6f5bb01c043f485c9b5364f34448fd",
-    "services/api/src/continuum/pipeline.py": "e1ca14c589df17472224585a01f4a2214c6a2843a4d86fb381fc11c2748c04a5",
+    "services/api/src/continuum/models.py": "7f85c3526ecbc7392d757702afc71580d04a29a63fb19b1cd59f6932be629766",
+    "services/api/src/continuum/pipeline.py": "a9c24afa9de10e599e7f50fac53729ef4cc11ef686c8ac4d1d595cd9e4c7eb59",
     "services/api/src/continuum/pipeline_models.py": "0a8f7f6a37d60582747b4e60cf578b632a33d42782ec00e6156c3f0f0e3c81be",
     "services/api/src/continuum/pipeline_schemas.py": "518db35c494b836a7727e88791e2f6427a3e0bae7feb5051814b91ae3f6e18e0",
+    "services/api/src/continuum/progress.py": "8922abf6743ccc2a9c4acf21fb66d219ef8c6ee33a6c7ea6c24a2a35dd734876",
     "services/api/src/continuum/relations.py": "bb210d98fd38377c144fdd088d06301351eeb97d1e52c93de1f5e5e40707acf5",
-    "services/api/src/continuum/release.py": "d09672357d872f8d146abf65c23f5f18da091e1d721544979afa45c588b5a090",
-    "services/api/src/continuum/review.py": "fc0034b95c134d3ee82e12fd25a3b687e8426078dd4f01ef3a7a2dd28cb1c55e",
-    "services/api/src/continuum/schemas.py": "dde0f27c817c0b4116dadfaade2be963a2bd828e6a451ade238a74bb7ced817d",
+    "services/api/src/continuum/release.py": "e98fd1e7b86f1e9a11728ef21aaadbf7493c714693a87418c1a04df7139ab8b6",
+    "services/api/src/continuum/review.py": "3656b0e20cc8de83b964af013b8e8dadd6c8f7a50fcf279ecfbdbf80f768173d",
+    "services/api/src/continuum/schemas.py": "7f1ce2bfca7ff2c77242a503836f74a776289f996eeaeb7ba0f2aa11bfa94efb",
     "services/api/src/continuum/security.py": "9c8ed1a0c9ad9c45bf924054091edac04f07d50f0975f4e8fccc8c015f8cec0c",
     "services/api/src/continuum/worker.py": "b5b89b72454827308494eb892f9ce654f73e2e2a41f43b44e0fabe64048dbf7b",
     "services/api/tests/conftest.py": "c5684201678a7aac5af80d74d205b60666e5e1cbc1fb39dfb3b79d6df1f8b5f5",
@@ -108,10 +109,11 @@
     "services/api/tests/test_comparison.py": "801644a90623d56be79880c01ee25f7f6cf3887a25f4343454907b7820d50744",
     "services/api/tests/test_continuity.py": "84e9d1d89b4168442be46f9aa1f961e133b19657d78a087f7044d832fca1b71b",
     "services/api/tests/test_discovery.py": "dd2932ad7c86b8216d20eeafadccf51a2465e8730b6488b85f42313bfc61d030",
-    "services/api/tests/test_frontend_browser.py": "9a612b87e7e92a1ea44a0fbd1cd54f221bc59395c423d86c8bccb39c6ac5645b",
+    "services/api/tests/test_first_load.py": "19a77032796f92224f265cd194bad32a6e31e5966209b54559190faae2095d66",
+    "services/api/tests/test_frontend_browser.py": "b9ef61a6c9ed1a40e39b631087416f4197a8b7946c3ec3be0d1c21143872ae36",
     "services/api/tests/test_pipeline.py": "6b7be1b2b139697aa1492d054b8de38eb64894a7518f2195238204a2a8e9b718",
     "services/api/tests/test_process.py": "86ac10d9cd226c9c37fe1724d0045aaf75efbbc35ca0a3bf6d849e3f89d46462",
-    "services/api/tests/test_review.py": "4433009e23b4aa1b88479ef92a5a418a513110ac5bfe663747ffc46adfce8e3b"
+    "services/api/tests/test_review.py": "8e72942828c98fb9cdd723979031dbc6fba233ca397294d607de2fdf5f270337"
   },
   "dependencies": [
     {
@@ -296,7 +298,8 @@
       "function": "human_review",
       "status": "implemented",
       "limitations": [
-        "Exact-context authorization, reasoned judgments, correction, reversal and independent follow-up."
+        "Exact-context authorization and evidence acknowledgment; initial candidate rationale optional; exceptional-action reasons required.",
+        "Existing databases require separately authorized nullable-reason migration before reason-free writes."
       ]
     },
     {
@@ -336,162 +339,83 @@
     }
   ],
   "verificationReferences": [
-    "outputs/continuity-completion/verification.json"
+    "outputs/first-load-review/verification.json"
   ],
   "verification": {
-    "observedAt": "2026-11-13T16:31:36.882718+00:00",
-    "backendPostgreSQL": {
-      "passed": 132,
-      "command": "services/api/.venv/Scripts/python.exe -m pytest services/api/tests -q",
-      "evidence": "outputs/continuity-completion/backend-suite.log",
-      "scope": "Generated isolated PostgreSQL schemas; accepted retained source; synthetic named accounts.",
-      "warnings": [
-        "Starlette HTTPX TestClient deprecation notice."
-      ]
+    "recordedAt": "2026-11-13T17:42:07.769972+00:00",
+    "change": "reduce-first-load-review-burden",
+    "workingTreeBuild": "dirty source tree; hashes identify the tested bytes",
+    "automated": {
+      "regression": {
+        "passed": 150,
+        "seconds": 281.89,
+        "log": "outputs/first-load-pytest-final.log",
+        "stage": "before final baseline rejection count binding and comparison guard"
+      },
+      "finalFocused": {
+        "passed": 19,
+        "seconds": 176.68,
+        "log": "outputs/first-load-release-check.log",
+        "scope": "18 API/model tests and expanded authenticated browser"
+      },
+      "frontend": {
+        "passed": 12,
+        "log": "outputs/first-load-node.log"
+      },
+      "lint": "passed with existing demo effect warning",
+      "build": "passed with existing optional large-chunk warning",
+      "openspec": "strict validation passed",
+      "diffCheck": "passed"
     },
-    "frontendUnit": {
-      "passed": 11,
-      "command": "node --test apps/web/src/data/service.test.js apps/web/src/data/workflow.test.js"
-    },
-    "authenticatedBrowser": {
+    "browser": {
       "passed": true,
+      "mode": "real Chromium against isolated TCP API/Vite and PostgreSQL test schema",
+      "desktop": [
+        1280,
+        720
+      ],
+      "mobile": [
+        390,
+        844
+      ],
+      "screenshots": [
+        "outputs/frontend-integration/progress-desktop.png",
+        "outputs/frontend-integration/progress-mobile.png",
+        "outputs/frontend-integration/progress-failure-desktop.png",
+        "outputs/frontend-integration/progress-failure-mobile.png",
+        "outputs/frontend-integration/reason-free-history.png"
+      ],
+      "export": "outputs/frontend-integration/review-export.json",
       "cases": [
-        "cookie login",
-        "demo isolation",
-        "real snapshot",
-        "exact sources",
-        "durable draft",
-        "stale projection preserves draft",
-        "lost response identical retry",
-        "persisted judgment and history",
-        "typed manual requirement link",
-        "record revision revalidation",
-        "prior evidence read-only",
-        "server content search",
-        "retained historical read-only",
-        "file explorer",
-        "viewer read-only",
-        "logout",
-        "offline fails closed"
+        "capture failure visibility",
+        "accepted capture and frozen discovery",
+        "partial coverage",
+        "reason-free confirmation and rejection",
+        "evidence acknowledgment",
+        "draft reload",
+        "stale write",
+        "identical uncertain retry",
+        "baseline and incoming separation",
+        "comparison with pending baseline",
+        "completion with exact limitation acknowledgment",
+        "JSON export absence metadata",
+        "comparison after completion",
+        "historical and viewer read-only"
       ],
-      "pageErrors": []
+      "exportJudgments": 19
     },
-    "layoutBrowser": {
-      "passed": true,
-      "scope": "Actual service components with synthetic fixture; desktop, 1280x720 and mobile; source contrast, fixed dialogs, lists, graph and summary; no page errors.",
-      "evidenceDirectory": "outputs/ui-repair"
+    "liveService": {
+      "verified": false,
+      "reason": "Existing database and live application were not migrated or restarted."
     },
-    "uiLibraryBrowser": {
-      "passed": true,
-      "scope": "Default service entry; demo interaction; Base UI menus/select/checkbox/dialog; Radix tabs; cmdk search; Sonner notification; mobile; no page errors.",
-      "evidenceDirectory": "outputs/ui-library"
+    "migration": {
+      "prepared": "services/api/migrations/optional-review-reason.sql",
+      "applied": false,
+      "separateAuthorizationRequired": true
     },
-    "build": {
-      "passed": true,
-      "evidence": "outputs/continuity-completion/frontend-build.log",
-      "warning": "Existing large optional graph/language chunks."
-    },
-    "lint": {
-      "passed": true,
-      "warning": "Existing DemoContinuumProvider set-state-in-effect warning."
-    },
-    "pythonDependencyCheck": {
-      "passed": true
-    },
-    "openSpecStrictValidation": {
-      "passed": true
-    },
-    "mechanicalDesignScan": {
-      "findings": 0,
-      "scope": "Regex-only scan of ServiceTools.jsx, ServiceApp.jsx and service.css; does not establish complete visual accessibility."
-    },
-    "guidedAcceptedInputRehearsal": {
-      "case": "G-01 through G-04 automated development verification",
-      "actorScope": "isolated synthetic account; not a practitioner assessment",
-      "databaseScope": "generated test schema managed by the pytest fixture",
-      "baselineRevision": {
-        "objectAlgorithm": "sha1",
-        "commitId": "0f78e117eadb59a01dd51e09344479fa3eeb4187"
-      },
-      "incomingRevision": {
-        "objectAlgorithm": "sha1",
-        "commitId": "c62d6648d81e1aebc65f80bddc72f165fba7320b"
-      },
-      "baselineSnapshotId": "d4c775d9-3db5-4fdf-aca9-24f35cbe4d4b",
-      "incomingSnapshotId": "4e5db691-37c1-4978-93cc-9d8f7320dbb0",
-      "baselineAssertionRevisionId": "41c279a9-d681-5761-b186-f1af9b811a2c",
-      "incomingAssertionRevisionId": "f0749fdf-778d-5224-b31f-6d05c7dad375",
-      "incomingInitialValidity": "stale",
-      "incomingDecision": "retire",
-      "priorReasonRetrieved": true,
-      "priorSourceReferencesUnchanged": true,
-      "technology": {
-        "technology": "Git",
-        "version": "git version 2.55.0.windows.2",
-        "mode": "diff --no-index --no-renames",
-        "scope": "retained accepted file bytes"
-      }
-    },
-    "inputAcceptance": {
-      "schemaVersion": "acceptance-0.1.0",
-      "id": "HC-UPSTREAM-2026-11-13-A1",
-      "acceptedOn": "2026-11-13",
-      "basis": "User replied to the completed input proposal: alright, commit then continue development",
-      "proposalId": "HC-UPSTREAM-2026-11-13-P1",
-      "checkpointCommit": "e3381c4b3fb0e2c4c3707c9f9e1a9bb445539a8e",
-      "manifestSha256": "57fe399e8f70706748f22307c272b9c612c703b1fac036477fb00d6c304e7b37",
-      "localAcquisition": true,
-      "repositoryId": 38067078,
-      "repositoryFullName": "healthchecks/healthchecks",
-      "method": "immutable GitHub REST commit/tree/blob reads",
-      "maximumPaths": 10,
-      "maximumRevisions": 4,
-      "maximumFileBytes": 1048576,
-      "maximumUniqueBlobBytes": 4194304,
-      "expectedOutcomes": [
-        "UP-01",
-        "UP-02",
-        "UP-03",
-        "UP-04",
-        "UP-05",
-        "UP-06",
-        "UP-08"
-      ],
-      "conditionalOutcome": "UP-07 remains conditional on a separately accepted discovery configuration",
-      "automaticDiscovery": false,
-      "clone": false,
-      "executeUpstream": false,
-      "installUpstreamDependencies": false,
-      "deploy": false
-    },
-    "discoveryAcceptance": {
-      "schemaVersion": "discovery-acceptance-0.1.0",
-      "id": "HC-LEXICAL-2026-11-13-A1",
-      "acceptedOn": "2026-11-13",
-      "basis": "User selected: Use the proposed P-08 profile (recommended)",
-      "profileId": "HC-LEXICAL-2026-11-13-P1",
-      "profileSha256": "eeea88c56462a0f90c4f38ee1027bd214bc429cc64fecc0bb1b67bd29ca3fc75",
-      "manifestSha256": "57fe399e8f70706748f22307c272b9c612c703b1fac036477fb00d6c304e7b37",
-      "methodId": "lexical-file-v1",
-      "independentExpectationId": "UP-07",
-      "expectedOutcome": "An unconfirmed automatic lexical candidate from the C0 email document to the C0 SMTP handler, retaining the failure token and exact-version evidence",
-      "humanConfirmation": "Required separately; acceptance does not confirm discovered relationships",
-      "researchAccuracyClaim": false
-    },
-    "localRuntime": {
-      "apiHealth": "ok",
-      "frontendProxyHealth": "ok",
-      "frontend": "http://localhost:5173",
-      "api": "http://127.0.0.1:8787",
-      "dataMigration": false,
-      "userDatabaseReset": false
-    },
-    "researchBoundary": {
-      "practitionerEvaluation": "not performed",
-      "accuracyOrProductivityFindings": "not established",
-      "deletionFixture": "Synthetic retained-snapshot boundary in isolated schema; no new upstream deletion acquisition.",
-      "deployment": "not performed"
-    }
+    "sourceAcquisition": "No additional source acquired; accepted four-revision package and frozen profile reused.",
+    "deployment": "not performed",
+    "practitionerEvaluation": "not performed"
   },
   "guidedTaskIds": [
     "G-01",

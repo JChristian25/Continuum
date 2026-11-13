@@ -108,3 +108,33 @@ The complete current verification and build identity are recorded in
 automated accepted-input rehearsal from the still-unperformed practitioner study.
 Existing local user data is preserved. Deployment, HTTPS acceptance and schema
 migration remain separate authorized activities.
+# First-load progress and initial rationale (2026-11-14)
+
+`read_workspace.result.progress` is an additive lifecycle projection for its exact
+snapshot ID/version. Steps contain `id`, `label`, `state`, `action` and `blockers`;
+counts retain candidate/stale/confirmed/rejected/retired, reviewed and pending.
+`baseline` identifies the retained baseline and its separate review counts.
+`operations` exposes current processing for active snapshots and frozen processing
+for historical ones; older snapshots without processing provenance report unknown
+discovery. Captured choices never imply review completion. Git comparison does
+not require all baseline candidates to be confirmed or even reviewed. Same-revision
+comparison is permitted by the service and can produce an empty affected queue.
+Refresh or check processing status after publication; state survives reload.
+
+An initial candidate `record_judgment` confirm/reject may omit `reason` or send
+null/blank (normalized to null). Nonblank text is preserved with existing bounds.
+Eligibility comes from stored initial context, not a client claim. Incoming review,
+reconfirmation, retirement, corrections, reversals and follow-up notes retain
+their existing requirements. Evidence acknowledgment remains mandatory for
+confirmation. Original uncertain-delivery envelopes are replayed unchanged.
+
+History and new JSON exports use `reason: null, reasonStatus: "not_provided"` for
+absence, or text plus `reasonStatus: "provided"`. Display null as “No reason
+provided”; that label is not authored rationale and is not searched as such.
+Legacy blank reasons are handled as absent on reads without rewriting rows.
+This changes the development 0.1.0 reason contract additively; consumers must allow
+null before rollout. Previously generated exports remain frozen.
+
+Existing database rollout requires separately authorized application of
+`migrations/optional-review-reason.sql` before deploying nullable writes. No live
+migration is performed by this work or by ORM `create_all` on existing tables.

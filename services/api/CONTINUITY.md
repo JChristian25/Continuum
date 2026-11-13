@@ -1,5 +1,18 @@
 # Continuity core continuation
 
+First-load review continuation (2026-11-14): Workspace now projects capture,
+discovery, baseline review, comparison and incoming queue state from exact
+service records. Partial lexical scope and failed processing stay visible;
+comparison does not depend on finishing baseline reviews. Historical snapshots
+retain their processing provenance; older provenance gaps remain unknown.
+Ordinary initial candidate confirmation/rejection can omit rationale while
+retaining evidence acknowledgment and exact accountable history. History and
+new exports expose null plus `reasonStatus: not_provided`; UI display is “No
+reason provided”. Search skips absent rationale. Exceptional reasons remain
+required. See FRONTEND.md and the new change's implementation.md for the
+research conflict and rollout boundary. The prepared migration has not been
+applied to user data; live existing-database acceptance remains pending.
+
 This development implementation preserves the existing frontend and accepted
 Healthchecks package. It introduces no new service, database table or application
 dependency. Existing accounts and local data are retained.
