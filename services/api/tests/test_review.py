@@ -276,7 +276,7 @@ def test_login_throttle_is_durable_and_does_not_echo_secrets(setup):
 
 def test_request_and_page_limits(setup):
     headers = sign_in(setup)
-    assert post(setup, headers, envelope(reason=" ")).status_code == 422
+    assert post(setup, headers, envelope(reason="x" * 8001)).status_code == 422
     assert post(setup, headers, envelope(expectedProjectionVersion=True)).status_code == 422
     assert setup["client"].post("/api/v1/commands", headers={**headers, "Content-Type": "application/json"}, content="x" * 262145).status_code == 413
     assert setup["client"].get("/api/v1/repositories/repo/contexts/context1/history", params={"viewId": "view1", "pageSize": 101}).status_code == 422

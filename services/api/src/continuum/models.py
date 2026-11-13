@@ -155,7 +155,7 @@ class ReviewEvent(Base):
     recorded_at: Mapped[str] = mapped_column(String(40))
     sequence: Mapped[int]
     type: Mapped[str] = mapped_column(String(40))
-    reason: Mapped[str] = mapped_column(Text)
+    reason: Mapped[str | None] = mapped_column(Text)
     payload: Mapped[dict] = mapped_column(JSON)
 
 

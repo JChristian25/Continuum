@@ -7,7 +7,7 @@ from sqlalchemy import select
 from .models import ArtifactVersion, Receipt, ReviewEvent
 from .pipeline_models import Activity, Operation, RepositoryView, Selection, Snapshot
 from .schemas import Strict, Id
-from .review import scoped
+from .review import scoped, reason_data
 from .security import digest, fail, utc
 
 class CompleteInput(Strict):
@@ -77,7 +77,7 @@ def publish_export(db, operation):
     judgments, references = [], []
     for item in snapshot.document['assertions']:
         event = scoped(db, ReviewEvent, item['projection']['effectiveJudgmentEventId'], operation.repository_id) if item['projection']['effectiveJudgmentEventId'] else None
-        judgments.append({**item, 'effectiveEvent': {'id': event.id, 'reason': event.reason, 'actorId': event.actor_id, 'recordedAt': event.recorded_at, 'payload': event.payload} if event else None})
+        judgments.append({**item, 'effectiveEvent': {'id': event.id, **reason_data(event.reason), 'actorId': event.actor_id, 'recordedAt': event.recorded_at, 'payload': event.payload} if event else None})
         for retained in db.scalars(select(ReviewEvent).where(ReviewEvent.context_id == item['projection']['contextId'], ReviewEvent.sequence <= item['historySequence']).order_by(ReviewEvent.sequence)):
             references.append({'eventId': retained.id, 'contextId': retained.context_id, 'assertionRevisionId': retained.assertion_revision_id,
                 'artifactVersionIds': [e['versionId'] for e in [item['assertion']['source'], item['assertion']['target']] if e['versionId']], 'evidenceIds': item['assertion']['evidenceIds']})

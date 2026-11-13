@@ -72,7 +72,7 @@ def search(db, repository, data):
         for item in snapshot.document['assertions']:
             projection, assertion = item['projection'], item['assertion']
             for event in db.scalars(select(ReviewEvent).where(ReviewEvent.context_id == projection['contextId'], ReviewEvent.sequence <= item['historySequence']).order_by(ReviewEvent.sequence)):
-                if text in event.reason.casefold():
+                if event.reason and text in event.reason.casefold():
                     for endpoint in [assertion['source'], assertion['target']]:
                         reasons.setdefault(endpoint['artifactId'], []).append({'field': 'rationale', 'locator': None,
                             'excerpt': event.reason[:500], 'eventId': event.id, 'contextId': projection['contextId']})

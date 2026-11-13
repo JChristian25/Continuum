@@ -55,7 +55,7 @@ def main():
             ('ingestion','implemented',['Accepted 10-path, four-commit inventory only.']),('extraction','partially_implemented',['Python tokenize and document line scan; no AST or runtime dependency analysis.']),
             ('relationship_evidence','partially_implemented',['Frozen lexical documents candidates; manually anchored documents/implements/motivates; no semantic accuracy claim.']),
             ('change_handling','partially_implemented',['Native Git retained-byte comparison; exact path identity; no automatic rename identity or transitive propagation.']),
-            ('human_review','implemented',['Exact-context authorization, reasoned judgments, correction, reversal and independent follow-up.']),
+            ('human_review','implemented',['Exact-context authorization and evidence acknowledgment; initial candidate rationale optional; exceptional-action reasons required.', 'Existing databases require separately authorized nullable-reason migration before reason-free writes.']),
             ('search','implemented',['Unicode literal matching, retained snapshot, up to 1000 artifacts/5000 assertions and 100 results/page.']),
             ('graph','implemented',['Typed one-hop neighborhoods and explicit unresolved endpoints.']),('completion','implemented',['Current settled snapshot and explicit limitations acknowledgment.']),
             ('export','implemented',['Queued JSON export, at most 4 MiB; references rather than a full source archive.']),('AI_assistant','unsupported',['Outside this core continuation.'])]],

@@ -51,10 +51,18 @@ class NewFollowUp(Strict):
 
 class Judgment(ContextInput):
     decision: Literal["confirm", "reject", "reconfirm", "retire"]
-    reason: Note
+    reason: Note | None = None
     reviewedEvidenceIds: list[Id] = Field(max_length=1024)
     contentConcern: Note | None
     followUpDisposition: Annotated[NoFollowUp | NewFollowUp, Field(discriminator="kind")]
+
+    @field_validator('reason', mode='before')
+    @classmethod
+    def absent_reason(cls, value):
+        # Normalize only blank input; retain authored nonblank text verbatim.
+        if isinstance(value, str) and not value.strip() and len(value) <= 8000:
+            return None
+        return value
 
     @model_validator(mode="after")
     def unique_evidence(self):

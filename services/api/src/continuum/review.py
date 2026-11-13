@@ -16,6 +16,11 @@ def scoped(db, model, identity, repository_id):
     return row
 
 
+def reason_data(reason):
+    supplied = isinstance(reason, str) and bool(reason.strip())
+    return {'reason': reason if supplied else None, 'reasonStatus': 'provided' if supplied else 'not_provided'}
+
+
 def projection(context):
     return {
         "contextId": context.id, "repositoryId": context.repository_id,
@@ -178,6 +183,11 @@ def command(db, actor, repository, envelope):
     successor = None
 
     if envelope.command == "record_judgment":
+        optional_reason = (context.kind == 'initial' and context.comparison_id is None
+                           and context.validity == 'candidate' and context.resolution == 'open'
+                           and data.decision in {'confirm', 'reject'})
+        if not optional_reason and data.reason is None:
+            fail('invalid_input', details={'fields': ['reason']})
         allowed = {("candidate", "open"): {"confirm", "reject"},
                    ("stale", "open"): {"reconfirm", "retire"},
                    ("confirmed", "resolved"): {"retire"}}
@@ -361,7 +371,7 @@ def history(db, repository_id, view_id, context_id, cursor, page_size):
     items = [{"id": event.id, "repositoryId": event.repository_id, "contextId": event.context_id,
               "assertionRevisionId": event.assertion_revision_id, "actorId": event.actor_id,
               "recordedAt": event.recorded_at, "sequence": event.sequence, "type": event.type,
-              "reason": event.reason, "payload": event.payload, "references": references,
+              **reason_data(event.reason), "payload": event.payload, "references": references,
               "reversedByEventId": reversed_by.get(event.id)} for event in events[:page_size]]
     next_cursor = None
     if len(events) > page_size:

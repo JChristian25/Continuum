@@ -160,6 +160,8 @@ def make_snapshot(db, selection):
                    snapshot_version=selection.snapshot_version,
                    document={"snapshot": header, "assertions": assertions, "artifacts": artifacts,
                              "followUps": [follow_up(work) for work in works],
+                             "processing": [{"id": o.id, "kind": o.kind, "status": o.status, "limitations": o.limitations}
+                                            for o in operations if o.kind in {"capture", "discovery"}],
                              "comparison": db.get(Activity, selection.id).document if selection.base_revision else None})
     db.add(row)
     db.flush()
@@ -211,7 +213,8 @@ def query(db, repository, envelope):
         snapshot = scoped(db, Snapshot, data.snapshotId, repository.id)
         selection = scoped(db, Selection, snapshot.selection_id, repository.id)
         from .cycle import completion
-        return {**snapshot.document, "completion": completion(db, snapshot), "currentSnapshotVersion": selection.snapshot_version,
+        from .progress import workspace_progress
+        return {**snapshot.document, "progress": workspace_progress(db, snapshot, selection), "completion": completion(db, snapshot), "currentSnapshotVersion": selection.snapshot_version,
                 "mode": "active" if selection.snapshot_version == snapshot.snapshot_version else "historical"}
     if envelope.query == "list_snapshots":
         data = SnapshotListInput.model_validate(envelope.input)
