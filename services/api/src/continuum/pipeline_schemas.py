@@ -19,6 +19,7 @@ class CommitRef(Strict):
 
 
 class SelectionInput(Strict):
+    comparisonId: Id | None = None
     repositoryId: Id
     targetRevision: CommitRef
     baseRevision: CommitRef | None

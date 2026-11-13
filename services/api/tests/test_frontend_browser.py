@@ -16,7 +16,7 @@ from continuum.config import Settings
 from continuum.main import create_app
 from continuum.models import ReviewEvent
 from continuum.worker import run_operation
-from test_pipeline import captured, pipeline, submit
+from test_pipeline import ask, captured, pipeline, submit
 
 
 def port():
@@ -28,6 +28,11 @@ def port():
 def test_real_frontend_session_snapshot_and_review(captured):
     _, queued = submit(captured, 'discover_candidates')
     assert run_operation(captured['db'], queued['result']['operationId'])
+    choice = {**captured['selection'], 'targetRevision': {'objectAlgorithm': 'sha1', 'commitId': 'c62d6648d81e1aebc65f80bddc72f165fba7320b'}}
+    selected = ask(captured, captured['headers'], 'select_context', choice)
+    target = {**captured, 'selection': choice, 'selected': selected}
+    _, admission = submit(target)
+    assert run_operation(captured['db'], admission['result']['operationId'])
     web_port, api_port = port(), port()
     origin = f'http://127.0.0.1:{web_port}'
     settings = Settings(str(captured['engine'].url.render_as_string(hide_password=False)), origin=origin, local_http=True)

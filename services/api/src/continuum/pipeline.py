@@ -72,12 +72,17 @@ def registered_inputs(db, repository_id, inventory_id, configuration_id):
 
 
 def selection_data(selection):
-    return {"repositoryId": selection.repository_id, "targetRevision": selection.target_revision,
+    return {**({"comparisonId": selection.id} if selection.base_revision else {}), "repositoryId": selection.repository_id, "targetRevision": selection.target_revision,
             "baseRevision": selection.base_revision, "inventoryId": selection.inventory_id,
             "configurationId": selection.configuration_id}
 
 
 def select_initial(db, repository_id, data):
+    if data.comparisonId:
+        selected = scoped(db, Selection, data.comparisonId, repository_id)
+        if selection_data(selected) != data.model_dump():
+            fail('invalid_input')
+        return selected
     if data.repositoryId != repository_id or data.baseRevision is not None:
         fail("invalid_input", details={"fields": ["repositoryId", "baseRevision"]})
     _, _, manifest, _ = registered_inputs(db, repository_id, data.inventoryId, data.configurationId)
@@ -121,7 +126,7 @@ def make_snapshot(db, selection):
                          "processedCount": 0, "excludedCount": None,
                          "limitations": ["No complete processing claim for this function in this snapshot."]})
     limitations = {"Bounded Healthchecks input; not complete project coverage.",
-                   "Search, graph, comparison and export are not implemented in this service boundary."}
+                   "Server search, graph traversal and export are not implemented in this service boundary."}
     for operation in operations:
         limitations.update(operation.limitations)
         for item in operation.coverage:
@@ -147,7 +152,8 @@ def make_snapshot(db, selection):
     row = Snapshot(id=header["id"], repository_id=selection.repository_id, selection_id=selection.id,
                    snapshot_version=selection.snapshot_version,
                    document={"snapshot": header, "assertions": assertions, "artifacts": artifacts,
-                             "followUps": [follow_up(work) for work in works]})
+                             "followUps": [follow_up(work) for work in works],
+                             "comparison": db.get(Activity, selection.id).document if selection.base_revision else None})
     db.add(row)
     db.flush()
     return row
@@ -164,7 +170,7 @@ def admit(db, actor, repository, envelope):
         return prior.result
     view = scoped(db, RepositoryView, envelope.viewId, repository.id)
     selection = scoped(db, Selection, view.selection_id, repository.id)
-    if view.mode != "active":
+    if view.mode != "active" or selection.base_revision:
         fail("historical_context")
     if data.targetRevision.model_dump() != selection.target_revision or data.inventoryId != selection.inventory_id or data.configurationId != selection.configuration_id:
         fail("invalid_input")

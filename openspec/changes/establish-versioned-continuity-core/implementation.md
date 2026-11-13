@@ -130,3 +130,34 @@ manual candidate/record-revision forms, and guided research evidence are still
 unfinished. Existing proposal IDs, input/profile bytes, earlier verification
 artifacts and synthetic browser state are retained. No deployment or data
 migration was performed.
+
+## Bounded comparison and interface simplification continuation
+
+The user authorized revision comparison and requested less clutter. The normal
+home retains its workspace card and Continue review action; the duplicate queue
+and filters now live only in Review relationships. Snapshot/commit identifiers,
+full source text, version metadata and secondary review actions use disclosures.
+PRODUCT.md and DESIGN.md are preserved.
+
+The compare_revisions command takes two retained captured snapshot IDs under a
+reviewer grant, validates matching accepted inventory/profile, verifies source
+bytes and compares SHA-256 content under exact path identity. Its retained
+activity names the base/target snapshots, changes, limitations and direct impacts.
+An incoming selection is distinct from its base and ordinary initial selections.
+Earlier assertions, decisions and snapshots are preserved. Confirmed base links
+become stale; never-confirmed links stay candidates; terminal claims are skipped.
+Identical retained inputs reuse contexts, including after decisions. The command
+receipt handles uncertain retry. Incoming evidence requires an unchanged exact
+excerpt at the original anchor; uncertain anchors remain unresolved.
+
+Observed checks: 112 tests passed in the full backend/integration run, 11 frontend
+tests passed, and the expanded browser flow separately verified the comparison
+command and incoming selection. Build and lint passed with the previously recorded
+optional bundle and demo-effect warnings. The mechanical design detector reported
+no findings. All automated judgments use isolated synthetic accounts/schemas.
+
+Task 3.3 is deliberately still open: the accepted source contains no deleted-path
+fixture, and full deletion/rename, comparison chaining, reconfirmation/retirement
+and race verification are not complete. Tasks 4.1 and 4.3 also remain open. No
+new upstream acquisition, schema migration, deployment or practitioner judgment
+was performed.

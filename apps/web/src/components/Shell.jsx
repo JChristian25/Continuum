@@ -128,7 +128,7 @@ export default function Shell({
           </button>
         </Tooltip>
 
-        {serviceMode && ctx.selection && <label className="revision-switch"><span className="revision-switch__text"><small>Selected revision · initial review</small><select aria-label="Selected revision" value={ctx.selection.targetRevision.commitId} disabled={ctx.busy} onChange={e => ctx.changeSelection({ ...ctx.selection, targetRevision: { objectAlgorithm: 'sha1', commitId: e.target.value } })}>{ctx.descriptor?.repositories.find(r => r.id === state.activeRepoId)?.inputs.find(i => i.id === ctx.selection.inventoryId)?.revisions.map(r => <option key={r.label} value={r.commitId}>{r.label} · {r.commitId.slice(0, 7)}</option>)}</select></span></label>}
+        {serviceMode && ctx.selection && <label className="revision-switch"><span className="revision-switch__text"><small>Selected revision</small><select aria-label="Selected revision" value={ctx.selection.targetRevision.commitId} disabled={ctx.busy} onChange={e => ctx.changeSelection({ ...ctx.selection, baseRevision: null, comparisonId: undefined, targetRevision: { objectAlgorithm: 'sha1', commitId: e.target.value } })}>{ctx.descriptor?.repositories.find(r => r.id === state.activeRepoId)?.inputs.find(i => i.id === ctx.selection.inventoryId)?.revisions.map(r => <option key={r.label} value={r.commitId}>{r.label} · {r.commitId.slice(0, 7)}</option>)}</select></span></label>}
         {/* Revision Cycle Segmented Toggle */}
         {!serviceMode && <Tooltip
           title="Review Cycle Context"

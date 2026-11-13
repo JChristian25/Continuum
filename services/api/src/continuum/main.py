@@ -25,6 +25,7 @@ from .pipeline_models import Activity, EvidenceOrigin, InputRegistration, Profil
 from .acquisition import WORKSPACE, load_accepted, sha256
 from .discovery import load_profile
 from .capture import execute as capture_command
+from .comparison import compare
 from .security import check_csrf, cookie, current_actor, digest, error, fail, login_attempt, repository_access, utc
 
 
@@ -200,7 +201,9 @@ def create_app(settings=None, engine=None, *, worker_enabled=True):
         with factory.begin() as db:
             actor, _ = current_actor(db, request, settings, write=True)
             repository = repository_access(db, actor, body.repositoryId, write=True)
-            if body.command in {"capture_files", "discover_candidates"}:
+            if body.command == "compare_revisions":
+                response = compare(db, actor, repository, body)
+            elif body.command in {"capture_files", "discover_candidates"}:
                 response = admit(db, actor, repository, body)
             elif body.command in {"capture_record", "revise_record", "capture_candidate"}:
                 response = capture_command(db, actor, repository, body)

@@ -36,3 +36,8 @@ the later processing tasks; do not mark the whole change implemented.
 Frontend integration evidence and remaining UI form limits are recorded in
 `services/api/FRONTEND.md` and `frontend-integration-verification.json`. This does
 not mark comparison, complete knowledge access or the research evaluation complete.
+
+Task 3.3 continuation: bounded compare_revisions API and frontend entry are now
+implemented; exact captured snapshots, stale/candidate separation, equal commits,
+history retention and retry deduplication are tested. Deletion/rename, chaining,
+full revalidation and race gates remain open; see implementation.md.

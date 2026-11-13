@@ -1,0 +1,47 @@
+{
+  "observedAt": "2026-11-13T14:44:00.350264+00:00",
+  "baselineCommit": "527eae19a858eeb8a74aec31a47c72adfc5ddd4c",
+  "sourceSha256": {
+    "apps/web/src/components/ServiceApp.jsx": "5da2d82a5cb1cd6cb491f2da9839ef277249a7221717ac753c2a0fc1d2576634",
+    "apps/web/src/components/Shell.jsx": "d43d36ee7110f585c3abfaf43971654fdc93c0f9ca2807e296a1cd2ffeb7b525",
+    "apps/web/src/components/service.css": "a1ca3428f5ad036dc715eb00473b15284a10ad0ce8b00c6ae64ec14dc1a24d30",
+    "apps/web/src/context/ServiceContinuumProvider.jsx": "05615dcb9c59c4f1fa6e13ba29c2dfef21bbd76b092015a32d5339948bedfc4f",
+    "apps/web/src/data/serviceModel.js": "d76e11ec705f57b28ff00aa289aa711880dae4b470e0475bfe9e088ceb174546",
+    "apps/web/tests/service-browser.mjs": "2c479ef0d00d0e5ab3bf015206c94f6487c5b678adca0095fbc6803bb85ec273",
+    "openspec/changes/establish-versioned-continuity-core/implementation.md": "bf869735ca48dc7abe248de897f3de04528bef94043489a073632b373d48a498",
+    "openspec/changes/establish-versioned-continuity-core/tasks.md": "7100f2ee1f63bd2e7296421a6cc8d6282b458588555746e838886657ca9e4a20",
+    "services/api/FRONTEND.md": "a20c79221d165e48a12e305866da3bf3c2690c0122b44428a0b59dd4aea52437",
+    "services/api/src/continuum/main.py": "c45dfb67b3821fece748844567803bfd57c4d085e0d8990fb987deeec82186d3",
+    "services/api/src/continuum/pipeline.py": "393a0bb29104144ad9a0183ba2082f05be24cfa813ae755a9ff04c6dadce8c68",
+    "services/api/src/continuum/pipeline_schemas.py": "a3c9bcfad7057f2ee43706a00bdd5147c9bdda50d5978a6d49460fd29f7156f3",
+    "services/api/src/continuum/schemas.py": "c8d450d8998574f52a319cf1163da5f42484e77937a85620b82827553d1fc963",
+    "services/api/tests/test_frontend_browser.py": "9a612b87e7e92a1ea44a0fbd1cd54f221bc59395c423d86c8bccb39c6ac5645b",
+    "services/api/src/continuum/comparison.py": "f795f8d07cc4b6b05c356b739081fce54777b0a6989d9d17ca83ec237a4c442c",
+    "services/api/tests/test_comparison.py": "801644a90623d56be79880c01ee25f7f6cf3887a25f4343454907b7820d50744"
+  },
+  "hashScope": "Observed working-tree bytes before Git line-ending normalization.",
+  "checks": {
+    "fullBackendIntegrationSuite": {
+      "passed": 112,
+      "warnings": 1
+    },
+    "expandedFinalBrowserRegression": {
+      "passed": 1,
+      "covers": "Comparison entry, incoming selection, draft retry, historical/viewer reads, login/logout and demo isolation."
+    },
+    "frontendUnitTests": {
+      "passed": 11
+    },
+    "productionBuild": "passed; optional bundle warning retained",
+    "lint": "passed; existing demo effect warning retained",
+    "designDetector": "no findings",
+    "desktopAndMobile": "Automated viewport checks and screenshot inspection; home queue duplication removed.",
+    "liveProxyHealth": "ok; updated API advertises compare_revisions"
+  },
+  "boundaries": [
+    "Accepted existing Healthchecks source only; no acquisition, migration or deployment.",
+    "Automated judgments use isolated synthetic accounts and generated schemas.",
+    "Task 3.3 remains open: deletion/rename, chaining, full revalidation and race verification are unfinished.",
+    "Server search/traversal, completion/export, remaining authoring forms and guided research evidence remain open."
+  ]
+}

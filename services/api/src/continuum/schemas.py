@@ -28,7 +28,7 @@ class Envelope(Strict):
     requestId: Id
     repositoryId: Id
     viewId: Id
-    command: Literal["record_judgment", "reverse_judgment", "correct_assertion", "open_follow_up", "resolve_follow_up", "capture_files", "discover_candidates", "capture_record", "revise_record", "capture_candidate"]
+    command: Literal["compare_revisions", "record_judgment", "reverse_judgment", "correct_assertion", "open_follow_up", "resolve_follow_up", "capture_files", "discover_candidates", "capture_record", "revise_record", "capture_candidate"]
     input: dict
 
 

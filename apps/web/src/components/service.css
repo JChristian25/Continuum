@@ -39,3 +39,12 @@
 .service-canvas > * { flex-shrink: 0; }
 .service-app .focus-brief { padding: 26px 30px; }
 .service-app .app-rail__nav { overflow-y: auto; min-height: 0; }
+
+.service-context { color: var(--ink-2); font-size: 13px; }
+.service-context > summary { cursor: pointer; padding: 3px 0; }
+.service-context[open] { padding: 16px; border: 1px solid var(--border); border-radius: 12px; }
+.service-context .journey-form { max-width: 560px; margin-top: 16px; }
+.service-canvas > .focus-brief { max-width: 860px; width: 100%; align-self: center; margin-top: 24px; }
+.service-app .service-inspector details > summary { padding: 8px 0; color: var(--ink-2); font-size: 13px; }
+.service-app .service-inspector .journey-form details > label { display: grid; gap: 8px; margin-top: 12px; }
+.service-app .service-inspector .card { border: 0; border-radius: 0; padding: 12px 0; }

@@ -96,7 +96,9 @@ offline failure. Desktop and mobile snapshots were inspected; the dashboard card
 
 ## Remaining work
 
-This integration does not implement selected-revision comparisons/revalidation,
+A bounded first comparison is now available through Compare revisions: select an initial target revision, expand Compare revisions, select a baseline and submit. Both inventories must already be captured. The comparison retains exact snapshots, reports changed paths and queues directly affected nonterminal assertions; confirmed base claims become stale and unconfirmed claims remain candidates. Retries preserve decisions. Renames are not inferred, and moved or missing anchors cannot be confirmed by substitution.
+
+Task 3.3 remains open for full deletion/rename, chaining, retirement/reconfirmation and concurrency verification. This integration does not yet complete the revalidation workflow or implement
 server-side search/graph traversal, cycle completion/export, UI assertion correction,
 manual candidate/successor forms, authored-record revision forms or guided research
 evaluation. The service already supports some of those write commands, but their

@@ -32,7 +32,7 @@ export function permittedDecisions(projection) {
 }
 
 export const draftKey = (selection, row) => JSON.stringify([
-  selection.repositoryId, selection.targetRevision.commitId, row.projection.contextId, row.assertion.id,
+  selection.repositoryId, selection.comparisonId || null, selection.targetRevision.commitId, row.projection.contextId, row.assertion.id,
 ]);
 
 export const emptyDraft = () => ({ decision: '', reason: '', contentConcern: '', followUpKind: 'none', followUpNote: '', independentNote: '', inspected: false });

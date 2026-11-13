@@ -108,7 +108,7 @@ export default function ServiceContinuumProvider({ children }) {
         persist({ ...drafts.current, $operation: admitted }); setOperation(admitted);
       }
       setNotice('Saved to the service.');
-      if (selection?.repositoryId === envelope.repositoryId) await loadWorkspace(selection);
+      if (selection?.repositoryId === envelope.repositoryId) await loadWorkspace(response.result.selection || selection);
       return response;
     } catch (e) {
       if (e.status && e.status < 500 && e.status !== 401) {

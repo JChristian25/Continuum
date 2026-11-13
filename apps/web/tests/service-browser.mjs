@@ -19,13 +19,15 @@ try {
   await page.getByLabel('Password', { exact: true }).fill(password);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByText('LIVE SERVICE · active', { exact: false })).toBeVisible();
-  await expect(page.locator('.service-row')).toHaveCount(19);
   await expect.poll(async () => (await page.locator('.focus-brief').boundingBox()).height).toBeGreaterThan(150);
+  await expect(page.locator('.service-row')).toHaveCount(0);
   await page.screenshot({ path: fileURLToPath(new URL('../../../outputs/frontend-integration/workspace.png', import.meta.url)), fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: fileURLToPath(new URL('../../../outputs/frontend-integration/workspace-mobile.png', import.meta.url)), fullPage: true });
   if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)) throw new Error('Workspace overflows the mobile viewport');
   await page.setViewportSize({ width: 1280, height: 720 });
+  await page.getByRole('button', { name: 'Review relationships', exact: true }).click();
+  await expect(page.locator('.service-row')).toHaveCount(19);
   await expect(page.locator('body')).not.toContainText('src/bbb.py');
   await page.locator('.service-row').first().click();
   await expect(page.getByRole('heading', { name: 'Recorded evidence' })).toBeVisible();
@@ -37,6 +39,7 @@ try {
   // Draft survives leaving the context and a browser reload.
   await page.getByRole('button', { name: 'Close inspector' }).click();
   await page.reload();
+  await page.getByRole('button', { name: 'Review relationships', exact: true }).click();
   await expect(page.locator('.service-row')).toHaveCount(19);
   await page.locator('.service-row').first().click();
   await expect(page.getByRole('heading', { name: 'Recorded evidence' })).toBeVisible();
@@ -78,6 +81,7 @@ try {
   await expect(page.locator('.service-inspector')).toContainText('Isolated browser verification');
   await page.getByRole('button', { name: 'Close inspector' }).click();
   // Retained snapshots are readable and cannot accept a judgment.
+  await page.getByText('Revision & snapshot details', { exact: true }).click();
   const retained = page.getByLabel('Retained snapshot');
   const historical = await retained.locator('option').evaluateAll(options => options.find(o => o.textContent.includes('historical') && !o.textContent.includes('Version 0'))?.value);
   await retained.selectOption(historical);
@@ -91,12 +95,20 @@ try {
   await page.getByRole('button', { name: 'Code explorer', exact: true }).click();
   await page.locator('.service-row').first().click();
   await expect(page.locator('.service-file-grid .code-box')).toBeVisible();
+  await page.getByLabel('Selected revision').selectOption('c62d6648d81e1aebc65f80bddc72f165fba7320b');
+  await page.getByRole('button', { name: 'Review relationships', exact: true }).click();
+  await expect(page.locator('.service-row')).toHaveCount(0);
+  await page.getByText('Compare revisions', { exact: true }).click();
+  await page.getByRole('button', { name: 'Compare and review impact' }).click();
+  await expect(page.getByText(/changed paths · .* affected relationships/)).toBeVisible({ timeout: 20000 });
+  await expect(page.locator('.service-row').first()).toBeVisible();
   await page.getByRole('button', { name: 'Account', exact: true }).click();
   await page.getByRole('button', { name: 'Sign out', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Welcome back to Continuum.' })).toBeVisible();
   await page.getByLabel('Login', { exact: true }).fill('bob');
   await page.getByLabel('Password', { exact: true }).fill(password);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await page.getByRole('button', { name: 'Review relationships', exact: true }).click();
   await expect(page.locator('.service-row')).toHaveCount(19);
   await expect(page.getByRole('button', { name: 'Record intent', exact: true })).toBeDisabled();
   await page.locator('.service-row').first().click();
