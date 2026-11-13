@@ -1,0 +1,110 @@
+{
+  "observedAt": "2026-11-13T14:25:17.851862+00:00",
+  "baselineCommit": "12d3b4274e461be1ce789c309f84065fe9ce4d50",
+  "inputs": {
+    "manifestSha256": "57fe399e8f70706748f22307c272b9c612c703b1fac036477fb00d6c304e7b37",
+    "profileSha256": "eeea88c56462a0f90c4f38ee1027bd214bc429cc64fecc0bb1b67bd29ca3fc75"
+  },
+  "sourceSha256": {
+    "apps/web/src/App.jsx": "90a23375618d34a7057383452cf3a32fcb6634879edc05fb7f8fc11228df0e9a",
+    "apps/web/src/DemoApp.jsx": "6afc69a0980b34d7bbb66dbf530ecb839458232c42201856e573b3930c659916",
+    "apps/web/src/components/Shell.jsx": "38c5277c75e3d99a56deda53319e1aca9d9d78d442acfffd60c918f386c72480",
+    "apps/web/src/components/ServiceApp.jsx": "ef5b5eee481c741eeb8e7550641db8b95aed1012a5629daad61c26b587ff11b0",
+    "apps/web/src/components/service.css": "1c7ec60207755614e2c74aed7dc6ec5acdb4f1a341590fd2132107227e07a459",
+    "apps/web/src/context/ContinuumContext.jsx": "1f66564eb38ec374548953aad97a257542420a197221817df5ae9449e2faff41",
+    "apps/web/src/context/ContinuumBase.js": "5d96ba7e81a35311d91929c089710166dbfb8e1e76c017464d81be62d9bf5a04",
+    "apps/web/src/context/DemoContinuumProvider.jsx": "49cafaf20ffa432c219b186aeeecb83c4c7836dc2635dc09af62d111d9f95f92",
+    "apps/web/src/context/ServiceContinuumProvider.jsx": "18cb22e5779b21ae3f6d02ca0d76df0a192738feff30129deef5d5c85a79849f",
+    "apps/web/src/data/serviceApi.js": "51f459003a0d39894c30dfdb1d2b9bea0b14e5a80acb730f275b590040281583",
+    "apps/web/src/data/serviceModel.js": "ca079dbb44232ad4cc2abc167d7d70d97cbd1b720bc4e89a3b1e83cd586046b9",
+    "apps/web/src/data/service.test.js": "15f72ebadc645687cd05d247f08866b78649d82882ffb4bc0823801ebc9772e9",
+    "apps/web/tests/service-browser.mjs": "aac1e16d7707d456e000229a025ddff3a2c72260071c4d1a599321ba6b85c7a2",
+    "apps/web/vite.config.js": "af9333cff227708acf45422514df65e205b474055c24026e0b72398c4b29649f",
+    "apps/web/package-lock.json": "e605e87310a18aac945ff58ed6f2ad370f013baee0d214db75fd0b83ab06ade7",
+    "services/api/src/continuum/main.py": "3e46a822c05ba0b34fd328ba6ab6e96f8861d27e30b9600e9ae20b51b26e718a",
+    "services/api/src/continuum/pipeline.py": "7157a1cbf7d6315c1c3ee8063195a0d2c1a6d0689497027a6aa5badc9278f80d",
+    "services/api/src/continuum/pipeline_schemas.py": "bc64dec42b2b0fd1405f99ac9dbda7d9b18a4255b0195a02d09f913af373f031",
+    "services/api/src/continuum/review.py": "fc040d94e55c53238b02a0a58886857a6f0dd93a9b04663cdd301003c3880682",
+    "services/api/src/continuum/local_setup.py": "4f5b0dccaf98596bbe4de70843375b1e4b95266b33e868fba8e940a1b498f0cc",
+    "services/api/tests/test_pipeline.py": "6b7be1b2b139697aa1492d054b8de38eb64894a7518f2195238204a2a8e9b718",
+    "services/api/tests/test_frontend_browser.py": "efa8cee15d1434f8e0d9d714935c3b91c734cf97cd4f07379b1acc6fbbd85862"
+  },
+  "checks": [
+    {
+      "command": "services/api/.venv/Scripts/python.exe -m pytest services/api/tests -q --disable-warnings --tb=short",
+      "exitCode": 0,
+      "passed": 108,
+      "warnings": 1,
+      "scope": "Isolated PostgreSQL schemas, real accepted source, synthetic accounts; includes TCP API/browser test."
+    },
+    {
+      "command": "node --test apps/web/src/data/service.test.js apps/web/src/data/workflow.test.js",
+      "exitCode": 0,
+      "passed": 11
+    },
+    {
+      "command": "npm --prefix apps/web run lint",
+      "exitCode": 0,
+      "warnings": [
+        "Existing demo migration effect warning in DemoContinuumProvider.jsx."
+      ]
+    },
+    {
+      "command": "npm --prefix apps/web run build",
+      "exitCode": 0,
+      "warnings": [
+        "Large optional graph/language bundles."
+      ]
+    },
+    {
+      "command": "services/api/.venv/Scripts/python.exe -m pytest services/api/tests/test_frontend_browser.py -q --disable-warnings --tb=short",
+      "scope": "Final browser regression after UI changes; desktop/mobile captures inspected.",
+      "exitCode": 0
+    }
+  ],
+  "browser": {
+    "passed": true,
+    "cases": [
+      "cookie login",
+      "demo isolation",
+      "real snapshot",
+      "exact sources",
+      "durable draft",
+      "stale projection preserves draft",
+      "lost response identical retry",
+      "persisted judgment and history",
+      "retained historical read-only",
+      "file explorer",
+      "viewer read-only",
+      "logout",
+      "offline fails closed"
+    ],
+    "pageErrors": []
+  },
+  "localRuntime": {
+    "url": "http://localhost:5173",
+    "api": "http://127.0.0.1:8787",
+    "healthThroughFrontendProxy": "ok",
+    "unauthenticatedWorkspaceStatus": 401,
+    "login": "jc",
+    "passwordProvisioning": "Secure prompt delivery; Argon2id hash; no password in this record.",
+    "databaseCounts": {
+      "jcEnabled": true,
+      "initialReviewSelections": 4,
+      "fileVersionMemberships": 40,
+      "relationshipContextMemberships": 76,
+      "candidateContexts": 76,
+      "completeOperations": 8,
+      "reviewEvents": 0
+    },
+    "namedAccountBrowserLogin": "Not used for automated tests; tests use isolated synthetic accounts."
+  },
+  "limitations": [
+    "Local loopback HTTP development; no deployment or HTTPS acceptance.",
+    "Four independent initial-review selections; comparison/revalidation unfinished.",
+    "Bounded lexical candidates; no semantic accuracy or practitioner research result.",
+    "Server search/traversal/completion/export and remaining authoring forms unfinished.",
+    "No upstream source execution or data migration."
+  ],
+  "sourceHashScope": "SHA-256 of observed working-tree bytes before Git line-ending normalization."
+}

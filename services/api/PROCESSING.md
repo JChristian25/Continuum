@@ -16,9 +16,9 @@ durability boundary as their versions, contexts, provenance and operation result
 
 This is not the full continuity cycle. Selected-revision comparison and incoming
 revalidation, search, graph queries, cycle completion, export, release readiness
-and the frontend adapter remain unfinished. The frontend still uses synthetic
-browser data. No browser/session UX pass or Healthchecks upstream-test pass is
-claimed.
+remain unfinished. The [frontend integration](FRONTEND.md) now uses real service
+snapshots and has isolated browser/session verification. No Healthchecks upstream-test
+pass or semantic research assessment is claimed.
 
 ## Accepted source and configuration
 

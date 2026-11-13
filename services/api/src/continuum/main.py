@@ -15,13 +15,15 @@ from sqlalchemy.exc import SQLAlchemyError
 from .config import Settings
 from .acquisition import AcquisitionError
 from .db import make_engine, session_factory
-from .models import Artifact, ArtifactVersion, AssertionRevision, Evidence, FollowUp, ReviewContext, SecurityAudit, Session, View
+from .models import Artifact, ArtifactVersion, AssertionRevision, Evidence, FollowUp, Grant, Repository, ReviewContext, SecurityAudit, Session, View
 from .review import assertion_data, command, follow_up, history, projection, readable_evidence, scoped
 from .schemas import Envelope, Login
 from .pipeline import admit, query
 from .pipeline_schemas import QueryEnvelope
 from .pipeline_models import ReviewViewBinding, Selection, Snapshot
-from .pipeline_models import Activity, EvidenceOrigin, RevisionOrigin
+from .pipeline_models import Activity, EvidenceOrigin, InputRegistration, ProfileRegistration, RevisionOrigin
+from .acquisition import WORKSPACE, load_accepted, sha256
+from .discovery import load_profile
 from .capture import execute as capture_command
 from .security import check_csrf, cookie, current_actor, digest, error, fail, login_attempt, repository_access, utc
 
@@ -140,6 +142,38 @@ def create_app(settings=None, engine=None, *, worker_enabled=True):
             actor, current = current_actor(db, request, settings)
             return {"actorId": actor.id, "displayName": actor.display_name,
                     "csrfToken": current.csrf, "absoluteExpiresAt": utc(current.expires_at)}
+
+    @app.get("/api/v1/workspace")
+    def workspace(request: Request):
+        with factory.begin() as db:
+            actor, _ = current_actor(db, request, settings)
+            ids = list(db.scalars(select(Grant.repository_id).where(Grant.actor_id == actor.id,
+                                  Grant.role.in_(["viewer", "reviewer"])).order_by(Grant.repository_id)))
+            repositories = []
+            for identity in ids:
+                repository = repository_access(db, actor, identity)
+                role = db.get(Grant, (actor.id, identity)).role
+                inputs = []
+                for registered in db.scalars(select(InputRegistration).where(InputRegistration.repository_id == identity).order_by(InputRegistration.id)):
+                    manifest, _, manifest_digest, acceptance_digest, _ = load_accepted(
+                        WORKSPACE / registered.manifest_path, WORKSPACE / registered.acceptance_path, WORKSPACE)
+                    if manifest_digest != registered.manifest_digest or acceptance_digest != registered.acceptance_digest:
+                        fail("unavailable", 503)
+                    profiles = []
+                    for configured in db.scalars(select(ProfileRegistration).where(ProfileRegistration.repository_id == identity,
+                                                  ProfileRegistration.inventory_id == registered.id).order_by(ProfileRegistration.id)):
+                        profile, profile_digest = load_profile(WORKSPACE / configured.profile_path,
+                            WORKSPACE / configured.acceptance_path, manifest_digest)
+                        if profile_digest != configured.profile_digest or sha256((WORKSPACE / configured.acceptance_path).read_bytes()) != configured.acceptance_digest:
+                            fail("unavailable", 503)
+                        profiles.append({"id": configured.id, "methodId": profile["methodId"],
+                                         "digest": profile_digest, "limitations": profile["limitations"]})
+                    inputs.append({"id": registered.id, "repositoryFullName": manifest["repository"]["fullName"],
+                        "manifestDigest": manifest_digest, "pathCount": len(manifest["entries"]), "language": "Python",
+                        "revisions": [{"label": label, "objectAlgorithm": revision["objectAlgorithm"], "commitId": revision["commitId"]}
+                                      for label, revision in manifest["revisions"].items()], "profiles": profiles})
+                repositories.append({"id": identity, "name": repository.name, "role": role, "inputs": inputs})
+            return {"actorId": actor.id, "displayName": actor.display_name, "repositories": repositories}
 
     @app.post("/api/v1/auth/logout")
     def logout(request: Request):

@@ -12,7 +12,7 @@ from .pipeline_models import (Activity, InputRegistration, Operation, ProfileReg
                               ResultPage, ReviewViewBinding, Selection, SelectionArtifact,
                               SelectionContext, Snapshot)
 from .pipeline_schemas import (ActivityInput, OperationInput, ProcessingInput, ResultsInput, ReviewViewInput,
-                               SelectionInput, SnapshotInput)
+                               SelectionInput, SnapshotInput, SnapshotListInput, WorkspaceInput)
 from .review import assertion_data, evidence_data, follow_up, projection, scoped
 from .security import digest, fail
 
@@ -182,6 +182,23 @@ def admit(db, actor, repository, envelope):
 
 
 def query(db, repository, envelope):
+    if envelope.query == "read_workspace":
+        data = WorkspaceInput.model_validate(envelope.input)
+        snapshot = scoped(db, Snapshot, data.snapshotId, repository.id)
+        selection = scoped(db, Selection, snapshot.selection_id, repository.id)
+        return {**snapshot.document, "currentSnapshotVersion": selection.snapshot_version,
+                "mode": "active" if selection.snapshot_version == snapshot.snapshot_version else "historical"}
+    if envelope.query == "list_snapshots":
+        data = SnapshotListInput.model_validate(envelope.input)
+        view = scoped(db, RepositoryView, data.repositoryViewId, repository.id)
+        selected = scoped(db, Selection, view.selection_id, repository.id)
+        rows = db.execute(select(Snapshot.id, Snapshot.snapshot_version).where(Snapshot.selection_id == selected.id)
+                          .order_by(Snapshot.snapshot_version.desc(), Snapshot.id.desc()).limit(100)).all()
+        retained = {}
+        for identity, version in rows:
+            retained.setdefault(version, {"snapshotId": identity, "snapshotVersion": version,
+                                         "mode": "active" if version == selected.snapshot_version else "historical"})
+        return {"items": list(retained.values()), "limitations": ["Lists distinct versions within the most recent 100 retained snapshots for this selection."]}
     if envelope.query == "read_activity":
         data = ActivityInput.model_validate(envelope.input)
         return scoped(db, Activity, data.activityId, repository.id).document

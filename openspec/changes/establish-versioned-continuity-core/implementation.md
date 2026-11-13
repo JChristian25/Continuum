@@ -91,3 +91,42 @@ knowledge-access/search/graph/completion/export operations; frontend service
 integration and browser verification; reproducible release/guided-task evidence.
 The original proposed contracts and earlier verification artifacts remain
 inspectable. No existing user data was migrated and no deployment occurred.
+
+## Frontend integration continuation, 2026-11-13
+
+The normal frontend now uses the service adapter, named server accounts and
+immutable selected-revision snapshots. The prior synthetic application/provider
+are loaded only at `?mode=demo`; service errors do not fall back to fixture data.
+The existing shell, navigation and visual references are preserved.
+
+The user confirmed localhost:5173 and login jc, then supplied a password through
+a secure prompt. The local database now has that named reviewer account, four
+independent initial-review selections, 40 captured version memberships and 76
+unconfirmed contexts. No real practitioner judgments were seeded. The API runs
+on loopback port 8787, proxied by the existing frontend. This is local HTTP
+development access, not deployment or HTTPS acceptance.
+
+The UI connects exact evidence/source inspection, version/projection identity,
+judgments, independent content concerns/follow-up work, retained history,
+historical snapshots, source browsing and authored record capture. Processing
+admission/status and a snapshot relationship graph use service records. Review,
+independent work-note and record drafts are scoped to the signed-in actor and
+exact selected context. Uncertain writes retain the original envelope for
+explicit retry; known conflicts preserve drafts for refresh and inspection.
+
+Observed checks: 108 backend/integration tests, including the real browser/TCP
+flow, and 11 frontend tests passed. The final browser regression was rerun after
+UI changes. The browser uses real accepted source with isolated synthetic named
+accounts and a generated PostgreSQL schema; it checks conflicts, historical and
+viewer restrictions, identical retry after committed response loss, exact sources,
+draft reload, logout and service/demo isolation. Desktop/mobile screenshots were
+inspected and the collapsed dashboard-card sizing was corrected. The build passes;
+large optional graph/language bundles and one pre-existing demo lint warning remain.
+See services/api/FRONTEND.md and frontend-integration-verification.json for scope.
+
+Tasks 3.3, 4.1 and 4.3 remain open. Selected-revision comparison/revalidation,
+server search/graph traversal/completion/export, UI assertion correction and
+manual candidate/record-revision forms, and guided research evidence are still
+unfinished. Existing proposal IDs, input/profile bytes, earlier verification
+artifacts and synthetic browser state are retained. No deployment or data
+migration was performed.

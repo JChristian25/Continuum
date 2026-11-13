@@ -19,7 +19,7 @@ An integrated software knowledge continuity research prototype.
 </div>
 
 > [!IMPORTANT]
-> **Work in progress.** Continuum is under active specification and development as part of an ongoing thesis. The frontend demonstrates workflows with synthetic data. The FastAPI/PostgreSQL service has bounded real-source capture/discovery and review tests; frontend integration and the complete continuity cycle remain unfinished.
+> **Work in progress.** Continuum is under active specification and development as part of an ongoing thesis. The normal frontend uses named server accounts and real captured Healthchecks data. An explicit `?mode=demo` retains the synthetic demonstration. Incoming revision comparison and the complete continuity cycle remain unfinished.
 
 ## Overview
 
@@ -40,7 +40,7 @@ The diagrams below summarize the [active continuity proposal](openspec/changes/e
 
 ### How the parts fit together
 
-Supported project files and captured requirements/decisions provide versioned context. Proposed services connect that context to evidence-backed candidates, accountable review and current/historical knowledge access. The existing frontend is the visual reference for a later, separately scoped integration.
+Supported project files and captured requirements/decisions provide versioned context. Proposed services connect that context to evidence-backed candidates, accountable review and current/historical knowledge access. The service integration preserves the existing frontend shell and visual references.
 
 ![Proposed system structure: supported inputs feed versioned artifact context, candidate discovery, human review and current or historical knowledge access.](docs/diagrams/proposed-system.svg)
 
@@ -64,9 +64,9 @@ The project supports the thesis's development and evaluation work. It remains a 
 
 ## Current status
 
-Implementation began on 2026-11-13. The React 19 / Vite 8 frontend still uses synthetic fixtures and browser storage. The FastAPI/PostgreSQL service supports accountable review plus bounded Healthchecks acquisition, file capture, candidate discovery, authored records and manual candidates. The 104-test backend suite passed, followed by a separate embedded-worker TCP test. The frontend remains unconnected; incoming revision comparison/revalidation and the remaining knowledge-access operations are unfinished. See [source-processing setup and evidence](services/api/PROCESSING.md) and the [initial review-service guide](services/api/README.md).
+Implementation began on 2026-11-13. The normal React/Vite frontend now connects to FastAPI/PostgreSQL for named-account sessions, exact snapshot/source/evidence reads, judgments, history, follow-up work and authored record capture. Synthetic browser state is isolated behind `?mode=demo`. See the [local frontend guide](services/api/FRONTEND.md) for login, startup commands, observed browser evidence and remaining UI limits.
 
-The complete continuity cycle still requires selected Git revision comparisons, incoming revalidation, complete knowledge access and frontend integration. Remaining work is tracked in the [implementation tasks](openspec/changes/establish-versioned-continuity-core/tasks.md); the working backend subset does not complete the full cycle.
+The complete continuity cycle still requires selected Git revision comparisons, incoming revalidation, complete server knowledge-access/completion/export operations and the remaining authoring forms. Remaining work is tracked in the [implementation tasks](openspec/changes/establish-versioned-continuity-core/tasks.md).
 
 Healthchecks is the accepted demonstration input, with Python and Markdown/plain-text documents at file scope. Its [bounded input package](openspec/changes/establish-versioned-continuity-core/healthchecks-input-proposal.md) and separate frozen discovery profile were accepted; eighteen declared blobs have been acquired and verified. Scoped processing tests use those real bytes with isolated synthetic service users. This does not establish a completed demonstration, full-project coverage or semantic discovery accuracy.
 
@@ -87,7 +87,7 @@ Healthchecks is the accepted demonstration input, with Python and Markdown/plain
 └── README.md
 ```
 
-The frontend is a standalone npm package in `apps/web/`; there is no root npm package or workspace setup. Its existing npm and pnpm lockfiles are retained without regeneration. Use npm for the commands below. Keep root-level OpenSpec and skill commands at the repository root.
+The frontend is a standalone npm package in `apps/web/`; there is no root npm package or workspace setup. The npm lockfile tracks the current frontend and browser-test dependencies; the legacy pnpm lockfile is retained. Use npm for the commands below. Keep root-level OpenSpec and skill commands at the repository root.
 
 The authorized backend lives under `services/api/`, with its own virtual environment, dependency lock and PostgreSQL setup. See the [service guide](services/api/README.md). Earlier [repository layout and migration notes](docs/repository-layout.md) describe the planning baseline; no browser-data migration has been performed.
 
@@ -98,7 +98,8 @@ The authorized backend lives under `services/api/`, with its own virtual environ
 | [Project instructions](AGENTS.md) | Scope, permissions and evidence rules |
 | [Product context](PRODUCT.md) · [Design reference](DESIGN.md) | Product direction and the existing visual system |
 | [OpenSpec guide](openspec/README.md) | Planning workflow and capability layout |
-| [Observed frontend behavior](openspec/specs/frontend-demo/spec.md) | The current synthetic baseline |
+| [Observed service frontend](openspec/specs/frontend-service/spec.md) | Connected local behavior and evidence |
+| [Explicit demo behavior](openspec/specs/frontend-demo/spec.md) | Synthetic mode at `?mode=demo` |
 | [Active continuity proposal](openspec/changes/establish-versioned-continuity-core/proposal.md) | Proposed requirements and design |
 | [Research and traceability index](specs/README.md) | Background contracts, requirements and verification plans |
 | [Recorded manuscript source](specs/manuscript-source.md) | PDF identity and checked anchors |

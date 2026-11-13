@@ -62,6 +62,35 @@ def captured(pipeline):
     return pipeline
 
 
+def test_workspace_descriptor_exposes_only_granted_accepted_inputs(pipeline):
+    response = pipeline['client'].get('/api/v1/workspace')
+    assert response.status_code == 200, response.text
+    document = response.json()
+    assert document['actorId'] == 'reviewer'
+    assert [row['id'] for row in document['repositories']] == ['repo']
+    registered = document['repositories'][0]['inputs'][0]
+    assert registered['pathCount'] == 10
+    assert registered['repositoryFullName'] == 'healthchecks/healthchecks'
+    assert len(registered['revisions']) == 4
+    assert registered['profiles'][0]['methodId'] == 'lexical-file-v1'
+    with pipeline['db'].begin() as db:
+        db.delete(db.get(Grant, ('reviewer', 'repo')))
+    assert pipeline['client'].get('/api/v1/workspace').json()['repositories'] == []
+
+
+def test_workspace_snapshot_is_immutable_and_retained_versions_are_scoped(captured):
+    old_id = captured['selected']['snapshot']['id']
+    retained = ask(captured, captured['headers'], 'read_workspace', {'snapshotId': old_id})
+    assert retained['artifacts'] == [] and retained['mode'] == 'historical'
+    snapshot = ask(captured, captured['headers'], 'read_snapshot', {'selection': captured['selection']})
+    current = ask(captured, captured['headers'], 'read_workspace', {'snapshotId': snapshot['id']})
+    assert len(current['artifacts']) == 10 and current['mode'] == 'active'
+    versions = ask(captured, captured['headers'], 'list_snapshots', {'repositoryViewId': captured['selected']['repositoryViewId']})
+    assert {row['snapshotVersion'] for row in versions['items']} == {0, 1}
+    body = {'schemaVersion': '0.1.0', 'requestId': uuid.uuid4().hex, 'repositoryId': 'other', 'query': 'read_workspace', 'input': {'snapshotId': old_id}}
+    assert captured['client'].post('/api/v1/queries', headers=captured['headers'], json=body).status_code == 403
+
+
 def test_capture_admission_is_durable_and_retry_returns_original_receipt(pipeline):
     body, response = submit(pipeline)
     identity = response["result"]["operationId"]

@@ -26,9 +26,13 @@ the later processing tasks; do not mark the whole change implemented.
 ## 4. Access and integration
 
 - [ ] 4.1 Implement retained snapshots, search, graph, completion and export with safe pagination; verify snapshot consistency, access isolation and unsettled-work conflicts (C-03c, C-08b/c/d, C-10b).
-- [ ] 4.2 Connect the existing frontend through a separately tested service adapter, preserving appearance and context-keyed drafts; verify browser login, uncertain delivery, conflicts, historical reads and service/demo isolation (AU-03, T-17/19/20).
+- [x] 4.2 Connect the existing frontend through a separately tested service adapter, preserving appearance and context-keyed drafts; verify browser login, uncertain delivery, conflicts, historical reads and service/demo isolation (AU-03, T-17/19/20).
 - [ ] 4.3 Prepare the reproducible release record and guided task evidence using accepted inputs; report source, PostgreSQL, browser and real-project results separately (C-09a/b, HC-01 through HC-08).
 
 ## Workflow follow-up
 
 - Review the complete implementation and evidence before synchronizing observed specs or archiving this change.
+
+Frontend integration evidence and remaining UI form limits are recorded in
+`services/api/FRONTEND.md` and `frontend-integration-verification.json`. This does
+not mark comparison, complete knowledge access or the research evaluation complete.

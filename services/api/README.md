@@ -1,8 +1,10 @@
 # Continuum review service
 
 FastAPI and PostgreSQL implement the first versioned-review service boundary.
-The React application still uses synthetic browser data. It is not connected to
-this API, and its personas do not authenticate service requests.
+The normal React application now uses server sessions and captured source through
+this API. See [frontend integration](FRONTEND.md) for current startup, named-account
+access, browser verification and remaining limits. Synthetic personas are isolated
+to explicit demonstration mode.
 
 Continuation on 2026-11-13 added accepted Healthchecks acquisition and a
 database-backed capture/discovery pipeline, authored records and manual

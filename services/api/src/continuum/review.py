@@ -38,6 +38,7 @@ def follow_up(row):
 def assertion_data(db, revision):
     assertion = scoped(db, Assertion, revision.assertion_id, revision.repository_id)
     return {"id": revision.id, "assertionId": assertion.id,
+            "predecessorAssertionId": assertion.predecessor_id,
             "repositoryId": revision.repository_id, "type": assertion.type,
             "source": revision.source, "target": revision.target,
             "evidenceIds": revision.evidence_ids, "methodId": revision.method_id,

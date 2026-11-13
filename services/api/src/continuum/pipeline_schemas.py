@@ -36,12 +36,20 @@ class QueryEnvelope(Strict):
     schemaVersion: Literal["0.1.0"]
     requestId: Id
     repositoryId: Id
-    query: Literal["select_context", "read_snapshot", "open_review_view", "read_operation", "read_capture_results", "read_discovery_results", "read_activity"]
+    query: Literal["select_context", "read_snapshot", "read_workspace", "list_snapshots", "open_review_view", "read_operation", "read_capture_results", "read_discovery_results", "read_activity"]
     input: dict
 
 
 class SnapshotInput(Strict):
     selection: SelectionInput
+
+
+class WorkspaceInput(Strict):
+    snapshotId: Id
+
+
+class SnapshotListInput(Strict):
+    repositoryViewId: Id
 
 
 class ReviewViewInput(Strict):

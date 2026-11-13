@@ -34,7 +34,8 @@ export default function Shell({
   onOpenImportModal,
   onSwitchRepo
 }) {
-  const { openCommandPalette } = useContinuum();
+  const ctx = useContinuum();
+ const { openCommandPalette, serviceMode } = ctx;
   const [personaOpen, setPersonaOpen] = useState(false);
   const [repoOpen, setRepoOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(() => window.matchMedia('(max-width: 760px)').matches);
@@ -48,7 +49,7 @@ export default function Shell({
   const isMac = typeof navigator !== 'undefined' && /(Mac|iPhone|iPod|iPad)/i.test(navigator.userAgent || navigator.platform || '');
   const activeUser = state.teamMembers?.find((member) => member.id === state.activeUserId) || state.teamMembers?.[0];
   const activeRepo = state.repositories?.find((repo) => repo.id === state.activeRepoId) || state.repositories?.[0];
-  const isAuthorized = activeUser?.authority === 'Authorized Reviewer';
+  const isAuthorized = serviceMode ? activeRepo?.role === 'reviewer' : activeUser?.authority === 'Authorized Reviewer';
 
   useEffect(() => {
     const closeMenus = (event) => {
@@ -127,8 +128,9 @@ export default function Shell({
           </button>
         </Tooltip>
 
+        {serviceMode && ctx.selection && <label className="revision-switch"><span className="revision-switch__text"><small>Selected revision · initial review</small><select aria-label="Selected revision" value={ctx.selection.targetRevision.commitId} disabled={ctx.busy} onChange={e => ctx.changeSelection({ ...ctx.selection, targetRevision: { objectAlgorithm: 'sha1', commitId: e.target.value } })}>{ctx.descriptor?.repositories.find(r => r.id === state.activeRepoId)?.inputs.find(i => i.id === ctx.selection.inventoryId)?.revisions.map(r => <option key={r.label} value={r.commitId}>{r.label} · {r.commitId.slice(0, 7)}</option>)}</select></span></label>}
         {/* Revision Cycle Segmented Toggle */}
-        <Tooltip
+        {!serviceMode && <Tooltip
           title="Review Cycle Context"
           content={state.revisionMode === 'R1'
             ? 'Incoming Change (8f3b21d). Click to compare historical baseline.'
@@ -150,6 +152,8 @@ export default function Shell({
           </button>
         </Tooltip>
 
+        }
+
         {/* Floating Workspace Popover (Flies out to the right) */}
         {repoOpen && (
           <div className="rail-popover rail-popover--scope" role="menu" aria-label="Switch workspace">
@@ -166,14 +170,14 @@ export default function Shell({
                     type="button"
                     role="menuitem"
                     className={`rail-popover__item ${isCurrent ? 'is-current' : ''}`}
-                    disabled={repo.id !== 'repo-checkout'}
+                    disabled={!serviceMode && repo.id !== 'repo-checkout'}
                     onClick={() => { onSwitchRepo?.(repo.id); setRepoOpen(false); }}
                   >
                     <div className="rail-popover__item-text">
                       <span className="rail-popover__item-title" title={repo.fullName}>{repo.fullName}</span>
                       <span className="rail-popover__item-meta">
                         <span className="rail-popover__badge" title={repo.language}>{repo.language}</span>
-                        <span className="rail-popover__nodes-count">{repo.id === 'repo-checkout' ? `${repo.stats?.nodes || 0} nodes · ${repo.branch}` : 'Preview only · no review dataset'}</span>
+                        <span className="rail-popover__nodes-count">{serviceMode ? `${repo.inputs?.[0]?.pathCount || 0} approved paths · ${repo.role}` : repo.id === 'repo-checkout' ? `${repo.stats?.nodes || 0} nodes · ${repo.branch}` : 'Preview only · no review dataset'}</span>
                       </span>
                     </div>
                     {isCurrent && <Check size={14} className="rail-popover__check" />}
@@ -187,7 +191,7 @@ export default function Shell({
                 className="rail-popover__action"
                 onClick={() => { setRepoOpen(false); onOpenImportModal?.(); }}
               >
-                <Plus size={14} /> Import repository
+                <Plus size={14} /> {serviceMode ? 'Registered inputs' : 'Import repository'}
               </button>
             </div>
           </div>
@@ -198,7 +202,7 @@ export default function Shell({
       <div className="app-rail__quick-actions">
         {/* Prominent "+ Record Intent" Button */}
         <Tooltip title="Record Design Intent" content="Capture an architectural decision and link it to code or docs" side="right">
-          <button className="rail-primary-action" type="button" onClick={openModal}>
+          <button className="rail-primary-action" type="button" disabled={serviceMode && (!ctx.canWrite || ctx.busy)} onClick={openModal}>
             <Plus size={15} strokeWidth={2.5} />
             <span>Record intent</span>
           </button>
@@ -223,7 +227,8 @@ export default function Shell({
       {/* 4. NAVIGATION LINKS */}
       <nav className="app-rail__nav" aria-label="Continuum navigation">
         <span className="app-rail__label">Navigate</span>
-        {modules.map((module) => {
+        {modules.filter(module => !serviceMode || !['chat', 'architecture'].includes(module.id)).map((original) => {
+ const module = serviceMode ? { ...original, label: ({ changes: 'Review relationships', account: 'Account' })[original.id] || original.label, helper: ({ changes: 'Review selected-revision relationships', files: 'Read captured files and authored records', explore: 'Inspect saved relationships' })[original.id] || original.helper } : original;
           const Icon = module.icon;
           const active = state.activeModule === module.id || (module.id === 'dashboard' && state.activeModule === 'overview');
           const showBadge = module.review && pendingCount > 0;
@@ -248,7 +253,7 @@ export default function Shell({
 
       {/* 5. FOOTER: USER PERSONA SWITCHER */}
       <div className="app-rail__account" ref={personaRef}>
-        <span className="app-rail__label">Review persona</span>
+        <span className="app-rail__label">{serviceMode ? 'Signed in' : 'Review persona'}</span>
         <Tooltip
           title="Active Review Persona"
           content={`${activeUser?.name} (${isAuthorized ? 'Authorized Reviewer · Can record & approve judgments' : 'Read-Only Viewer · Can inspect context'})`}
@@ -258,7 +263,7 @@ export default function Shell({
           <button
             className={`account-button ${personaOpen ? 'is-open' : ''}`}
             type="button"
-            onClick={() => { setPersonaOpen(open => !open); setRepoOpen(false); }}
+            onClick={() => { if (serviceMode) switchModule('account'); else setPersonaOpen(open => !open); setRepoOpen(false); }}
             aria-expanded={personaOpen}
             aria-haspopup="menu"
           >
@@ -272,7 +277,7 @@ export default function Shell({
         </Tooltip>
 
         {/* Floating Persona Popover (Flies out to the right) */}
-        {personaOpen && (
+        {!serviceMode && personaOpen && (
           <div className="rail-popover rail-popover--account" role="menu" aria-label="Review as">
             <div className="rail-popover__header">
               <span className="rail-popover__label">Review As Persona</span>

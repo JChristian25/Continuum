@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Record the observed synthetic review workflow in the current frontend. This baseline is grounded in `apps/web/src/App.jsx`, `apps/web/src/context/ContinuumContext.jsx`, `apps/web/src/data/workflow.js`, `apps/web/src/data/state.js`, `apps/web/src/components/Inspector.jsx` and `apps/web/src/components/ReviewSummary.jsx`. It does not establish connected authentication, Git ingestion, analysis services or durable multi-user storage. Existing limitations are documented in `../../../specs/engineering-review.md`.
+Record the observed synthetic review workflow, available only at `?mode=demo`. The default application uses the separate service frontend. This baseline is grounded in `apps/web/src/DemoApp.jsx`, `apps/web/src/context/DemoContinuumProvider.jsx`, `apps/web/src/data/workflow.js`, `apps/web/src/data/state.js`, `apps/web/src/components/Inspector.jsx` and `apps/web/src/components/ReviewSummary.jsx`. It does not establish connected authentication, Git ingestion, analysis services or durable multi-user storage. Existing limitations are documented in `../../../specs/engineering-review.md`.
 
 ## Requirements
 
