@@ -15,3 +15,5 @@ node --test src/data/workflow.test.js
 From the repository root, use `npm --prefix apps/web` for npm commands and `node --test apps/web/src/data/workflow.test.js` for the existing workflow suite. Vite writes build output to this package's `dist/` directory. Application dependencies and both existing lockfiles belong to this package.
 
 Root-level project instructions still apply. Moving the frontend does not implement or connect a backend.
+
+Frontend component choices, migration boundaries and browser checks are recorded in [UI-LIBRARIES.md](UI-LIBRARIES.md).

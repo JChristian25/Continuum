@@ -73,6 +73,7 @@ export default function DemoAppContent() {
 
       // Escape to close drawers and modals
       if (e.key === 'Escape') {
+        if (document.querySelector('[role="dialog"], [role="menu"], [role="listbox"]')) return;
         if (codeExplorerOpen) { closeCodeExplorer(); return; }
         if (isCommandPaletteOpen) { closeCommandPalette(); return; }
         if (importModalOpen) { closeImportModal(); return; }

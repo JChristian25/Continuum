@@ -98,6 +98,8 @@ export default function TraceabilityFlow({
   rawEdges = [],
   selectedArtifactId,
   onSelectNode,
+  onSelectEdge,
+  compact = false,
   theme = 'dark'
 }) {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
@@ -126,8 +128,8 @@ export default function TraceabilityFlow({
         layoutOptions: {
           'elk.algorithm': 'layered',
           'elk.direction': 'RIGHT',
-          'elk.spacing.nodeNode': '95',
-          'elk.layered.spacing.nodeNodeBetweenLayers': '220',
+          'elk.spacing.nodeNode': compact ? '28' : '95',
+          'elk.layered.spacing.nodeNodeBetweenLayers': compact ? '140' : '220',
           'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF',
           'elk.layered.spacing.edgeNodeBetweenLayers': '40'
         },
@@ -162,6 +164,7 @@ export default function TraceabilityFlow({
         const flowEdges = rawEdges.map((e, idx) => ({
           id: `flow-e-${idx}-${e.from}-${e.to}`,
           source: e.from,
+          data: { contextId: e.id },
           target: e.to,
           label: e.label,
           type: 'smoothstep',
@@ -195,7 +198,7 @@ export default function TraceabilityFlow({
 
     computeLayout();
     return () => { isCancelled = true; };
-  }, [rawNodes, rawEdges, selectedArtifactId, setNodes, setEdges]);
+  }, [rawNodes, rawEdges, selectedArtifactId, compact, setNodes, setEdges]);
 
   // Synchronize selection state in nodes
   useEffect(() => {
@@ -213,7 +216,7 @@ export default function TraceabilityFlow({
   };
 
   return (
-    <div style={{ width: '100%', height: 740, borderRadius: 'var(--r-lg)', overflow: 'hidden', border: '1px solid var(--border)', position: 'relative' }}>
+    <div style={{ width: '100%', height: compact ? '100%' : 740, borderRadius: 'var(--r-lg)', overflow: 'hidden', border: '1px solid var(--border)', position: 'relative' }}>
       {!layoutReady ? (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--ink-2)', fontSize: 13 }}>
           Computing automated hierarchical DAG layout with ELK…
@@ -226,17 +229,18 @@ export default function TraceabilityFlow({
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onNodeClick={handleNodeClick}
+          onEdgeClick={(_, edge) => onSelectEdge?.(edge.data?.contextId)}
           fitView
-          fitViewOptions={{ padding: 0.2 }}
+          fitViewOptions={{ padding: compact ? 0.1 : 0.2 }}
           minZoom={0.3}
           maxZoom={2.0}
         >
           <Background color={theme === 'dark' ? '#334155' : '#CBD5E1'} gap={16} size={1} />
           <Controls showInteractive={false} />
-          <MiniMap
+          {!compact && <MiniMap
             nodeColor={() => 'var(--accent)'}
             maskColor={theme === 'dark' ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.6)'}
-          />
+          />}
         </ReactFlow>
       )}
     </div>

@@ -336,7 +336,7 @@ export default function ChatbotModule({ ctx }) {
                         fontSize: 11.5
                       }}
                     >
-                      <button
+                      <Button variant="unstyled"
                         type="button"
                         onClick={() => toggleReasoning(msg.id)}
                         style={{
@@ -357,7 +357,7 @@ export default function ChatbotModule({ ctx }) {
                           <span>Graph Traversal &amp; Extraction Traces ({msg.reasoning.length})</span>
                         </span>
                         {reasoningOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                      </button>
+                      </Button>
 
                       <AnimatePresence>
                         {reasoningOpen && (

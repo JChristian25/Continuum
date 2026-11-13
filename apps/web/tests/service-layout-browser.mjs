@@ -1,0 +1,56 @@
+import { chromium, expect } from '@playwright/test';
+import { mkdir } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+const url = process.env.CONTINUUM_WEB_URL || 'http://localhost:5173';
+const output = fileURLToPath(new URL('../../../outputs/ui-repair/', import.meta.url));
+await mkdir(output,{recursive:true});
+const browser=await chromium.launch();
+const page=await browser.newPage({viewport:{width:1440,height:900},reducedMotion:'reduce'});
+const errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text())});
+const snap=name=>page.screenshot({path:`${output}/${name}.png`,fullPage:true});
+const nav=name=>page.locator('.app-rail').getByRole('button',{name,exact:true}).click();
+try {
+ await page.goto(`${url}/tests/service-layout.html`);
+ await expect(page.getByRole('heading',{name:'Workspace',exact:true})).toBeVisible();
+ await snap('workspace-desktop');
+ await nav('Review relationships');await expect(page.locator('.service-row')).toHaveCount(19);
+ expect((await page.locator('.service-row').first().boundingBox()).height).toBeLessThan(90);
+ await snap('relationships-desktop');
+ await page.locator('.service-row').first().click();
+ await expect(page.locator('.service-inspector .code-line__text').first()).toBeVisible();
+ await expect(page.getByRole('heading',{name:'Recorded evidence'})).toBeVisible();
+ expect(await page.locator('.service-inspector .service-disclosure').getAttribute('open')).toBeNull();
+ const colors=await page.locator('.code-line__text').first().evaluate(el=>({text:getComputedStyle(el).color,bg:getComputedStyle(el.closest('.code-box__body')).backgroundColor}));
+ const luminance=c=>{const rgb=c.match(/[\d.]+/g).slice(0,3).map(v=>{const n=Number(v)/255;return n<=.04045?n/12.92:((n+.055)/1.055)**2.4});return rgb[0]*.2126+rgb[1]*.7152+rgb[2]*.0722};
+ const a=luminance(colors.text),b=luminance(colors.bg);expect((Math.max(a,b)+.05)/(Math.min(a,b)+.05)).toBeGreaterThan(4.5);
+ await snap('inspector-desktop');
+ await page.getByRole('tab',{name:'review',exact:true}).click();await page.getByRole('combobox',{name:'Relationship judgment'}).click();await page.getByRole('option',{name:'confirm',exact:true}).click();
+ await page.getByRole('textbox',{name:'Reason',exact:true}).fill('Synthetic layout fixture draft.');
+ await page.getByRole('checkbox').check();await expect(page.getByRole('checkbox')).toBeChecked();
+ await page.getByRole('button',{name:'Close inspector',exact:true}).click();
+ await page.locator('.service-canvas').evaluate(el=>{el.scrollTop=el.scrollHeight});
+ await page.keyboard.press('Control+k');
+ const dialog=page.getByRole('dialog',{name:'Search current snapshot'});await expect(dialog).toBeVisible();
+ expect(await dialog.evaluate(el=>getComputedStyle(el).position)).toBe('fixed');
+ let box=await dialog.boundingBox();expect(box.y).toBeGreaterThanOrEqual(20);expect(box.y+box.height).toBeLessThanOrEqual(880);
+ await snap('search-desktop');
+ await dialog.getByRole('searchbox',{name:'Search captured knowledge'}).fill('no-match-xyz');await expect(dialog.getByText('No matching captured records')).toBeVisible();
+ await dialog.getByRole('searchbox',{name:'Search captured knowledge'}).fill('');await dialog.locator('.service-row').first().click();await expect(dialog).toHaveCount(0);await expect(page.getByRole('heading',{name:'Code explorer',exact:true})).toBeVisible();
+ await nav('Code explorer');await page.locator('.service-file-row').first().click();await expect(page.locator('.service-file-reader .code-line__text').first()).toBeVisible();await snap('files-desktop');
+ await expect(page.locator('.service-source-identity')).not.toHaveAttribute('open');
+ await nav('Coverage');await expect(page.locator('.service-coverage-row')).toHaveCount(6);await snap('coverage-desktop');
+ await nav('Explore context');await expect(page.locator('.react-flow__node')).toHaveCount(10,{timeout:15000});await snap('graph-desktop');
+ await nav('Review summary');await snap('summary-desktop');
+ await page.getByRole('button',{name:'Record intent',exact:true}).click();
+ const record=page.getByRole('dialog',{name:'Record intent'});await expect(record).toBeVisible();expect(await record.evaluate(el=>getComputedStyle(el).position)).toBe('fixed');await expect(record.getByRole('alert')).toHaveCount(0);await snap('record-desktop');await page.getByRole('button',{name:'Close record form'}).click();
+ await page.setViewportSize({width:1280,height:720});await page.keyboard.press('Control+k');await expect(dialog).toBeVisible();box=await dialog.boundingBox();expect(box.y).toBeGreaterThanOrEqual(20);expect(box.y+box.height).toBeLessThanOrEqual(700);await page.keyboard.press('Escape');
+ await page.setViewportSize({width:390,height:844});
+ for(const [label,name] of [['Workspace','workspace'],['Review relationships','relationships'],['Code explorer','files'],['Coverage','coverage'],['Explore context','graph']]) {
+  await nav(label);if(name==='files')await expect(page.locator('.service-file-reader .code-line__text').first()).toBeVisible();if(name==='graph')await expect(page.locator('.react-flow__node')).toHaveCount(10);
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  await snap(`${name}-mobile`);
+ }
+ await page.keyboard.press('Control+k');await expect(dialog).toBeVisible();box=await dialog.boundingBox();expect(box.x).toBeGreaterThanOrEqual(0);expect(box.x+box.width).toBeLessThanOrEqual(390);expect(box.y+box.height).toBeLessThanOrEqual(844);await snap('search-mobile');
+ expect(errors).toEqual([]);
+ console.log('PASS: actual service components with synthetic fixture; workspace, 19-row queue, inspector, review controls, readable source contrast, fixed search after scrolling, search selection dismissal, files, coverage, graph, summary, 1280x720 and mobile bounds; no browser errors. No backend writes.');
+} catch(e) {console.log('BROWSER_ERRORS',errors);await snap('failure');throw e;} finally {await browser.close();}

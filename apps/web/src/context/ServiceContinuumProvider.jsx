@@ -89,6 +89,32 @@ export default function ServiceContinuumProvider({ children }) {
       setDetail(data); setDraft({ ...emptyDraft(), ...drafts.current[draftKey(selection, data)] });
     } catch (e) { if (generation === epoch.current) report(e); }
   }
+  async function openPriorDecision() {
+    const impact = workspace?.comparison?.impacts.find(i => i.contextId === detail?.projection.contextId);
+    if (!impact) return;
+    const generation = ++epoch.current;
+    const returnContextId = detail.projection.contextId;
+    setBusy(true); setError('');
+    try {
+      const earlier = await api.query(selection.repositoryId, 'read_workspace', { snapshotId: workspace.comparison.baseSnapshotId });
+      const item = earlier.assertions.find(i => i.projection.contextId === impact.baseContextId);
+      if (!item) throw new Error('The retained prior context is unavailable.');
+      const context = await api.query(selection.repositoryId, 'read_assertion', { snapshotId: earlier.snapshot.id, contextId: impact.baseContextId, assertionRevisionId: item.assertion.id, historical: true });
+      const [history, sources, evidence] = await Promise.all([api.history(selection.repositoryId, impact.baseContextId, context.viewId), Promise.all([...new Set([context.assertion.source.versionId, context.assertion.target.versionId].filter(Boolean))].map(id => api.version(selection.repositoryId, id))), Promise.all(context.evidence.map(e => api.evidence(selection.repositoryId, e.id)))]);
+      if (generation === epoch.current) setDetail({ ...context, history, sources, evidence, returnContextId });
+    } catch (e) { if (generation === epoch.current) report(e); }
+    finally { if (generation === epoch.current) setBusy(false); }
+  }
+  async function loadMoreHistory() {
+    if (!detail?.history.nextCursor || lock.current) return;
+    lock.current = true; setBusy(true);
+    const generation = epoch.current;
+    try {
+      const page = await api.history(selection.repositoryId, detail.projection.contextId, detail.viewId, detail.history.nextCursor);
+      if (generation === epoch.current) setDetail(current => ({ ...current, history: { ...page, items: [...current.history.items, ...page.items.filter(item => !current.history.items.some(old => old.id === item.id))] } }));
+    } catch (e) { if (generation === epoch.current) report(e); }
+    finally { lock.current = false; setBusy(false); }
+  }
   function updateDraft(patch) {
     const next = { ...draft, ...patch };
     try { persist({ ...drafts.current, [draftKey(selection, detail)]: next }); setDraft(next); }
@@ -104,11 +130,11 @@ export default function ServiceContinuumProvider({ children }) {
       const response = await api.command(envelope);
       const next = { ...drafts.current }; delete next.$pending; if (key) delete next[key]; persist(next); setPending(null);
       if (response.result.operationId) {
-        const admitted = { repositoryId: envelope.repositoryId, ...response.result };
+        const admitted = { repositoryId: envelope.repositoryId, command: envelope.command, snapshotId: envelope.input.snapshotId, ...response.result };
         persist({ ...drafts.current, $operation: admitted }); setOperation(admitted);
       }
       setNotice('Saved to the service.');
-      if (selection?.repositoryId === envelope.repositoryId) await loadWorkspace(response.result.selection || selection);
+      if (envelope.command !== 'export_snapshot' && selection?.repositoryId === envelope.repositoryId) await loadWorkspace(response.result.selection || selection);
       return response;
     } catch (e) {
       if (e.status && e.status < 500 && e.status !== 401) {
@@ -125,7 +151,7 @@ export default function ServiceContinuumProvider({ children }) {
   const activeRepository = descriptor?.repositories.find(r => r.id === state.activeRepoId);
   const canWrite = activeRepository?.role === 'reviewer' && workspace?.mode === 'active' && storageReady && !pending;
   const value = { serviceMode: true, api, session, checking, signIn, signOut, state, setState, descriptor, selection, repositoryViewId, workspace, detail, draft, updateDraft,
-    rows: reviewRows(workspace), error, notice, busy, canWrite, pending, report, submit, saveJudgment,
+    rows: reviewRows(workspace), openPriorDecision, loadMoreHistory, openSource: artifactId => { setState(s => ({ ...s, activeModule: 'files', sourceArtifactId: artifactId, inspectorOpen: false })); setCommandPaletteOpen(false); }, error, notice, busy, canWrite, pending, report, submit, saveJudgment,
     retryPending: () => pending && submit(pending.envelope, pending.draftKey),
     refresh: () => selection && loadWorkspace(selection),
     retainedSnapshots, openSnapshot: async snapshotId => {

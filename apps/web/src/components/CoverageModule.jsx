@@ -176,46 +176,46 @@ export default function CoverageModule({ ctx }) {
 
             {/* Dynamic Spectrum Legend */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', marginTop: 14, fontSize: 11.5 }}>
-              <button
+              <Button variant="unstyled"
                 type="button"
                 onClick={() => handleSetFilter(filter === 'reviewed' ? 'all' : 'reviewed')}
                 className="btn-ghost"
                 style={{ display: 'flex', alignItems: 'center', gap: 5, color: 'var(--ink-2)', cursor: 'pointer', opacity: filter === 'all' || filter === 'reviewed' ? 1 : 0.45 }}
               >
                 <span className="status-dot dot--green" /> Reviewed Support ({covItems.filter(a => a.coverageCondition === 'reviewed').length})
-              </button>
-              <button
+              </Button>
+              <Button variant="unstyled"
                 type="button"
                 onClick={() => handleSetFilter(filter === 'attention' ? 'all' : 'attention')}
                 className="btn-ghost"
                 style={{ display: 'flex', alignItems: 'center', gap: 5, color: 'var(--ink-2)', cursor: 'pointer', opacity: filter === 'all' || filter === 'attention' ? 1 : 0.45 }}
               >
                 <span className="status-dot dot--amber" /> Needs Attention ({covItems.filter(a => a.coverageCondition === 'attention').length})
-              </button>
-              <button
+              </Button>
+              <Button variant="unstyled"
                 type="button"
                 onClick={() => handleSetFilter(filter === 'candidate' ? 'all' : 'candidate')}
                 className="btn-ghost"
                 style={{ display: 'flex', alignItems: 'center', gap: 5, color: 'var(--ink-2)', cursor: 'pointer', opacity: filter === 'all' || filter === 'candidate' ? 1 : 0.45 }}
               >
                 <span className="status-dot dot--indigo" /> Candidate ({covItems.filter(a => a.coverageCondition === 'candidate').length})
-              </button>
-              <button
+              </Button>
+              <Button variant="unstyled"
                 type="button"
                 onClick={() => handleSetFilter(filter === 'no_link' ? 'all' : 'no_link')}
                 className="btn-ghost"
                 style={{ display: 'flex', alignItems: 'center', gap: 5, color: 'var(--ink-2)', cursor: 'pointer', opacity: filter === 'all' || filter === 'no_link' ? 1 : 0.45 }}
               >
                 <span className="status-dot dot--red" /> No Known Doc ({covItems.filter(a => a.coverageCondition === 'no_link').length})
-              </button>
-              <button
+              </Button>
+              <Button variant="unstyled"
                 type="button"
                 onClick={() => handleSetFilter(filter === 'unknown' ? 'all' : 'unknown')}
                 className="btn-ghost"
                 style={{ display: 'flex', alignItems: 'center', gap: 5, color: 'var(--ink-2)', cursor: 'pointer', opacity: filter === 'all' || filter === 'unknown' ? 1 : 0.45 }}
               >
                 <span className="status-dot dot--neutral" /> Boundary Disclosed ({covItems.filter(a => a.coverageCondition === 'unknown').length})
-              </button>
+              </Button>
             </div>
           </div>
 

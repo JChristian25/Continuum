@@ -14,9 +14,10 @@ import {
   WrapText,
   ListTree
 } from 'lucide-react';
+import { Menu } from '@base-ui/react/menu';
 import Tooltip from './Tooltip.jsx';
 import { REPO_FILES } from '../data/repoFiles.js';
-import { Button, Input, Tabs, TabsList, TabsTrigger } from './ui/index.js';
+import { Button, Input, Tabs, TabsList, TabsTrigger, Dialog, DialogContent } from './ui/index.js';
 
 export default function CodeExplorerModal({ isOpen, onClose, initialFile = 'src/bbb.py' }) {
   const [userSelectedFile, setUserSelectedFile] = useState(null);
@@ -40,11 +41,6 @@ export default function CodeExplorerModal({ isOpen, onClose, initialFile = 'src/
   useEffect(() => {
     if (!isOpen) return;
     const handleKey = (e) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        onClose();
-        return;
-      }
       if (e.key === 'r' && !['input', 'textarea'].includes(document.activeElement?.tagName?.toLowerCase())) {
         e.preventDefault();
         setShowSymbols(prev => !prev);
@@ -77,8 +73,8 @@ export default function CodeExplorerModal({ isOpen, onClose, initialFile = 'src/
   if (!isOpen) return null;
 
   return (
-    <div className="gh-modal-overlay" onClick={onClose} role="dialog" aria-modal="true" aria-label="GitHub-Style Code & Symbols Explorer">
-      <div className="gh-modal-window" onClick={(e) => e.stopPropagation()}>
+    <Dialog open={isOpen} onOpenChange={open => !open && onClose()}>
+      <DialogContent className="gh-modal-window library-code-dialog" padded={false} showClose={false} aria-label="GitHub-Style Code & Symbols Explorer">
         
         {/* Top GitHub Navigation Bar */}
         <header className="gh-top-bar">
@@ -99,22 +95,21 @@ export default function CodeExplorerModal({ isOpen, onClose, initialFile = 'src/
                 </span>
               ))}
 
-              <div className="gh-file-picker-wrap">
-                <button
+              <Menu.Root open={fileMenuOpen} onOpenChange={setFileMenuOpen}><div className="gh-file-picker-wrap">
+                <Menu.Trigger render={<Button variant="unstyled" />}
                   type="button"
                   className="gh-breadcrumb-file"
-                  onClick={() => setFileMenuOpen(open => !open)}
                   aria-expanded={fileMenuOpen}
                 >
                   <strong>{fileData.name}</strong>
                   <ChevronDown size={13} />
-                </button>
+                </Menu.Trigger>
 
-                {fileMenuOpen && (
-                  <div className="gh-file-dropdown">
+                <Menu.Portal><Menu.Positioner sideOffset={4} className="library-menu-positioner">
+                  <Menu.Popup className="gh-file-dropdown library-menu-popup">
                     <p>Switch Repository File</p>
                     {Object.keys(REPO_FILES).map((path) => (
-                      <button
+                      <Menu.Item nativeButton render={<Button variant="unstyled" />}
                         key={path}
                         type="button"
                         className={path === selectedFile ? 'is-active' : ''}
@@ -127,11 +122,10 @@ export default function CodeExplorerModal({ isOpen, onClose, initialFile = 'src/
                       >
                         <FileCode2 size={13} />
                         <span>{path}</span>
-                      </button>
+                      </Menu.Item>
                     ))}
-                  </div>
-                )}
-              </div>
+                  </Menu.Popup></Menu.Positioner></Menu.Portal>
+              </div></Menu.Root>
             </nav>
           </div>
 
@@ -141,14 +135,14 @@ export default function CodeExplorerModal({ isOpen, onClose, initialFile = 'src/
               <span>Tree-sitter AST &amp; Docling Connected</span>
             </span>
             <Tooltip title="Close File Viewer" shortcut="Esc" side="bottom">
-              <button
+              <Button variant="unstyled"
                 type="button"
                 className="gh-icon-btn"
                 onClick={onClose}
                 aria-label="Close File Viewer"
               >
                 <X size={16} />
-              </button>
+              </Button>
             </Tooltip>
           </div>
         </header>
@@ -280,14 +274,14 @@ export default function CodeExplorerModal({ isOpen, onClose, initialFile = 'src/
               <div className="gh-symbols-header">
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
                   <strong className="gh-symbols-title">Symbols</strong>
-                  <button
+                  <Button variant="unstyled"
                     type="button"
                     className="gh-icon-btn"
                     onClick={() => setShowSymbols(false)}
                     title="Close Symbols Panel"
                   >
                     <X size={14} />
-                  </button>
+                  </Button>
                 </div>
                 <p className="gh-symbols-desc">
                   Find definitions, Tree-sitter AST nodes, and Continuum trace links in this file.
@@ -315,7 +309,7 @@ export default function CodeExplorerModal({ isOpen, onClose, initialFile = 'src/
                   filteredSymbols.map(sym => {
                     const isSelected = activeLine === sym.line;
                     return (
-                      <button
+                      <Button variant="unstyled"
                         key={sym.id}
                         type="button"
                         className={`gh-symbol-item ${isSelected ? 'is-selected' : ''}`}
@@ -346,7 +340,7 @@ export default function CodeExplorerModal({ isOpen, onClose, initialFile = 'src/
                             </Tooltip>
                           )}
                         </div>
-                      </button>
+                      </Button>
                     );
                   })
                 )}
@@ -355,7 +349,7 @@ export default function CodeExplorerModal({ isOpen, onClose, initialFile = 'src/
           )}
         </div>
 
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Infinity as InfinityIcon, PanelLeftClose, PanelLeftOpen, Bot, Check, ChevronDown, FileCode2, FolderGit2, GitCompare, GitCommit,
   LayoutDashboard, Moon, Network, Plus, Search, Server, Shield,
@@ -6,7 +6,8 @@ import {
 } from 'lucide-react';
 import { useContinuum } from '../context/ContinuumContext.jsx';
 import Tooltip from './Tooltip.jsx';
-import { Badge } from './ui/index.js';
+import { Badge, Button, Select } from './ui/index.js';
+import { Menu } from '@base-ui/react/menu';
 import { motion } from 'motion/react';
 
 const modules = [
@@ -43,41 +44,22 @@ export default function Shell({
     document.documentElement.dataset.sidebar = collapsed ? 'collapsed' : 'expanded';
     return () => { delete document.documentElement.dataset.sidebar; };
   }, [collapsed]);
-  const personaRef = useRef(null);
-  const repoRef = useRef(null);
+  const AccountTrigger = serviceMode ? Button : Menu.Trigger;
 
   const isMac = typeof navigator !== 'undefined' && /(Mac|iPhone|iPod|iPad)/i.test(navigator.userAgent || navigator.platform || '');
   const activeUser = state.teamMembers?.find((member) => member.id === state.activeUserId) || state.teamMembers?.[0];
   const activeRepo = state.repositories?.find((repo) => repo.id === state.activeRepoId) || state.repositories?.[0];
   const isAuthorized = serviceMode ? activeRepo?.role === 'reviewer' : activeUser?.authority === 'Authorized Reviewer';
 
-  useEffect(() => {
-    const closeMenus = (event) => {
-      if (personaRef.current && !personaRef.current.contains(event.target)) setPersonaOpen(false);
-      if (repoRef.current && !repoRef.current.contains(event.target)) setRepoOpen(false);
-    };
-    const onKeyDown = (e) => {
-      if (e.key === 'Escape') {
-        setPersonaOpen(false);
-        setRepoOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', closeMenus);
-    window.addEventListener('keydown', onKeyDown);
-    return () => {
-      document.removeEventListener('mousedown', closeMenus);
-      window.removeEventListener('keydown', onKeyDown);
-    };
-  }, []);
 
   return (
     <aside className={`app-rail ${collapsed ? 'is-collapsed' : ''}`} aria-label="Continuum navigation">
-      <button className="sidebar-toggle" onClick={() => setCollapsed(value => !value)} aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-expanded={!collapsed}>
+      <Button variant="unstyled" className="sidebar-toggle" onClick={() => setCollapsed(value => !value)} aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-expanded={!collapsed}>
         {collapsed ? <PanelLeftOpen size={19} /> : <PanelLeftClose size={19} />}
-      </button>
+      </Button>
       {/* 1. BRAND HEADER & THEME TOGGLE */}
       <div className="app-rail__header">
-        <button
+        <Button variant="unstyled"
           type="button"
           className="app-rail__brand"
           onClick={() => switchModule('dashboard')}
@@ -90,32 +72,32 @@ export default function Shell({
             <strong>Continuum</strong>
             <small>Knowledge continuity</small>
           </div>
-        </button>
+        </Button>
 
         <Tooltip content={theme === 'dark' ? 'Switch to Light mode' : 'Switch to Dark mode'} side="bottom">
-          <button
+          <Button variant="unstyled"
             className="rail-theme-toggle"
             type="button"
             onClick={toggleTheme}
             aria-label={`Toggle color theme (currently ${theme})`}
           >
             {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
-          </button>
+          </Button>
         </Tooltip>
       </div>
 
       {/* 2. WORKSPACE & REVISION CYCLE SECTION */}
-      <div className="app-rail__workspace-group" ref={repoRef}>
+      <Menu.Root open={repoOpen} onOpenChange={setRepoOpen}><div className="app-rail__workspace-group">
         <div className="app-rail__section-header">
           <span className="app-rail__label">Workspace</span>
         </div>
 
         {/* Repository Selector */}
         <Tooltip title="Workspace Scope" content="Switch active repository or import external codebase" side="right" disabled={repoOpen}>
-          <button
+          <Menu.Trigger render={<Button variant="unstyled" />}
             className={`scope-selector ${repoOpen ? 'is-open' : ''}`}
             type="button"
-            onClick={() => { setRepoOpen(open => !open); setPersonaOpen(false); }}
+            onClick={() => setPersonaOpen(false)}
             aria-expanded={repoOpen}
             aria-haspopup="menu"
           >
@@ -125,10 +107,10 @@ export default function Shell({
               <small>{activeRepo?.language || 'Repository'}</small>
             </div>
             <ChevronDown size={14} className="scope-selector__chevron" />
-          </button>
+          </Menu.Trigger>
         </Tooltip>
 
-        {serviceMode && ctx.selection && <label className="revision-switch"><span className="revision-switch__text"><small>Selected revision</small><select aria-label="Selected revision" value={ctx.selection.targetRevision.commitId} disabled={ctx.busy} onChange={e => ctx.changeSelection({ ...ctx.selection, baseRevision: null, comparisonId: undefined, targetRevision: { objectAlgorithm: 'sha1', commitId: e.target.value } })}>{ctx.descriptor?.repositories.find(r => r.id === state.activeRepoId)?.inputs.find(i => i.id === ctx.selection.inventoryId)?.revisions.map(r => <option key={r.label} value={r.commitId}>{r.label} · {r.commitId.slice(0, 7)}</option>)}</select></span></label>}
+        {serviceMode && ctx.selection && <label className="revision-switch"><span className="revision-switch__text"><small>Selected revision</small><Select aria-label="Selected revision" value={ctx.selection.targetRevision.commitId} disabled={ctx.busy} onChange={e => ctx.changeSelection({ ...ctx.selection, baseRevision: null, comparisonId: undefined, targetRevision: { objectAlgorithm: 'sha1', commitId: e.target.value } })}>{ctx.descriptor?.repositories.find(r => r.id === state.activeRepoId)?.inputs.find(i => i.id === ctx.selection.inventoryId)?.revisions.map(r => <option key={r.label} value={r.commitId}>{r.label} · {r.commitId.slice(0, 7)}</option>)}</Select></span></label>}
         {/* Revision Cycle Segmented Toggle */}
         {!serviceMode && <Tooltip
           title="Review Cycle Context"
@@ -137,7 +119,7 @@ export default function Shell({
             : 'Baseline (a41c90e). Click to switch to incoming change.'}
           side="right"
         >
-          <button
+          <Button variant="unstyled"
             type="button"
             className={`revision-switch revision-switch--${state.revisionMode === 'R1' ? 'r1' : 'r0'}`}
             onClick={toggleRevisionMode}
@@ -149,14 +131,14 @@ export default function Shell({
               <strong>{state.revisionMode === 'R1' ? 'Incoming Change' : 'Baseline'}</strong>
             </div>
             <span className={`status-dot ${state.revisionMode === 'R1' ? 'dot--green' : 'dot--neutral'}`} />
-          </button>
+          </Button>
         </Tooltip>
 
         }
 
         {/* Floating Workspace Popover (Flies out to the right) */}
-        {repoOpen && (
-          <div className="rail-popover rail-popover--scope" role="menu" aria-label="Switch workspace">
+        <Menu.Portal><Menu.Positioner side="right" align="start" sideOffset={8} className="library-menu-positioner">
+          <Menu.Popup className="rail-popover rail-popover--scope library-menu-popup" aria-label="Switch workspace">
             <div className="rail-popover__header">
               <span className="rail-popover__label">Switch Workspace</span>
               <span className="rail-popover__count">{state.repositories?.length || 0} repositories</span>
@@ -165,7 +147,7 @@ export default function Shell({
               {state.repositories?.map((repo) => {
                 const isCurrent = repo.id === activeRepo?.id;
                 return (
-                  <button
+                  <Menu.Item nativeButton render={<Button variant="unstyled" />}
                     key={repo.id}
                     type="button"
                     role="menuitem"
@@ -181,31 +163,30 @@ export default function Shell({
                       </span>
                     </div>
                     {isCurrent && <Check size={14} className="rail-popover__check" />}
-                  </button>
+                  </Menu.Item>
                 );
               })}
             </div>
             <div className="rail-popover__footer">
-              <button
+              <Menu.Item nativeButton render={<Button variant="unstyled" />}
                 type="button"
                 className="rail-popover__action"
                 onClick={() => { setRepoOpen(false); onOpenImportModal?.(); }}
               >
                 <Plus size={14} /> {serviceMode ? 'Registered inputs' : 'Import repository'}
-              </button>
+              </Menu.Item>
             </div>
-          </div>
-        )}
-      </div>
+          </Menu.Popup></Menu.Positioner></Menu.Portal>
+      </div></Menu.Root>
 
       {/* 3. PRIMARY ACTION & SEARCH GROUP */}
       <div className="app-rail__quick-actions">
         {/* Prominent "+ Record Intent" Button */}
         <Tooltip title="Record Design Intent" content="Capture an architectural decision and link it to code or docs" side="right">
-          <button className="rail-primary-action" type="button" disabled={serviceMode && (!ctx.canWrite || ctx.busy)} onClick={openModal}>
+          <Button variant="unstyled" className="rail-primary-action" type="button" disabled={serviceMode && (!ctx.canWrite || ctx.busy)} onClick={openModal}>
             <Plus size={15} strokeWidth={2.5} />
             <span>Record intent</span>
-          </button>
+          </Button>
         </Tooltip>
 
         {/* Global Search / Omnibar Trigger */}
@@ -234,7 +215,7 @@ export default function Shell({
           const showBadge = module.review && pendingCount > 0;
           return (
             <Tooltip key={module.id} content={module.helper} side="right">
-              <button
+              <Button variant="unstyled"
                 type="button"
                 className={`rail-nav-item ${active ? 'is-active' : ''}`}
                 onClick={() => switchModule(module.id)}
@@ -245,14 +226,14 @@ export default function Shell({
                 <Icon size={16} />
                 <span className="rail-nav-item__label">{module.label}</span>
                 {showBadge && <Badge variant="accent" size="xs" className="ml-auto font-mono text-[10px] px-1.5 py-0 h-4 min-w-4 flex items-center justify-center">{pendingCount}</Badge>}
-              </button>
+              </Button>
             </Tooltip>
           );
         })}
       </nav>
 
       {/* 5. FOOTER: USER PERSONA SWITCHER */}
-      <div className="app-rail__account" ref={personaRef}>
+      <Menu.Root open={personaOpen} onOpenChange={setPersonaOpen}><div className="app-rail__account">
         <span className="app-rail__label">{serviceMode ? 'Signed in' : 'Review persona'}</span>
         <Tooltip
           title="Active Review Persona"
@@ -260,10 +241,10 @@ export default function Shell({
           side="right"
           disabled={personaOpen}
         >
-          <button
+          <AccountTrigger {...(serviceMode ? { variant: 'unstyled' } : { render: <Button variant="unstyled" /> })}
             className={`account-button ${personaOpen ? 'is-open' : ''}`}
             type="button"
-            onClick={() => { if (serviceMode) switchModule('account'); else setPersonaOpen(open => !open); setRepoOpen(false); }}
+            onClick={() => { if (serviceMode) switchModule('account'); setRepoOpen(false); }}
             aria-expanded={personaOpen}
             aria-haspopup="menu"
           >
@@ -273,12 +254,12 @@ export default function Shell({
               <small>{isAuthorized ? 'Authorized Reviewer' : 'Read-Only Viewer'}</small>
             </div>
             <ChevronDown size={14} className="account-button__chevron" />
-          </button>
+          </AccountTrigger>
         </Tooltip>
 
         {/* Floating Persona Popover (Flies out to the right) */}
-        {!serviceMode && personaOpen && (
-          <div className="rail-popover rail-popover--account" role="menu" aria-label="Review as">
+        {!serviceMode && <Menu.Portal><Menu.Positioner side="right" align="end" sideOffset={8} className="library-menu-positioner">
+          <Menu.Popup className="rail-popover rail-popover--account library-menu-popup" aria-label="Review as">
             <div className="rail-popover__header">
               <span className="rail-popover__label">Review As Persona</span>
               <span className="rail-popover__count">Switch Identity</span>
@@ -288,7 +269,7 @@ export default function Shell({
                 const isCurrent = member.id === activeUser?.id;
                 const isAuth = member.authority === 'Authorized Reviewer';
                 return (
-                  <button
+                  <Menu.Item nativeButton render={<Button variant="unstyled" />}
                     key={member.id}
                     type="button"
                     role="menuitem"
@@ -308,13 +289,12 @@ export default function Shell({
                       </span>
                     </div>
                     {isCurrent && <Check size={14} className="rail-popover__check" />}
-                  </button>
+                  </Menu.Item>
                 );
               })}
             </div>
-          </div>
-        )}
-      </div>
+          </Menu.Popup></Menu.Positioner></Menu.Portal>}
+      </div></Menu.Root>
     </aside>
   );
 }

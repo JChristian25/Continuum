@@ -151,7 +151,7 @@ export default function FilesModule({ ctx }) {
 
             return (
               <div key={folderKey} style={{ marginBottom: 6 }}>
-                <button
+                <Button variant="unstyled"
                   type="button"
                   onClick={() => toggleFolder(folderKey)}
                   style={{
@@ -176,14 +176,14 @@ export default function FilesModule({ ctx }) {
                   <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--ink-3)', fontFamily: 'var(--font-mono)' }}>
                     {visibleFiles.length}
                   </span>
-                </button>
+                </Button>
 
                 {isOpen && (
                   <div style={{ marginLeft: 16, marginTop: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
                     {visibleFiles.map(file => {
                       const isSelected = selectedFilePath === file.path;
                       return (
-                        <button
+                        <Button variant="unstyled"
                           key={file.path}
                           type="button"
                           onClick={() => {
@@ -220,7 +220,7 @@ export default function FilesModule({ ctx }) {
                               {file.statusLabel}
                             </span>
                           )}
-                        </button>
+                        </Button>
                       );
                     })}
                   </div>
@@ -235,7 +235,7 @@ export default function FilesModule({ ctx }) {
             .map(file => {
               const isSelected = selectedFilePath === file.path;
               return (
-                <button
+                <Button variant="unstyled"
                   key={file.path}
                   type="button"
                   onClick={() => {
@@ -268,7 +268,7 @@ export default function FilesModule({ ctx }) {
                   <Badge variant="neutral" size="xs" className="font-mono text-[9px]">
                     root
                   </Badge>
-                </button>
+                </Button>
               );
             })}
         </div>
@@ -583,7 +583,7 @@ export default function FilesModule({ ctx }) {
                   filteredSymbols.map(sym => {
                     const isSelected = activeLine === sym.line;
                     return (
-                      <button
+                      <Button variant="unstyled"
                         key={sym.id}
                         type="button"
                         onClick={() => scrollToLine(sym.line)}
@@ -627,7 +627,7 @@ export default function FilesModule({ ctx }) {
                             </span>
                           )}
                         </div>
-                      </button>
+                      </Button>
                     );
                   })
                 )}

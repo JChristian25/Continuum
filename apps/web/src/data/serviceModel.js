@@ -19,7 +19,9 @@ export function reviewRows(workspace) {
   const artifacts = new Map((workspace?.artifacts || []).map(item => [item.artifactId, item]));
   return (workspace?.assertions || []).map(item => ({ ...item, id: item.projection.contextId,
     source: artifacts.get(item.assertion.source.artifactId), target: artifacts.get(item.assertion.target.artifactId),
-    sourcePath: artifacts.get(item.assertion.source.artifactId)?.path || 'Unavailable document',
+    sourcePath: artifacts.get(item.assertion.source.artifactId)?.path || 'Unavailable source',
+    sourceLabel: artifacts.get(item.assertion.source.artifactId)?.identity?.title || artifacts.get(item.assertion.source.artifactId)?.path || 'Unavailable source',
+    targetLabel: artifacts.get(item.assertion.target.artifactId)?.identity?.title || artifacts.get(item.assertion.target.artifactId)?.path || 'Unavailable target',
     targetPath: artifacts.get(item.assertion.target.artifactId)?.path || 'Unavailable code',
   }));
 }

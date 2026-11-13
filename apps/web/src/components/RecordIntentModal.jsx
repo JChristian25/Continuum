@@ -28,23 +28,23 @@ export default function RecordIntentModal({ getActiveUser, onClose, onSubmit }) 
 
   return (
     <Dialog open={true} onOpenChange={(open) => !open && onClose?.()}>
-      <DialogContent className="max-w-[540px]">
+      <DialogContent className="max-w-[540px]" aria-describedby="intent-description">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <PlusCircle className="h-5 w-5 text-[var(--accent)]" />
             <span>Record Design Intent</span>
           </DialogTitle>
-          <DialogDescription>
+          <DialogDescription id="intent-description">
             Directly author an Architecture Decision Record (ADR) or ISO Requirement and anchor it to code.
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">
-            <label className="text-[12px] font-semibold text-[var(--ink-2)]">
+            <label htmlFor="intent-kind" className="text-[12px] font-semibold text-[var(--ink-2)]">
               Intent Record Type
             </label>
-            <Select value={kind} onChange={(e) => setKind(e.target.value)}>
+            <Select id="intent-kind" value={kind} onChange={(e) => setKind(e.target.value)}>
               <option value="Architecture Decision (ADR)">Architecture Decision Record (ADR)</option>
               <option value="System Requirement (REQ)">System Requirement (ISO/IEC/IEEE 29148)</option>
               <option value="Refactoring Constraint">Refactoring Constraint / RFC</option>
@@ -52,10 +52,10 @@ export default function RecordIntentModal({ getActiveUser, onClose, onSubmit }) 
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-[12px] font-semibold text-[var(--ink-2)]">
+            <label htmlFor="intent-target" className="text-[12px] font-semibold text-[var(--ink-2)]">
               Direct Target Artifact
             </label>
-            <Select value={targetId} onChange={(e) => setTargetId(e.target.value)}>
+            <Select id="intent-target" value={targetId} onChange={(e) => setTargetId(e.target.value)}>
               <option value="bbb.py::createRequest">src/bbb.py · createRequest() (Changed Provider Seed)</option>
               <option value="bbb.py::cancelRequest">src/bbb.py · cancelRequest() (Undocumented Sibling)</option>
               <option value="aaa.py::submitUserOrder">src/aaa.py · submitUserOrder() (Order Intake Caller)</option>
@@ -66,10 +66,10 @@ export default function RecordIntentModal({ getActiveUser, onClose, onSubmit }) 
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-[12px] font-semibold text-[var(--ink-2)]">
+            <label htmlFor="intent-title" className="text-[12px] font-semibold text-[var(--ink-2)]">
               Intent Title / Proposition Summary
             </label>
-            <Input
+            <Input id="intent-title"
               type="text"
               placeholder="e.g. Return structured dict from createRequest to avoid follow-up queries"
               value={title}
@@ -79,10 +79,10 @@ export default function RecordIntentModal({ getActiveUser, onClose, onSubmit }) 
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-[12px] font-semibold text-[var(--ink-2)]">
+            <label htmlFor="intent-rationale" className="text-[12px] font-semibold text-[var(--ink-2)]">
               Full Technical Rationale &amp; Context
             </label>
-            <Textarea
+            <Textarea id="intent-rationale"
               rows={4}
               placeholder="Explain the engineering tradeoffs, affected callers, and why this design was chosen…"
               value={rationale}

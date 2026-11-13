@@ -18,7 +18,7 @@ try {
   await page.getByLabel('Login', { exact: true }).fill('alice');
   await page.getByLabel('Password', { exact: true }).fill(password);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-  await expect(page.getByText('LIVE SERVICE · active', { exact: false })).toBeVisible();
+  await expect(page.locator('.service-live-state').filter({ hasText: 'active' })).toBeVisible();
   await expect.poll(async () => (await page.locator('.focus-brief').boundingBox()).height).toBeGreaterThan(150);
   await expect(page.locator('.service-row')).toHaveCount(0);
   await page.screenshot({ path: fileURLToPath(new URL('../../../outputs/frontend-integration/workspace.png', import.meta.url)), fullPage: true });
@@ -32,10 +32,11 @@ try {
   await page.locator('.service-row').first().click();
   await expect(page.getByRole('heading', { name: 'Recorded evidence' })).toBeVisible();
   await expect(page.locator('.service-inspector .code-box')).toHaveCount(2);
-  await page.getByRole('button', { name: 'review', exact: true }).click();
-  await page.getByLabel('Relationship judgment').selectOption('confirm');
+  await page.getByRole('tab', { name: 'review', exact: true }).click();
+  await page.getByRole('combobox', { name: 'Relationship judgment' }).click();
+  await page.getByRole('option', { name: 'confirm', exact: true }).click();
   await page.getByLabel('Reason', { exact: true }).fill('Isolated browser verification of exact-source review; not a research assessment.');
-  await page.getByLabel('I inspected the exact sources and recorded evidence.').check();
+  await page.getByRole('checkbox', { name: 'I inspected the exact sources and recorded evidence.' }).check();
   // Draft survives leaving the context and a browser reload.
   await page.getByRole('button', { name: 'Close inspector' }).click();
   await page.reload();
@@ -43,9 +44,9 @@ try {
   await expect(page.locator('.service-row')).toHaveCount(19);
   await page.locator('.service-row').first().click();
   await expect(page.getByRole('heading', { name: 'Recorded evidence' })).toBeVisible();
-  await page.getByRole('button', { name: 'review', exact: true }).click();
+  await page.getByRole('tab', { name: 'review', exact: true }).click();
   await expect.poll(() => page.getByRole('textbox', { name: 'Reason', exact: true }).inputValue()).toContain('Isolated browser verification');
-  await expect(page.getByLabel('Relationship judgment')).toHaveValue('confirm');
+  await expect(page.getByRole('combobox', { name: 'Relationship judgment' })).toHaveText('confirm');
   // Another successful operation makes the displayed projection stale.
   const session = await context.request.get(`${url}/api/v1/auth/session`).then(r => r.json());
   const competing = await context.request.post(`${url}/api/v1/commands`, { headers: { Origin: url, 'X-CSRF-Token': session.csrfToken }, data: {
@@ -60,7 +61,7 @@ try {
   await page.getByRole('button', { name: 'Refresh', exact: true }).click();
   await page.locator('.service-row').first().click();
   await expect(page.getByRole('heading', { name: 'Recorded evidence' })).toBeVisible();
-  await page.getByRole('button', { name: 'review', exact: true }).click();
+  await page.getByRole('tab', { name: 'review', exact: true }).click();
   // Lose the response after the command commits, then replay the identical envelope.
   const envelopes = [];
   await page.route('**/api/v1/commands', async route => {
@@ -77,31 +78,79 @@ try {
   await page.unroute('**/api/v1/commands');
   await page.locator('.service-row').filter({ hasText: 'confirmed' }).click();
   await expect(page.getByRole('heading', { name: 'Recorded evidence' })).toBeVisible();
-  await page.getByRole('button', { name: 'history', exact: true }).click();
+  await page.getByRole('tab', { name: 'history', exact: true }).click();
   await expect(page.locator('.service-inspector')).toContainText('Isolated browser verification');
   await page.getByRole('button', { name: 'Close inspector' }).click();
   // Retained snapshots are readable and cannot accept a judgment.
   await page.getByText('Revision & snapshot details', { exact: true }).click();
-  const retained = page.getByLabel('Retained snapshot');
-  const historical = await retained.locator('option').evaluateAll(options => options.find(o => o.textContent.includes('historical') && !o.textContent.includes('Version 0'))?.value);
-  await retained.selectOption(historical);
-  await expect(page.getByText('LIVE SERVICE · historical', { exact: false })).toBeVisible();
+  const retained = page.getByRole('combobox', { name: 'Retained snapshot' });
+  await retained.click();
+  await page.getByRole('option').filter({ hasText: 'historical' }).filter({ hasNotText: 'Version 0' }).first().click();
+  await expect(page.locator('.service-live-state').filter({ hasText: 'historical' })).toBeVisible();
   await page.locator('.service-row').first().click();
   await expect(page.getByRole('heading', { name: 'Recorded evidence' })).toBeVisible();
-  await page.getByRole('button', { name: 'review', exact: true }).click();
+  await page.getByRole('tab', { name: 'review', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Save judgment', exact: true })).toBeDisabled();
   await page.getByRole('button', { name: 'Close inspector' }).click();
   await page.getByRole('button', { name: 'Refresh', exact: true }).click();
   await page.getByRole('button', { name: 'Code explorer', exact: true }).click();
   await page.locator('.service-row').first().click();
   await expect(page.locator('.service-file-grid .code-box')).toBeVisible();
-  await page.getByLabel('Selected revision').selectOption('c62d6648d81e1aebc65f80bddc72f165fba7320b');
+  await page.getByRole('combobox', { name: 'Selected revision' }).click();
+  await page.getByRole('option').filter({ hasText: 'c62d664' }).click();
   await page.getByRole('button', { name: 'Review relationships', exact: true }).click();
   await expect(page.locator('.service-row')).toHaveCount(0);
   await page.getByText('Compare revisions', { exact: true }).click();
   await page.getByRole('button', { name: 'Compare and review impact' }).click();
   await expect(page.getByText(/changed paths · .* affected relationships/)).toBeVisible({ timeout: 20000 });
   await expect(page.locator('.service-row').first()).toBeVisible();
+  // Typed authored records remain explicit manual claims, and revision needs new review.
+  await page.getByRole('button', { name: 'Record intent', exact: true }).click();
+  const recordDialog = page.getByRole('dialog', { name: 'Record intent', exact: true });
+  await recordDialog.getByRole('combobox', { name: 'Kind' }).click();
+  await page.getByRole('option', { name: 'Requirement', exact: true }).click();
+  await recordDialog.getByRole('textbox', { name: 'Title', exact: true }).fill('Browser requirement');
+  await recordDialog.getByRole('textbox', { name: 'Content', exact: true }).fill('Readable captured requirement for browser verification.');
+  await recordDialog.getByRole('textbox', { name: 'Why is no source reference supplied?' }).fill('Synthetic isolated browser verification, not practitioner evidence.');
+  await recordDialog.getByRole('button', { name: 'Save record', exact: true }).click();
+  await expect(recordDialog).toHaveCount(0);
+  await page.getByText('Add a relationship', { exact: true }).click();
+  await page.getByRole('combobox', { name: 'Relationship meaning' }).click();
+  await page.getByRole('option', { name: 'Code implements requirement' }).click();
+  await page.getByRole('combobox', { name: 'Evidence from' }).click();
+  await page.getByRole('option', { name: 'Target artifact', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Relationship reason', exact: true }).fill('Synthetic manually anchored typed relationship.');
+  await page.getByRole('button', { name: 'Save candidate relationship' }).click();
+  await expect(page.locator('.service-row').filter({ hasText: 'Browser requirement' })).toBeVisible();
+  await page.getByRole('button', { name: 'Code explorer', exact: true }).click();
+  await page.locator('.service-file-row').filter({ hasText: 'Browser requirement' }).click();
+  await page.getByText('Revise this authored record', { exact: true }).click();
+  await page.getByRole('textbox', { name: 'Content', exact: true }).fill('Updated captured requirement with a new version.');
+  await page.getByRole('textbox', { name: 'Revision reason', exact: true }).fill('Verify a new version creates incoming review context.');
+  await page.getByRole('button', { name: 'Save new record version' }).click();
+  await expect(page.locator('.service-file-reader')).toContainText('Updated captured requirement');
+  await page.getByRole('button', { name: 'Review relationships', exact: true }).click();
+  await page.locator('.service-row').filter({ hasText: 'Browser requirement' }).click();
+  await page.getByRole('button', { name: 'Inspect prior decision & evidence' }).click();
+  await expect(page.getByRole('button', { name: 'Return to incoming review' })).toBeVisible();
+  await page.getByRole('tab', { name: 'review', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Save judgment' })).toBeDisabled();
+  await page.getByRole('button', { name: 'Return to incoming review' }).click();
+  await page.getByRole('button', { name: 'Close inspector' }).click();
+  await page.keyboard.press('Control+k');
+  const search = page.getByRole('dialog', { name: 'Search current snapshot' });
+  await search.getByRole('searchbox', { name: 'Search captured knowledge' }).fill('Updated captured requirement');
+  await expect(search.locator('.service-search-result')).toHaveCount(1);
+  await search.locator('.service-row').click();
+  await expect(search).toHaveCount(0);
+  await expect(page.locator('.service-file-reader')).toContainText('Updated captured requirement');
+  await page.getByRole('button', { name: 'Explore context', exact: true }).click();
+  await page.locator('.react-flow__node').filter({ hasText: 'Browser requirement' }).click();
+  await expect(page.locator('.react-flow__node')).toHaveCount(2);
+  await expect(page.locator('.react-flow__edge')).toHaveCount(1);
+  await page.locator('.react-flow__edge-interaction').click({ force: true });
+  await expect(page.locator('.service-inspector')).toContainText('Updated captured requirement');
+  await page.getByRole('button', { name: 'Close inspector' }).click();
   await page.getByRole('button', { name: 'Account', exact: true }).click();
   await page.getByRole('button', { name: 'Sign out', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Welcome back to Continuum.' })).toBeVisible();
@@ -113,7 +162,7 @@ try {
   await expect(page.getByRole('button', { name: 'Record intent', exact: true })).toBeDisabled();
   await page.locator('.service-row').first().click();
   await expect(page.getByRole('heading', { name: 'Recorded evidence' })).toBeVisible();
-  await page.getByRole('button', { name: 'review', exact: true }).click();
+  await page.getByRole('tab', { name: 'review', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Save judgment', exact: true })).toBeDisabled();
   await page.getByRole('button', { name: 'Close inspector' }).click();
   await page.getByRole('button', { name: 'Account', exact: true }).click();
@@ -129,5 +178,5 @@ try {
   await expect(demo.getByLabel('Demo email', { exact: true })).toBeVisible();
   await demoContext.close();
   if (errors.length) throw new Error(errors.join('\n'));
-  console.log(JSON.stringify({ passed: true, cases: ['cookie login', 'demo isolation', 'real snapshot', 'exact sources', 'durable draft', 'stale projection preserves draft', 'lost response identical retry', 'persisted judgment and history', 'retained historical read-only', 'file explorer', 'viewer read-only', 'logout', 'offline fails closed'], pageErrors: errors }));
+  console.log(JSON.stringify({ passed: true, cases: ['cookie login', 'demo isolation', 'real snapshot', 'exact sources', 'durable draft', 'stale projection preserves draft', 'lost response identical retry', 'persisted judgment and history', 'typed manual requirement link', 'record revision revalidation', 'prior evidence read-only', 'server content search', 'retained historical read-only', 'file explorer', 'viewer read-only', 'logout', 'offline fails closed'], pageErrors: errors }));
 } finally { await browser.close(); }

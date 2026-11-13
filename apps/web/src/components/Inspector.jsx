@@ -46,7 +46,7 @@ export default function Inspector({ ctx }) {
 
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (e.key === 'Escape') {
+      if (e.key === 'Escape' && !e.defaultPrevented && !document.querySelector('[role="dialog"], [role="menu"], [role="listbox"]')) {
         closeInspector();
       }
     };
@@ -100,7 +100,7 @@ export default function Inspector({ ctx }) {
               {state.revisionMode === 'R0' ? 'Baseline · a41c90e' : 'Incoming Change · 8f3b21d'}
             </Badge>
           </div>
-          <button
+          <Button variant="unstyled"
             type="button"
             className="inspector__close"
             onClick={closeInspector}
@@ -108,7 +108,7 @@ export default function Inspector({ ctx }) {
             title="Close inspector (Escape)"
           >
             <X size={15} />
-          </button>
+          </Button>
         </div>
 
         <h2 className="inspector__title">{art.name}</h2>
@@ -445,7 +445,7 @@ export default function Inspector({ ctx }) {
                     />
                   </div>
 
-                  {state.reviewError && <div className="form-error" role="alert">{state.reviewError}{state.simulateSaveError && <button className="text-link" onClick={() => ctx.setState(s => ({ ...s, simulateSaveError: false, reviewError: '' }))}>Turn off demo error and retry</button>}</div>}
+                  {state.reviewError && <div className="form-error" role="alert">{state.reviewError}{state.simulateSaveError && <Button variant="unstyled" className="text-link" onClick={() => ctx.setState(s => ({ ...s, simulateSaveError: false, reviewError: '' }))}>Turn off demo error and retry</Button>}</div>}
                   {/* Footer buttons */}
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: 4 }}>
                     <span style={{ fontSize: 11, color: 'var(--ink-3)' }}>
@@ -471,7 +471,7 @@ export default function Inspector({ ctx }) {
                   </div>
                 </div>
               )}
-              {inQueue && art.r1Status === 'reviewed' && !state.reviewFormOpen && state.revisionMode === 'R1' && <div className="saved-review-actions" role={saveNotice ? 'status' : undefined}><button className="btn btn--accent" onClick={ctx.reviewNext}>{pending.length ? `Next review (${pending.length} remaining)` : 'View review summary'}<ArrowRight size={15} /></button><button className="btn btn--secondary" onClick={closeInspector}>Back to queue</button></div>}
+              {inQueue && art.r1Status === 'reviewed' && !state.reviewFormOpen && state.revisionMode === 'R1' && <div className="saved-review-actions" role={saveNotice ? 'status' : undefined}><Button variant="unstyled" className="btn btn--accent" onClick={ctx.reviewNext}>{pending.length ? `Next review (${pending.length} remaining)` : 'View review summary'}<ArrowRight size={15} /></Button><Button variant="unstyled" className="btn btn--secondary" onClick={closeInspector}>Back to queue</Button></div>}
             </div>
           </div>
         ) : (

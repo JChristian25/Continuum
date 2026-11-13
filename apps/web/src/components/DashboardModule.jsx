@@ -27,7 +27,7 @@ export default function DashboardModule({ ctx, onOpenImportModal }) {
     <div className="canvas-scroll home-workspace">
       <header className="workspace-topline">
         <span>Workspace <span className="topline-divider">/</span> {current ? 'Incoming change review' : 'Baseline context'}</span>
-        <button className="text-link" onClick={onOpenImportModal}><FolderGit2 size={15} /> Change workspace</button>
+        <Button variant="unstyled" className="text-link" onClick={onOpenImportModal}><FolderGit2 size={15} /> Change workspace</Button>
       </header>
       <div className="home-content">
         <section className="home-welcome">
@@ -42,40 +42,40 @@ export default function DashboardModule({ ctx, onOpenImportModal }) {
           <p>{current ? 'Follow the change in createRequest() through its caller, requirement, and documentation. Your judgment keeps the context connected.' : 'Explore the evidence and decisions recorded in the baseline. Switch to Incoming Change in the sidebar to assess the current update.'}</p>
           <div className="focus-brief__actions">
             <Button onClick={() => switchModule(current && !outstanding.length ? 'summary' : 'changes')}>{current ? (outstanding.length ? 'Continue review' : 'View review summary') : 'Compare revisions'}<ArrowRight size={16} /></Button>
-            <button className="quiet-action" onClick={refresh}><RefreshCw size={14} />Refresh context</button>
+            <Button variant="unstyled" className="quiet-action" onClick={refresh}><RefreshCw size={14} />Refresh context</Button>
           </div>
           <div className="focus-brief__summary"><span>{current ? `${outstanding.length} items need review` : 'Historical context'}</span><span>{openWork.length} open follow-ups</span><span>1 disclosed limit</span></div>
         </section>
 
         <div className="home-shortcuts" aria-label="Workspace shortcuts">
-          <button onClick={openCommandPalette}><Search size={16} />Find a record</button>
-          <button onClick={() => switchModule('chat')}><InfinityIcon size={18} />Ask Continuum</button>
-          <button onClick={() => switchModule('explore')}><FolderGit2 size={16} />Explore context</button>
+          <Button variant="unstyled" onClick={openCommandPalette}><Search size={16} />Find a record</Button>
+          <Button variant="unstyled" onClick={() => switchModule('chat')}><InfinityIcon size={18} />Ask Continuum</Button>
+          <Button variant="unstyled" onClick={() => switchModule('explore')}><FolderGit2 size={16} />Explore context</Button>
         </div>
 
         <section className="home-review-list" aria-labelledby="review-now-heading">
-          <div className="section-heading"><h2 id="review-now-heading">{outstanding.length ? 'Pick up where the context changed' : 'All queued relationships reviewed'}</h2><button className="text-link" onClick={() => switchModule('changes')}>View queue <ArrowRight size={14} /></button></div>
+          <div className="section-heading"><h2 id="review-now-heading">{outstanding.length ? 'Pick up where the context changed' : 'All queued relationships reviewed'}</h2><Button variant="unstyled" className="text-link" onClick={() => switchModule('changes')}>View queue <ArrowRight size={14} /></Button></div>
           <div className="worklist__items">
-            {!outstanding.length && <div className="queue-empty"><p>{reviewed} judgments recorded. Follow-up work and coverage limits remain visible in the review summary.</p><button className="text-link" onClick={() => switchModule('summary')}>Review the outcome <ArrowRight size={14} /></button></div>}
+            {!outstanding.length && <div className="queue-empty"><p>{reviewed} judgments recorded. Follow-up work and coverage limits remain visible in the review summary.</p><Button variant="unstyled" className="text-link" onClick={() => switchModule('summary')}>Review the outcome <ArrowRight size={14} /></Button></div>}
             {outstanding.map(item => {
               const status = getStatusInfo(item, state.revisionMode);
               const work = getWorkInfo(item, state.revisionMode);
-              return <button key={item.id} className="review-item" onClick={() => selectArtifact(item.id)}>
+              return <Button variant="unstyled" key={item.id} className="review-item" onClick={() => selectArtifact(item.id)}>
                 <span className="review-item__icon"><FileCode2 size={19} /></span>
                 <span className="review-item__body"><strong>{item.shortName}</strong><small>{item.plainReason}</small></span>
                 <span className="review-item__status"><span className={`status-pill status-pill--sm ${status.cls}`}><span className={`status-dot ${status.dot}`} />{status.text}</span><small>{work.text}</small></span>
                 <ArrowRight size={16} />
-              </button>;
+              </Button>;
             })}
           </div>
         </section>
 
         <div className="home-context">
-          <section><h2>Behind this change</h2><p>{state.decisionHeadline.title}</p><button className="text-link" onClick={() => selectArtifact('DEC-04')}>Read decision DEC-04 <ArrowRight size={14} /></button></section>
+          <section><h2>Behind this change</h2><p>{state.decisionHeadline.title}</p><Button variant="unstyled" className="text-link" onClick={() => selectArtifact('DEC-04')}>Read decision DEC-04 <ArrowRight size={14} /></Button></section>
           <section><h2>Your judgment matters</h2><p>Evidence suggests a relationship. A reviewer confirms it. Candidate links stay unconfirmed until you record a judgment.</p></section>
         </div>
         <section className="pipeline-disclosure">
-          <button onClick={() => setPipelineOpen(value => !value)} aria-expanded={pipelineOpen} aria-controls="pipeline-detail"><span><RefreshCw size={14} />How this context was prepared</span><ChevronDown size={16} style={{ transform: pipelineOpen ? 'rotate(180deg)' : undefined }} /></button>
+          <Button variant="unstyled" onClick={() => setPipelineOpen(value => !value)} aria-expanded={pipelineOpen} aria-controls="pipeline-detail"><span><RefreshCw size={14} />How this context was prepared</span><ChevronDown size={16} style={{ transform: pipelineOpen ? 'rotate(180deg)' : undefined }} /></Button>
           <AnimatePresence initial={false}>{pipelineOpen && <motion.div id="pipeline-detail" initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: reduceMotion ? 0 : 0.2 }} style={{ overflow: 'hidden' }}><div className="pipeline-disclosure__detail">
             <div><strong>Repository collector</strong><span>24 repository files indexed for the incoming change.</span></div>
             <div><strong>Coverage limit</strong><span>One scanned PDF remains coverage unknown.</span></div>

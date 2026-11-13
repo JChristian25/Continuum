@@ -199,7 +199,7 @@ export default function GovernanceModule({ ctx, showToast }) {
                     </td>
                     <td style={{ fontSize: 12, color: 'var(--ink-2)' }}>{m.roleTitle}</td>
                     <td>
-                      <button
+                      <Button variant="unstyled"
                         type="button"
                         className={`status-pill ${isAuth ? 'status--green' : 'status--neutral'}`}
                         onClick={() => toggleMemberAuthority(m.id)}
@@ -208,7 +208,7 @@ export default function GovernanceModule({ ctx, showToast }) {
                       >
                         {isAuth ? <ShieldCheck size={13} /> : <Eye size={13} />}
                         <span>{m.authority}</span>
-                      </button>
+                      </Button>
                     </td>
                     <td>
                       <span className="font-mono" style={{ fontSize: 11, color: 'var(--ink-2)', display: 'inline-flex', alignItems: 'center', gap: 5, background: 'var(--ground-sunken)', padding: '2px 8px', borderRadius: 'var(--r-xs)' }}>

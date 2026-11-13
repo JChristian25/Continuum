@@ -657,7 +657,7 @@ export default function ExploreModule({ ctx }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           {viewMode === 'graph' && (
             <div className="graph-layout-selector" title="Select Graph Layout Preset">
-              <button
+              <Button variant="unstyled"
                 type="button"
                 className={`graph-layout-btn ${layoutPreset === 'radial' ? 'is-active' : ''}`}
                 onClick={() => setLayoutPreset('radial')}
@@ -665,8 +665,8 @@ export default function ExploreModule({ ctx }) {
               >
                 <Orbit size={12} />
                 <span>Seed Orbit</span>
-              </button>
-              <button
+              </Button>
+              <Button variant="unstyled"
                 type="button"
                 className={`graph-layout-btn ${layoutPreset === 'pipeline' ? 'is-active' : ''}`}
                 onClick={() => setLayoutPreset('pipeline')}
@@ -674,8 +674,8 @@ export default function ExploreModule({ ctx }) {
               >
                 <Workflow size={12} />
                 <span>Tiered Flow</span>
-              </button>
-              <button
+              </Button>
+              <Button variant="unstyled"
                 type="button"
                 className={`graph-layout-btn ${layoutPreset === 'cluster' ? 'is-active' : ''}`}
                 onClick={() => setLayoutPreset('cluster')}
@@ -683,7 +683,7 @@ export default function ExploreModule({ ctx }) {
               >
                 <Boxes size={12} />
                 <span>File Clusters</span>
-              </button>
+              </Button>
             </div>
           )}
 
@@ -711,7 +711,7 @@ export default function ExploreModule({ ctx }) {
               style={{ height: 32, fontSize: 12, paddingRight: searchTerm ? 28 : 12 }}
             />
             {searchTerm && (
-              <button
+              <Button variant="unstyled"
                 type="button"
                 onClick={() => handleSearchChange({ target: { value: '' } })}
                 style={{
@@ -730,7 +730,7 @@ export default function ExploreModule({ ctx }) {
                 aria-label="Clear search"
               >
                 <X size={12} />
-              </button>
+              </Button>
             )}
           </div>
 
@@ -1178,14 +1178,14 @@ export default function ExploreModule({ ctx }) {
                   </div>
                 </div>
 
-                <button
+                <Button variant="unstyled"
                   type="button"
                   onClick={() => setActivePreviewId(null)}
                   style={{ background: 'transparent', border: 'none', color: 'var(--ink-3)', cursor: 'pointer', padding: 4 }}
                   aria-label="Close Preview"
                 >
                   <X size={14} />
-                </button>
+                </Button>
               </div>
 
               <p className="graph-quick-dock__reason">

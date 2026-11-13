@@ -303,23 +303,23 @@ RETURN n.id, type(r), m.id LIMIT 4;`}
                     {cypherQueryRows.map((row, i) => (
                       <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
                         <td style={{ padding: '8px', color: '#38BDF8' }}>
-                          <button
+                          <Button variant="unstyled"
                             type="button"
                             onClick={() => selectArtifact(row.nId)}
                             style={{ background: 'none', border: 'none', color: '#38BDF8', cursor: 'pointer', font: 'inherit', textDecoration: 'underline' }}
                           >
                             {row.nId}
-                          </button>
+                          </Button>
                         </td>
                         <td style={{ padding: '8px', color: '#FCD34D' }}>{row.rel}</td>
                         <td style={{ padding: '8px', color: '#4ADE80' }}>
-                          <button
+                          <Button variant="unstyled"
                             type="button"
                             onClick={() => selectArtifact(row.mId)}
                             style={{ background: 'none', border: 'none', color: '#4ADE80', cursor: 'pointer', font: 'inherit', textDecoration: 'underline' }}
                           >
                             {row.mId}
-                          </button>
+                          </Button>
                         </td>
                         <td style={{ padding: '8px', textAlign: 'right' }}>
                           <Button

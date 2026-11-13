@@ -150,7 +150,7 @@ export default function ChangesModule({ ctx }) {
         </Tooltip>
       </header>
 
-      {state.revisionMode === 'R1' && <div className="review-loop-bar"><p><strong>{neighbors.length - reviewedCount} pending</strong> · Inspect the evidence, record your judgment, then continue to the next item.</p><div><button className="text-link" onClick={() => ctx.switchModule('summary')}>Review summary</button>{reviewedCount < neighbors.length && <button className="btn btn--accent" onClick={ctx.reviewNext}>Review next item <ChevronRight size={15} /></button>}</div></div>}
+      {state.revisionMode === 'R1' && <div className="review-loop-bar"><p><strong>{neighbors.length - reviewedCount} pending</strong> · Inspect the evidence, record your judgment, then continue to the next item.</p><div><Button variant="unstyled" className="text-link" onClick={() => ctx.switchModule('summary')}>Review summary</Button>{reviewedCount < neighbors.length && <Button variant="unstyled" className="btn btn--accent" onClick={ctx.reviewNext}>Review next item <ChevronRight size={15} /></Button>}</div></div>}
 
       {/* Changed Provider Seed Box */}
       <section className="change-focus" aria-label="Seed provider definition">
@@ -185,14 +185,14 @@ export default function ChangesModule({ ctx }) {
             </Tooltip>
           )}
           <Tooltip title="Semantic Shiki Diff" content="Toggle syntax-highlighted diff between baseline and incoming return contracts" side="top">
-            <button
+            <Button variant="unstyled"
               type="button"
               className="text-link"
               onClick={() => setShowDiff((open) => !open)}
               aria-expanded={showDiff}
             >
               {showDiff ? 'Hide Diff' : 'View Code Diff'} {showDiff ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
-            </button>
+            </Button>
           </Tooltip>
         </div>
       </section>
@@ -397,7 +397,7 @@ export default function ChangesModule({ ctx }) {
                 <CheckCircle2 size={28} color="var(--green)" />
                 <strong style={{ fontSize: 14, color: 'var(--ink)' }}>{filter === 'done' ? 'No judgments recorded yet' : 'Every queued item has a judgment'}</strong>
                 <span style={{ fontSize: 12 }}>{filter === 'done' ? 'Recorded judgments will appear here.' : 'Review completion is separate from follow-up work and unknown coverage.'}</span>
-                {filter !== 'done' && <button className="btn btn--accent" onClick={() => ctx.switchModule('summary')}>Continue to review summary <ChevronRight size={15} /></button>}
+                {filter !== 'done' && <Button variant="unstyled" className="btn btn--accent" onClick={() => ctx.switchModule('summary')}>Continue to review summary <ChevronRight size={15} /></Button>}
               </div>
             )}
           </div>

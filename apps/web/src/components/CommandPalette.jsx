@@ -1,4 +1,3 @@
-import { useEffect } from 'react';
 import { Command } from 'cmdk';
 import {
   FileCode2,
@@ -20,7 +19,7 @@ import {
   FolderGit2
 } from 'lucide-react';
 import { CHANGE_NEIGHBOR_IDS } from '../data/state.js';
-import { Badge } from './ui/index.js';
+import { Badge, Button, Dialog, DialogContent } from './ui/index.js';
 
 export default function CommandPalette({
   isOpen,
@@ -44,26 +43,6 @@ export default function CommandPalette({
   const activeUser = getActiveUser();
   const artifactsList = Object.values(state.artifacts || {});
 
-  // Keyboard shortcut listener to open/close
-  useEffect(() => {
-    const onKeyDown = (e) => {
-      if ((e.key === 'k' && (e.metaKey || e.ctrlKey)) || e.key === '/') {
-        const tag = document.activeElement?.tagName?.toLowerCase() || '';
-        if (tag !== 'input' && tag !== 'textarea' && tag !== 'select') {
-          e.preventDefault();
-          if (isOpen) {
-            onClose();
-          } else {
-            ctx.setCommandPaletteOpen?.(true);
-          }
-        }
-      }
-    };
-
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [isOpen, onClose, ctx]);
-
   if (!isOpen) return null;
 
   const getCategoryIcon = (category) => {
@@ -77,17 +56,16 @@ export default function CommandPalette({
   };
 
   return (
-    <div className="cmdk-backdrop" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="cmdk-dialog-container">
+    <Dialog open={isOpen} onOpenChange={open => !open && onClose()}>
+      <DialogContent className="cmdk-dialog-container library-command-dialog" padded={false} showClose={false} aria-label="Continuum Global Omnibar">
         <Command label="Continuum Global Omnibar" loop>
           <div className="cmdk-input-wrap">
             <Search size={16} color="var(--ink-3)" />
             <Command.Input
-              autoFocus
               placeholder="Type an artifact (FN-02, DEC-04), action, or module… (Esc to exit)"
               className="cmdk-input"
             />
-            <button type="button" className="cmdk-esc-badge" onClick={onClose} aria-label="Close command palette">ESC</button>
+            <Button variant="unstyled" type="button" className="cmdk-esc-badge" onClick={onClose} aria-label="Close command palette">ESC</Button>
           </div>
 
           <Command.List className="cmdk-list">
@@ -377,7 +355,7 @@ export default function CommandPalette({
             </Command.Group>
           </Command.List>
         </Command>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
