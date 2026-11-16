@@ -1,5 +1,5 @@
 """Read-only lifecycle facts; historical snapshots never inherit current processing."""
-from sqlalchemy import select
+from sqlalchemy import func, select
 from .pipeline_models import Operation, Selection, Snapshot
 from .cycle import completion
 
@@ -30,12 +30,34 @@ def workspace_progress(db, snapshot, selection):
     baseline_completed = completion(db, baseline)
     discovery_operations = baseline.document.get('processing', []) if comparison else operations
     discovered = any(o['kind'] == 'discovery' and o['status'] in {'complete', 'partial'} for o in discovery_operations)
-    # Return exact captured choices, not a claim that the user has selected a baseline.
+    # Return exact captured choices, reading only the latest snapshot per distinct selection.
     choices = []
     if active:
-        for row in db.scalars(select(Snapshot).join(Selection, Selection.id == Snapshot.selection_id).where(
-                Selection.repository_id == selection.repository_id, Selection.inventory_id == selection.inventory_id,
-                Selection.configuration_id == selection.configuration_id).order_by(Snapshot.snapshot_version.desc())):
+        latest_versions = (
+            select(Snapshot.selection_id, func.max(Snapshot.snapshot_version).label("max_version"))
+            .join(Selection, Selection.id == Snapshot.selection_id)
+            .where(
+                Selection.repository_id == selection.repository_id,
+                Selection.inventory_id == selection.inventory_id,
+                Selection.configuration_id == selection.configuration_id,
+            )
+            .group_by(Snapshot.selection_id)
+            .subquery()
+        )
+        rows = db.scalars(
+            select(Snapshot)
+            .join(
+                latest_versions,
+                (Snapshot.selection_id == latest_versions.c.selection_id)
+                & (Snapshot.snapshot_version == latest_versions.c.max_version),
+            )
+            .order_by(Snapshot.snapshot_version.desc(), Snapshot.id.desc())
+        )
+        seen_selections = set()
+        for row in rows:
+            if row.selection_id in seen_selections:
+                continue
+            seen_selections.add(row.selection_id)
             if captured(row.document):
                 choices.append({'snapshotId': row.id, 'selection': row.document['snapshot']['selection']})
     def step(identity, label, state, action, blockers=()):
@@ -48,8 +70,8 @@ def workspace_progress(db, snapshot, selection):
              [] if capture_ok else ['Capture the selected revision’s accepted inventory.']),
         step('discovery', 'Discover relationships', 'running' if discovery_running else 'partial' if discovered else 'unknown' if not active and 'processing' not in document else 'blocked' if not capture_ok or failures else 'ready', 'discovery',
              ['Baseline discovery is retained; incoming review comes from comparison. Frozen lexical scope only.'] if discovered and comparison else ['Discovery covers the frozen lexical profile only.'] if discovered else ['Capture inputs first.'] if not capture_ok else ['Run discovery or inspect processing failures.']),
-        step('review', 'Review the baseline', 'blocked' if processing and not comparison else 'complete' if baseline_completed else 'blocked' if baseline_pending else 'ready', 'review',
-             [f'{baseline_pending} pending baseline reviews.'] if baseline_pending else ['Wait for processing to settle.'] if processing and not comparison else [] if baseline_completed else ['Acknowledge the exact limitations to record completion.']),
+        step('review', 'Review the baseline', 'blocked' if processing and not comparison else 'complete' if baseline_completed else 'in_progress' if baseline_pending else 'ready', 'review',
+             [f'{baseline_pending} candidate reviews open. Review key links or compare revisions anytime.'] if baseline_pending else ['Wait for processing to settle.'] if processing and not comparison else [] if baseline_completed else ['Acknowledge the exact limitations to record completion.']),
         step('compare', 'Compare a revision', 'complete' if comparison else 'ready' if capture_ok and choices else 'blocked', 'compare',
              [] if comparison else ['Select captured baseline and target snapshots; pending baseline reviews do not block comparison.']),
         step('revalidate', 'Revalidate changes', 'complete' if comparison and completed else 'ready' if comparison else 'not_started', 'incoming',

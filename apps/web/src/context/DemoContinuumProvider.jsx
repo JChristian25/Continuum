@@ -4,7 +4,7 @@ import confetti from 'canvas-confetti';
 import { toast as sonnerToast } from 'sonner';
 import { loadState, saveState, createInitialState } from '../data/state.js';
 
-import { commitReview, reviewError, pendingItems, undoCommittedReview } from '../data/workflow.js';
+import { REVIEW_IDS, commitReview, reviewError, pendingItems, undoCommittedReview } from '../data/workflow.js';
 
 import { ContinuumContext } from './ContinuumBase.js';
 export default function DemoContinuumProvider({ children }) {
@@ -171,11 +171,12 @@ export default function DemoContinuumProvider({ children }) {
     });
   }, [setState, showToast]);
 
-  // Artifact selection â€” opens inspector
+  // Artifact selection — opens inspector (and auto-opens review form for unreviewed R1 queue items)
   const selectArtifact = useCallback((id) => {
     setState(s => {
       if (!s.artifacts[id]) return s;
-      return { ...s, selectedArtifactId: id, inspectorOpen: true, inspectorTab: 'reading', reviewFormOpen: false, reviewError: '', lastSavedReview: null };
+      const shouldOpenForm = s.revisionMode === 'R1' && REVIEW_IDS.includes(id) && s.artifacts[id].r1Status !== 'reviewed';
+      return { ...s, selectedArtifactId: id, inspectorOpen: true, inspectorTab: 'reading', reviewFormOpen: shouldOpenForm, reviewError: '', lastSavedReview: null };
     });
   }, [setState]);
 
@@ -261,10 +262,28 @@ export default function DemoContinuumProvider({ children }) {
     });
   }, [state, setState, showToast]);
 
+  const saveJudgmentAndNext = useCallback(() => {
+    const id = state.selectedArtifactId;
+    const error = reviewError(state, id);
+    if (error) { setState(s => ({ ...s, reviewError: error })); showToast(error, 'error'); return; }
+    const original = structuredClone(state.artifacts[id]);
+    const eventId = crypto.randomUUID();
+    const timestamp = new Date().toLocaleString();
+    setState(s => {
+      const committed = commitReview(s, id, timestamp, eventId);
+      const next = pendingItems(committed)[0];
+      if (!next) return committed;
+      return { ...committed, selectedArtifactId: next.id, activeModule: 'changes', inspectorOpen: true, inspectorTab: 'reading', reviewFormOpen: true, lastSavedReview: null, reviewError: '' };
+    });
+    showToast(`Judgment saved for ${original.shortName}.`, () => {
+      setState(s => undoCommittedReview(s, original, eventId));
+    });
+  }, [state, setState, showToast]);
+
   const reviewNext = useCallback(() => {
     const next = pendingItems(state)[0];
     if (next) {
-      setState(s => ({ ...s, selectedArtifactId: next.id, activeModule: 'changes', inspectorOpen: true, inspectorTab: 'reading', reviewFormOpen: false, lastSavedReview: null, reviewError: '' }));
+      setState(s => ({ ...s, selectedArtifactId: next.id, activeModule: 'changes', inspectorOpen: true, inspectorTab: 'reading', reviewFormOpen: s.revisionMode === 'R1', lastSavedReview: null, reviewError: '' }));
     } else {
       setState(s => ({ ...s, activeModule: 'summary', inspectorOpen: false, reviewFormOpen: false, lastSavedReview: null }));
     }
@@ -409,6 +428,7 @@ export default function DemoContinuumProvider({ children }) {
     suggestAiDraft,
     confirmAiDraft,
     saveJudgment,
+    saveJudgmentAndNext,
     undoReview,
     importModalOpen,
     openImportModal,

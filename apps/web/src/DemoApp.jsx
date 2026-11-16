@@ -212,7 +212,7 @@ export default function DemoAppContent() {
 
       {/* Sonner Toaster */}
       <Toaster
-        position="bottom-right"
+        position="top-center"
         theme={theme}
         closeButton
       />

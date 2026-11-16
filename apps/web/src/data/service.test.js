@@ -2,6 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ContinuumApi, ServiceError } from './serviceApi.js';
 import { DraftStore, draftKey, judgmentInput, chooseSelection, optionalReason, reasonLabel } from './serviceModel.js';
+import { computeLineDiff } from './diff.js';
+import { rankEvidenceItems } from './evidenceSignal.js';
+import { buildAuditReportMarkdown } from './auditReport.js';
 
 test('only initial candidates allow absent reason and drafts remain verbatim', () => {
   const detail = { mode: 'active', projection: { kind: 'initial', comparisonId: null, validity: 'candidate', resolution: 'open' }, evidence: [{ id: 'e' }] };
@@ -68,4 +71,53 @@ test('selection comes only from a granted repository with a registered profile',
   assert.equal(chooseSelection({ id: 'repo', inputs: [] }), null);
   const selected = chooseSelection({ id: 'repo', inputs: [{ id: 'accepted', profiles: [{ id: 'frozen' }], revisions: [{ commitId: 'exact', objectAlgorithm: 'sha1' }] }] });
   assert.equal(selected.targetRevision.commitId, 'exact'); assert.equal(selected.baseRevision, null);
+});
+
+test('computeLineDiff extracts minimal changed hunks cleanly', () => {
+  const same = computeLineDiff('a\nb\nc', 'a\nb\nc');
+  assert.equal(same.identical, true);
+  assert.deepEqual(same.hunks, []);
+
+  const diff = computeLineDiff('line1\noldValue = 1\nline3', 'line1\nnewValue = 2\nextraLine\nline3');
+  assert.equal(diff.identical, false);
+  assert.equal(diff.removed, 1);
+  assert.equal(diff.added, 2);
+  assert.equal(diff.hunks.length, 1);
+  assert.equal(diff.hunks[0].lines.some(l => l.type === 'del' && l.text === 'oldValue = 1'), true);
+  assert.equal(diff.hunks[0].lines.some(l => l.type === 'add' && l.text === 'newValue = 2'), true);
+});
+
+test('rankEvidenceItems prioritizes direct file references and shared technical tokens', () => {
+  const sources = [
+    { id: 'v-doc', identity: { path: 'docs/email.md' }, content: 'generic note\nConfigure hc/api/smtpd.py timeout failure_kw\n' },
+    { id: 'v-code', identity: { path: 'hc/api/smtpd.py' }, content: 'failure_kw = True\ntimeout = 30\n' },
+  ];
+  const evidence = [
+    { id: 'e1', artifactVersionId: 'v-doc', locator: { kind: 'lines', startLine: 1, endLine: 1 }, availability: 'available', excerpt: 'generic note' },
+    { id: 'e2', artifactVersionId: 'v-doc', locator: { kind: 'lines', startLine: 2, endLine: 2 }, availability: 'available', excerpt: 'Configure hc/api/smtpd.py timeout failure_kw' },
+  ];
+  const ranked = rankEvidenceItems(evidence, sources, { path: 'docs/email.md' }, { path: 'hc/api/smtpd.py' });
+  assert.equal(ranked.items[0].id, 'e2');
+  assert.equal(ranked.items[0].isDirect, true);
+  assert.equal(ranked.directCount, 1);
+  assert.ok(ranked.items[0].sharedTokens.includes('failure'));
+});
+
+test('buildAuditReportMarkdown summarizes workspace decisions, diffs and coverage', () => {
+  const md = buildAuditReportMarkdown({
+    selection: { repositoryId: 'r1' },
+    state: { repositories: [{ id: 'r1', fullName: 'healthchecks/healthchecks' }] },
+    workspace: {
+      mode: 'active',
+      artifacts: [{ artifactId: 'a1' }],
+      followUps: [],
+      comparison: { baseRevision: { commitId: '1111111' }, targetRevision: { commitId: '2222222' }, changes: [{ path: 'a.py', kind: 'modified' }], impacts: [{ contextId: 'c1' }] },
+      snapshot: { id: 's1', snapshotVersion: 2, selection: { repositoryId: 'r1', targetRevision: { commitId: '2222222' } }, pendingReviewCount: 0, openFollowUpCount: 0, coverage: [{ function: 'ingestion', status: 'complete', processedCount: 1, eligibleCount: 1 }], limitations: ['Bounded sample'] },
+    },
+    rows: [{ id: 'c1', sourceLabel: 'docs/a.md', targetLabel: 'a.py', assertion: { type: 'documents', methodId: 'lexical-file-v1', evidenceIds: ['e1'] }, projection: { validity: 'confirmed', resolution: 'resolved' }, priorDecision: { reason: 'Verified directly' } }],
+  });
+  assert.match(md, /Software Knowledge Continuity Audit Report/);
+  assert.match(md, /healthchecks\/healthchecks/);
+  assert.match(md, /Verified directly/);
+  assert.match(md, /Bounded sample/);
 });

@@ -16,7 +16,7 @@ from .config import Settings
 from .acquisition import AcquisitionError
 from .db import make_engine, session_factory
 from .models import Artifact, ArtifactVersion, AssertionRevision, Evidence, FollowUp, Grant, Repository, ReviewContext, SecurityAudit, Session, View
-from .review import assertion_data, command, follow_up, history, projection, readable_evidence, scoped
+from .review import assertion_data, command, follow_up, history, load_scoped_map, projection, readable_evidence, scoped
 from .schemas import Envelope, Login
 from .pipeline import admit, query
 from .pipeline_schemas import QueryEnvelope
@@ -25,7 +25,7 @@ from .pipeline_models import Activity, EvidenceOrigin, InputRegistration, Profil
 from .acquisition import WORKSPACE, load_accepted, sha256
 from .discovery import load_profile
 from .capture import execute as capture_command
-from .comparison import compare
+from .comparison import compare, prior_decision_map
 from .security import check_csrf, cookie, current_actor, digest, error, fail, login_attempt, repository_access, utc
 
 
@@ -224,7 +224,7 @@ def create_app(settings=None, engine=None, *, worker_enabled=True):
         return {"schemaVersion": "0.1.0", "requestId": body.requestId, "result": result}
 
     @app.get("/api/v1/repositories/{repository_id}/contexts/{context_id}")
-    def read_context(repository_id: str, context_id: str, request: Request, viewId: str):
+    def read_context(repository_id: str, context_id: str, request: Request, viewId: str, includeExcerpts: bool = False):
         with factory.begin() as db:
             actor, _ = current_actor(db, request, settings)
             repository_access(db, actor, repository_id)
@@ -232,21 +232,46 @@ def create_app(settings=None, engine=None, *, worker_enabled=True):
             view = scoped(db, View, viewId, repository_id)
             if view.context_id != context.id:
                 fail("invalid_input")
+            def resolve_prior(comp_doc):
+                if comp_doc is None and context.comparison_id:
+                    activity = db.get(Activity, context.comparison_id)
+                    comp_doc = activity.document if activity else None
+                return prior_decision_map(db, comp_doc).get(context.id) if comp_doc else None
+            def enrich_evidence_list(evidence_ids, rows_by_id=None):
+                ev_map = rows_by_id if rows_by_id is not None else load_scoped_map(db, Evidence, evidence_ids, repository_id)
+                origins_by_ev = ({row.evidence_id: row for row in db.scalars(select(EvidenceOrigin).where(EvidenceOrigin.evidence_id.in_(evidence_ids)))}
+                                 if includeExcerpts and evidence_ids else {})
+                act_ids = list({origin.activity_id for origin in origins_by_ev.values()})
+                act_docs = {row.id: row.document for row in db.scalars(select(Activity).where(Activity.id.in_(act_ids)))} if act_ids else {}
+                version_cache = {}
+                enriched = []
+                for identity in evidence_ids:
+                    item = readable_evidence(db, ev_map[identity], include_excerpt=includeExcerpts, version_cache=version_cache)
+                    if includeExcerpts:
+                        origin = origins_by_ev.get(identity)
+                        item["provenance"] = act_docs.get(origin.activity_id) if origin else None
+                    enriched.append(item)
+                return enriched
             binding = db.get(ReviewViewBinding, view.id)
             if binding:
                 retained = db.get(Snapshot, binding.snapshot_id)
                 selected = db.get(Selection, binding.selection_id)
                 item = next(row for row in retained.document["assertions"] if row["projection"]["contextId"] == context.id)
                 mode = "historical" if view.mode == "historical" or selected.snapshot_version != retained.snapshot_version or context.resolution == "superseded" else "active"
-                return {"viewId": view.id, "mode": mode, **item,
-                        "followUps": [work for work in retained.document["followUps"] if work["contextId"] == context.id]}
+                result = {"viewId": view.id, "mode": mode, **item,
+                          "followUps": [work for work in retained.document["followUps"] if work["contextId"] == context.id],
+                          "priorDecision": resolve_prior(retained.document.get("comparison"))}
+                if includeExcerpts:
+                    result = {**result, "evidence": enrich_evidence_list([e["id"] for e in item["evidence"]])}
+                return result
             revision = scoped(db, AssertionRevision, context.assertion_revision_id, repository_id)
-            evidence = [readable_evidence(db, scoped(db, Evidence, identity, repository_id)) for identity in revision.evidence_ids]
+            evidence = enrich_evidence_list(revision.evidence_ids)
             origin = db.get(RevisionOrigin, revision.id)
             return {"viewId": view.id, "mode": "historical" if context.resolution == "superseded" else view.mode,
                     "projection": projection(context), "assertion": assertion_data(db, revision), "evidence": evidence,
                     "provenance": db.get(Activity, origin.activity_id).document if origin else None,
-                    "followUps": [follow_up(work) for work in db.scalars(select(FollowUp).where(FollowUp.context_id == context.id).order_by(FollowUp.id))]}
+                    "followUps": [follow_up(work) for work in db.scalars(select(FollowUp).where(FollowUp.context_id == context.id).order_by(FollowUp.id))],
+                    "priorDecision": resolve_prior(None)}
 
     @app.get("/api/v1/repositories/{repository_id}/versions/{version_id}")
     def read_version(repository_id: str, version_id: str, request: Request):

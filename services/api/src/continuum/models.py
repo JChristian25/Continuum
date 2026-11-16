@@ -40,7 +40,7 @@ class Grant(Base):
 class Session(Base):
     __tablename__ = "sessions"
     digest: Mapped[str] = mapped_column(String(64), primary_key=True)
-    actor_id: Mapped[str | None] = mapped_column(ForeignKey("accounts.id"))
+    actor_id: Mapped[str | None] = mapped_column(ForeignKey("accounts.id"), index=True)
     csrf: Mapped[str] = mapped_column(String(100))
     created_at: Mapped[int] = mapped_column(default=lambda: int(time.time()))
     last_seen_at: Mapped[int] = mapped_column(default=lambda: int(time.time()))
@@ -122,11 +122,11 @@ class ReviewContext(Base):
     __tablename__ = "review_contexts"
     id: Mapped[str] = mapped_column(String(80), primary_key=True, default=new_id)
     repository_id: Mapped[str] = mapped_column(ForeignKey("repositories.id"), index=True)
-    assertion_revision_id: Mapped[str] = mapped_column(ForeignKey("assertion_revisions.id"))
+    assertion_revision_id: Mapped[str] = mapped_column(ForeignKey("assertion_revisions.id"), index=True)
     kind: Mapped[str] = mapped_column(String(20), default="initial")
     base_revision: Mapped[dict | None] = mapped_column(JSON)
     target_revision: Mapped[dict] = mapped_column(JSON)
-    comparison_id: Mapped[str | None] = mapped_column(String(80))
+    comparison_id: Mapped[str | None] = mapped_column(String(80), index=True)
     initial_validity: Mapped[str] = mapped_column(String(20), default="candidate")
     validity: Mapped[str] = mapped_column(String(20), default="candidate")
     resolution: Mapped[str] = mapped_column(String(20), default="open")
@@ -163,7 +163,7 @@ class FollowUp(Base):
     __tablename__ = "follow_ups"
     id: Mapped[str] = mapped_column(String(80), primary_key=True, default=new_id)
     repository_id: Mapped[str] = mapped_column(ForeignKey("repositories.id"), index=True)
-    context_id: Mapped[str] = mapped_column(ForeignKey("review_contexts.id"))
+    context_id: Mapped[str] = mapped_column(ForeignKey("review_contexts.id"), index=True)
     assertion_revision_id: Mapped[str] = mapped_column(ForeignKey("assertion_revisions.id"))
     opened_by_event_id: Mapped[str] = mapped_column(ForeignKey("review_events.id"))
     kind: Mapped[str] = mapped_column(String(30))

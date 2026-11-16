@@ -1,12 +1,14 @@
 import { useEffect, useState, lazy, Suspense } from 'react';
-import { FileText, ChevronRight, Search, ArrowLeft, Download } from 'lucide-react';
-import { Button, Input, Textarea, Select, Checkbox } from './ui/index.js';
-import { contextEnvelope } from '../data/serviceModel.js';
+import { FileText, ChevronRight, Search, ArrowLeft, Download, CheckCircle2, Network, Plus, X, Printer, FileDown } from 'lucide-react';
+import { Button, Input, Textarea, Select, Checkbox, Dialog, DialogContent, DialogTitle, DialogDescription, Disclosure } from './ui/index.js';
+import { contextEnvelope, reasonLabel } from '../data/serviceModel.js';
+import { buildAuditReportMarkdown } from '../data/auditReport.js';
 const TraceabilityFlow = lazy(() => import('./TraceabilityFlow.jsx'));
 const relationKinds = { documents: ['document', 'code'], implements: ['code', 'requirement'], motivates: ['decision', 'code'] };
 const relationLabels = { documents: 'Document describes code', implements: 'Code implements requirement', motivates: 'Decision motivates code' };
 
 export function RelationshipEditor({ ctx, correction = false, successor = false }) {
+  const [open, setOpen] = useState(false);
   const key = JSON.stringify(['relationship', correction || successor ? ctx.detail?.projection.contextId : 'new', ctx.selection.repositoryId, ctx.selection.targetRevision.commitId, ctx.selection.comparisonId || null]);
   const current = ctx.formDrafts[key] || { type: correction || successor ? ctx.detail.assertion.type : 'documents', source: correction || successor ? ctx.detail.assertion.source.artifactId : '', target: correction || successor ? ctx.detail.assertion.target.artifactId : '', reason: '', anchor: 'source', start: 1, end: 1, newAnchor: false };
   const change = patch => ctx.saveFormDraft(key, { ...current, ...patch });
@@ -16,35 +18,72 @@ export function RelationshipEditor({ ctx, correction = false, successor = false 
   const source = sourceItems.find(a => a.artifactId === current.source) || sourceItems[0];
   const target = targetItems.find(a => a.artifactId === current.target) || targetItems[0];
   const eligible = ctx.canWrite && !ctx.busy && ctx.workspace.mode === 'active' && (!correction || ctx.detail.mode === 'active');
-  return <details className="service-editor"><summary>{correction ? 'Correct this relationship' : successor ? 'Propose an unconfirmed successor' : 'Add a relationship'}</summary><form className="journey-form" onSubmit={async event => {
+  const title = correction ? 'Correct this relationship' : successor ? 'Propose an unconfirmed successor' : 'Add a relationship';
+
+  const formContent = <form className="journey-form" onSubmit={async event => {
     event.preventDefault(); setMessage(''); if (!source || !target) return;
     const endpoints = { type: current.type, sourceArtifactId: source.artifactId, sourceVersionId: source.versionId, targetArtifactId: target.artifactId, targetVersionId: target.versionId };
     const selected = current.anchor === 'source' ? source : target;
     const input = correction ? { contextId: ctx.detail.projection.contextId, assertionRevisionId: ctx.detail.assertion.id, expectedProjectionVersion: ctx.detail.projection.projectionVersion, reason: current.reason, replacement: { ...endpoints, evidenceIds: current.newAnchor ? [] : ctx.detail.assertion.evidenceIds, ...(current.newAnchor ? {newEvidence:[{artifactVersionId:selected.versionId,locator:{kind:'lines',startLine:Number(current.start),endLine:Number(current.end)}}]} : {}) } } : { ...endpoints, targetRevision: ctx.selection.targetRevision, evidence: [{ artifactVersionId: selected.versionId, locator: { kind: 'lines', startLine: Number(current.start), endLine: Number(current.end) } }], reason: current.reason, predecessorContextId: successor ? ctx.detail.projection.contextId : null };
     const saved = await ctx.submit(contextEnvelope(ctx.selection, correction ? ctx.detail : { viewId: ctx.repositoryViewId }, correction ? 'correct_assertion' : 'capture_candidate', input), key);
-    if (saved) setMessage('Saved as an unconfirmed claim. A separate judgment is required.');
+    if (saved) {
+      setMessage('Saved as an unconfirmed claim. A separate judgment is required.');
+      if (!correction && !successor) setOpen(false);
+    }
   }}>
     <label>Relationship meaning<Select value={current.type} disabled={!eligible} onChange={e => change({ type: e.target.value, source: '', target: '' })}>{Object.keys(relationKinds).map(type => <option value={type} key={type}>{relationLabels[type]}</option>)}</Select></label>
     <label>Source artifact<Select value={source?.artifactId ?? ''} disabled={!eligible || !source} onChange={e => change({ source: e.target.value })}>{sourceItems.map(a => <option key={a.artifactId} value={a.artifactId}>{a.identity.title || a.path}</option>)}</Select></label>
     <label>Target artifact<Select value={target?.artifactId ?? ''} disabled={!eligible || !target} onChange={e => change({ target: e.target.value })}>{targetItems.map(a => <option key={a.artifactId} value={a.artifactId}>{a.identity.title || a.path}</option>)}</Select></label>
     {!source || !target ? <p className="inline-notice">Capture the required artifact kinds before adding this relationship.</p> : null}
     {correction && <label className="service-checkbox"><Checkbox checked={current.newAnchor} onChange={e => change({newAnchor:e.target.checked})} />Replace evidence with new line anchors</label>}
-    {(!correction || current.newAnchor) && <><label>Evidence from<Select value={current.anchor} disabled={!eligible} onChange={e => change({ anchor: e.target.value })}><option value="source">Source artifact</option><option value="target">Target artifact</option></Select></label><div className="service-evidence-range"><label>Start line<Input type="number" min="1" required value={current.start} onChange={e => change({ start: e.target.value })} /></label><label>End line<Input type="number" min={current.start} required value={current.end} onChange={e => change({ end: e.target.value })} /></label></div></>}
+    {(!correction || current.newAnchor) && <><label>Evidence from<Select value={current.anchor} disabled={!eligible} onChange={e => change({ anchor: e.target.value })}><option value="source">Source artifact</option><option value="target">Target artifact</option></Select></label>{(() => {
+      const anchored = current.anchor === 'source' ? source : target;
+      const loadedSource = anchored ? ctx.detail?.sources?.find(s => s.id === anchored.versionId) : null;
+      return anchored ? <>{loadedSource ? <Disclosure trigger={`Preview ${anchored.path} lines`} variant="subtle" className="service-line-preview"><div className="service-line-preview__body">{loadedSource.content.split('\n').slice(0, 80).map((line, i) => <div key={i} className="service-line-preview__row"><span>{i + 1}</span><code>{line || ' '}</code></div>)}</div></Disclosure> : <small className="service-id">Anchoring on {anchored.path}</small>}</> : null;
+    })()}<div className="service-evidence-range"><label>Start line<Input type="number" min="1" required value={current.start} onChange={e => change({ start: e.target.value })} /></label><label>End line<Input type="number" min={current.start} required value={current.end} onChange={e => change({ end: e.target.value })} /></label></div></>}
     {correction && !current.newAnchor && <p>Correction retains the displayed evidence references. Both replacement endpoints must be compatible with that exact evidence. Select Replace evidence to supply new exact line anchors.</p>}
     <label>{correction ? 'Correction reason' : 'Relationship reason'}<Textarea required maxLength={4000} value={current.reason} disabled={!eligible} onChange={e => change({ reason: e.target.value })} /></label>
     <Button type="submit" disabled={!eligible || !source || !target || !current.reason.trim()}>{correction ? 'Save correction for review' : 'Save candidate relationship'}</Button>{message && <p role="status">{message}</p>}
-  </form></details>;
+  </form>;
+
+  if (correction || successor) {
+    return <Disclosure trigger={title} variant="card" className="service-editor-disclosure">{formContent}</Disclosure>;
+  }
+
+  return <>
+    <Button variant="secondary" size="sm" onClick={() => { setMessage(''); setOpen(true); }}><Plus size={14} />{title}</Button>
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogContent className="service-dialog" padded={false} showClose={false} aria-labelledby="add-relationship-title" aria-describedby="add-relationship-desc">
+        <Button variant="unstyled" className="btn service-dialog-close" onClick={() => setOpen(false)} aria-label="Close relationship dialog"><X size={18} /></Button>
+        <DialogTitle id="add-relationship-title">{title}</DialogTitle>
+        <DialogDescription id="add-relationship-desc">Propose an explicit typed relationship anchored to captured source lines. New claims enter as unconfirmed candidates.</DialogDescription>
+        {formContent}
+      </DialogContent>
+    </Dialog>
+  </>;
 }
 
 export function RecordRevision({ ctx, record }) {
+  const [open, setOpen] = useState(false);
   const key = JSON.stringify(['revise', record.id]);
   const value = ctx.formDrafts[key] || { title: record.identity.title, content: record.content, reason: '', absence: record.identity.sourceAbsenceReason || '' };
   const change = patch => ctx.saveFormDraft(key, { ...value, ...patch });
-  return <details className="service-editor"><summary>Revise this authored record</summary><form className="journey-form" onSubmit={async e => {
-    e.preventDefault();
-    const artifact = ctx.workspace.artifacts.find(a => a.versionId === record.id);
-    await ctx.submit(contextEnvelope(ctx.selection, { viewId: ctx.repositoryViewId }, 'revise_record', { artifactId: artifact.artifactId, expectedRecordVersion: record.identity.recordVersion, title: value.title, content: value.content, sourceReference: record.identity.sourceReference, sourceAbsenceReason: record.identity.sourceReference ? null : value.absence, reason: value.reason }), key);
-  }}><label>Title<Input required value={value.title} onChange={e => change({ title: e.target.value })} /></label><label>Content<Textarea required value={value.content} onChange={e => change({ content: e.target.value })} /></label>{!record.identity.sourceReference && <label>Why is no source reference supplied?<Textarea required value={value.absence} onChange={e => change({ absence: e.target.value })} /></label>}<label>Revision reason<Textarea required value={value.reason} onChange={e => change({ reason: e.target.value })} /></label><Button type="submit" disabled={!ctx.canWrite || ctx.busy || ctx.workspace.mode !== 'active'}>Save new record version</Button></form></details>;
+  return <>
+    <Button variant="secondary" size="sm" onClick={() => setOpen(true)}>Revise this authored record</Button>
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogContent className="service-dialog" padded={false} showClose={false} aria-labelledby="revise-record-title" aria-describedby="revise-record-desc">
+        <Button variant="unstyled" className="btn service-dialog-close" onClick={() => setOpen(false)} aria-label="Close revise record dialog"><X size={18} /></Button>
+        <DialogTitle id="revise-record-title">Revise this authored record</DialogTitle>
+        <DialogDescription id="revise-record-desc">Saving creates a new exact record version and queues linked claims for incoming review.</DialogDescription>
+        <form className="journey-form" onSubmit={async e => {
+          e.preventDefault();
+          const artifact = ctx.workspace.artifacts.find(a => a.versionId === record.id);
+          const saved = await ctx.submit(contextEnvelope(ctx.selection, { viewId: ctx.repositoryViewId }, 'revise_record', { artifactId: artifact.artifactId, expectedRecordVersion: record.identity.recordVersion, title: value.title, content: value.content, sourceReference: record.identity.sourceReference, sourceAbsenceReason: record.identity.sourceReference ? null : value.absence, reason: value.reason }), key);
+          if (saved) { setOpen(false); ctx.openSource(artifact.artifactId); }
+        }}><label>Title<Input required value={value.title} onChange={e => change({ title: e.target.value })} /></label><label>Content<Textarea required value={value.content} onChange={e => change({ content: e.target.value })} /></label>{!record.identity.sourceReference && <label>Why is no source reference supplied?<Textarea required value={value.absence} onChange={e => change({ absence: e.target.value })} /></label>}<label>Revision reason<Textarea required value={value.reason} onChange={e => change({ reason: e.target.value })} /></label><Button type="submit" disabled={!ctx.canWrite || ctx.busy || ctx.workspace.mode !== 'active'}>Save new record version</Button></form>
+      </DialogContent>
+    </Dialog>
+  </>;
 }
 
 export function ServiceSearch({ ctx }) {
@@ -71,18 +110,139 @@ export function ServiceGraph({ ctx }) {
   const unresolvedRows = ctx.rows.filter(r => [r.assertion.source, r.assertion.target].some(e => e.availability !== 'available' || currentVersion.get(e.artifactId) !== e.versionId));
   const edges = root && result ? result.edges.map(e => ({ id:e.contextId, from:e.sourceArtifactId, to:e.targetArtifactId, label:`${e.type} · ${e.validity}`, kind:e.validity })) : ctx.rows.filter(r => !unresolvedRows.includes(r)).map(r => ({ id:r.id, from:r.assertion.source.artifactId, to:r.assertion.target.artifactId, label:`${r.assertion.type} · ${r.projection.validity}`, kind:r.projection.validity }));
   const nodes = ctx.workspace.artifacts.filter(a => !root || !result || result.nodes.some(n => n.artifactId === a.artifactId) || a.artifactId === root);
-  return <><div className="service-section-heading"><p className="service-explore-note">Select an edge to inspect that exact relationship. Select a node for its typed one-hop neighborhood.</p>{root && <Button variant="ghost" size="sm" onClick={() => { setRoot(null); setResult(null); setError(''); }}><ArrowLeft size={13} />Show full snapshot</Button>}</div>{error && <p role="alert">{error}</p>}<div className="service-graph"><Suspense fallback={<p>Loading graph…</p>}><TraceabilityFlow compact rawNodes={nodes.map(a => ({ id:a.artifactId,title:a.identity.title || a.path.split('/').at(-1),sub:a.path,category:a.kind }))} rawEdges={edges} onSelectNode={id => { if (id !== root) { setError(''); setResult(null); setRoot(id); } }} onSelectEdge={id => ctx.selectArtifact(id)} selectedArtifactId={root} theme={ctx.theme} /></Suspense></div>{result?.nextCursor && <Button variant="secondary" disabled={loading} onClick={async () => {
-    const cursor = result.nextCursor; setLoading(true); setError('');
-    try {
-      const next = await ctx.api.query(ctx.selection.repositoryId, 'read_graph', {snapshotId:ctx.workspace.snapshot.id, rootArtifactId:root, relationTypes:['documents','implements','motivates'], direction:'both', depth:1, pageSize:100, cursor});
-      setResult(previous => previous?.nextCursor === cursor ? {...next, nodes:[...new Map([...previous.nodes,...next.nodes].map(node=>[node.artifactId,node])).values()], edges:[...previous.edges,...next.edges], unresolved:[...previous.unresolved,...next.unresolved]} : previous);
-    } catch(e) {setError(e.message);} finally {setLoading(false);}
-  }}>More neighbors</Button>}{!root && unresolvedRows.map(row => <Button variant="secondary" key={row.id} onClick={() => ctx.selectArtifact(row.id)}>Inspect unresolved or earlier-version relationship</Button>)}{result?.unresolved?.map(item => <Button variant="secondary" key={item.contextId} onClick={() => ctx.selectArtifact(item.contextId)}>Inspect unresolved endpoint context</Button>)}</>;
+  const rootArtifact = root ? ctx.workspace.artifacts.find(a => a.artifactId === root) : null;
+  const kindCounts = ['code', 'document', 'requirement', 'decision'].map(k => ({ kind: k, count: nodes.filter(n => n.kind === k).length })).filter(x => x.count > 0);
+  return <>
+    <div className="service-graph-bar">
+      <div className="service-graph-bar__info">
+        <Network size={16} />
+        <div>
+          <strong>{rootArtifact ? `One-hop neighborhood: ${rootArtifact.identity.title || rootArtifact.path}` : 'Full snapshot relationship graph'}</strong>
+          <p className="service-explore-note">Select an edge to inspect that exact relationship. Select a node for its typed one-hop neighborhood.</p>
+        </div>
+      </div>
+      <div className="service-graph-bar__meta">
+        {kindCounts.map(({ kind, count }) => <span className="service-breakdown-pill" key={kind}>{count} {kind}</span>)}
+        <span className="service-breakdown-pill">{edges.length} {edges.length === 1 ? 'link' : 'links'}</span>
+        {root && <Button variant="secondary" size="sm" onClick={() => { setRoot(null); setResult(null); setError(''); }}><ArrowLeft size={13} />Show full snapshot</Button>}
+      </div>
+    </div>
+    {error && <p className="inline-notice form-error" role="alert">{error}</p>}
+    <div className="service-graph"><Suspense fallback={<div className="service-graph-loading" role="status">Loading graph layout…</div>}><TraceabilityFlow compact rawNodes={nodes.map(a => ({ id:a.artifactId,title:a.identity.title || a.path.split('/').at(-1),sub:a.path,category:a.kind }))} rawEdges={edges} onSelectNode={id => { if (id !== root) { setError(''); setResult(null); setRoot(id); } }} onSelectEdge={id => ctx.selectArtifact(id)} selectedArtifactId={root} theme={ctx.theme} /></Suspense></div>
+    {result?.nextCursor && <div className="service-toolbar"><Button variant="secondary" disabled={loading} onClick={async () => {
+      const cursor = result.nextCursor; setLoading(true); setError('');
+      try {
+        const next = await ctx.api.query(ctx.selection.repositoryId, 'read_graph', {snapshotId:ctx.workspace.snapshot.id, rootArtifactId:root, relationTypes:['documents','implements','motivates'], direction:'both', depth:1, pageSize:100, cursor});
+        setResult(previous => previous?.nextCursor === cursor ? {...next, nodes:[...new Map([...previous.nodes,...next.nodes].map(node=>[node.artifactId,node])).values()], edges:[...previous.edges,...next.edges], unresolved:[...previous.unresolved,...next.unresolved]} : previous);
+      } catch(e) {setError(e.message);} finally {setLoading(false);}
+    }}>More neighbors</Button></div>}
+    {(!root && unresolvedRows.length > 0 || (result?.unresolved?.length > 0)) && <div className="service-toolbar">{!root && unresolvedRows.map(row => <Button variant="secondary" size="sm" key={row.id} onClick={() => ctx.selectArtifact(row.id)}>Inspect unresolved or earlier-version relationship</Button>)}{result?.unresolved?.map(item => <Button variant="secondary" size="sm" key={item.contextId} onClick={() => ctx.selectArtifact(item.contextId)}>Inspect unresolved endpoint context</Button>)}</div>}
+  </>;
+}
+
+function AuditReportDialog({ ctx, open, onOpenChange }) {
+  const ws = ctx.workspace;
+  const rows = ctx.rows || [];
+  const snap = ws.snapshot;
+  const repo = ctx.state?.repositories?.find(r => r.id === ctx.selection?.repositoryId);
+  const repoName = repo?.fullName || snap.selection?.repositoryId || 'Repository';
+  const commit = snap.selection?.targetRevision?.commitId || '';
+
+  return <Dialog open={open} onOpenChange={onOpenChange}>
+    <DialogContent className="service-dialog service-report-dialog" padded={false} showClose={false} aria-labelledby="audit-report-title" aria-describedby="audit-report-desc">
+      <div className="service-report-toolbar no-print">
+        <div>
+          <DialogTitle id="audit-report-title">Continuity Audit Report</DialogTitle>
+          <DialogDescription id="audit-report-desc">Human-readable summary compiled from the verified snapshot and retained rationales.</DialogDescription>
+        </div>
+        <div className="service-report-toolbar__actions">
+          <Button variant="default" size="sm" onClick={() => window.print()}><Printer size={14} />Print / Save PDF</Button>
+          <Button variant="ghost" size="icon-sm" onClick={() => onOpenChange(false)} aria-label="Close audit report"><X size={18} /></Button>
+        </div>
+      </div>
+      <article className="service-print-report">
+        <header className="service-print-report__head">
+          <h2>Software Knowledge Continuity Audit Report</h2>
+          <p><strong>{repoName}</strong> · Revision <code>{commit.slice(0, 7)}</code> · Snapshot v{snap.snapshotVersion} ({ws.mode})</p>
+          <p className="service-method">Completion: {ws.completion ? `Completed at ${ws.completion.recordedAt} by ${ws.completion.actorId}` : 'In progress (review snapshot not yet completed)'}</p>
+        </header>
+        <section className="service-print-section">
+          <h3>Review summary</h3>
+          <div className="service-print-grid">
+            <div><strong>{ws.artifacts?.length || 0}</strong><span>Artifacts</span></div>
+            <div><strong>{rows.filter(r => r.projection.validity === 'confirmed').length}</strong><span>Confirmed</span></div>
+            <div><strong>{rows.filter(r => r.projection.validity === 'rejected').length}</strong><span>Rejected</span></div>
+            <div><strong>{rows.filter(r => r.projection.validity === 'stale').length}</strong><span>Stale</span></div>
+            <div><strong>{rows.filter(r => r.projection.validity === 'candidate').length}</strong><span>Candidate</span></div>
+            <div><strong>{snap.openFollowUpCount ?? 0}</strong><span>Open follow-ups</span></div>
+          </div>
+        </section>
+        {ws.comparison && <section className="service-print-section">
+          <h3>Revision comparison</h3>
+          <p className="service-method">Compared baseline <code>{ws.comparison.baseRevision?.commitId?.slice(0, 7)}</code> → target <code>{ws.comparison.targetRevision?.commitId?.slice(0, 7)}</code> · {ws.comparison.changes.length} changed paths · {ws.comparison.impacts.length} impacted links</p>
+          <ul className="service-technical-list">{ws.comparison.changes.map(c => <li key={c.path}><code>{c.path}</code> ({c.kind})</li>)}</ul>
+        </section>}
+        <section className="service-print-section">
+          <h3>Tracked relationships ({rows.length})</h3>
+          <table className="service-report-table">
+            <thead><tr><th>Relationship</th><th>Type</th><th>Status</th><th>Evidence</th><th>Rationale / Note</th></tr></thead>
+            <tbody>
+              {rows.map(r => <tr key={r.id}>
+                <td><strong>{r.sourceLabel || r.sourcePath}</strong><br /><small>{r.targetLabel || r.targetPath}</small></td>
+                <td>{r.assertion.type}</td>
+                <td><span className={`service-chip service-chip--${r.projection.validity}`}>{r.projection.validity}</span></td>
+                <td>{r.assertion.evidenceIds?.length || 0}</td>
+                <td>{r.priorDecision?.reason ? reasonLabel(r.priorDecision.reason) : (r.projection.resolution === 'resolved' ? 'Resolved' : 'Pending human review')}</td>
+              </tr>)}
+            </tbody>
+          </table>
+        </section>
+        <section className="service-print-section">
+          <h3>Disclosed coverage &amp; limitations</h3>
+          <ul className="service-technical-list">
+            {(snap.coverage || []).map(c => <li key={c.function}><strong>{c.function.replaceAll('_', ' ')}:</strong> {c.status} ({c.processedCount}/{c.eligibleCount ?? 'unknown'})</li>)}
+          </ul>
+          <ul className="service-technical-list">
+            {(snap.limitations || []).map((l, i) => <li key={i}>{l}</li>)}
+          </ul>
+        </section>
+      </article>
+    </DialogContent>
+  </Dialog>;
 }
 
 export function CycleActions({ ctx }) {
-  const [ack, setAck] = useState(false); const [exported, setExported] = useState(null); const [error, setError] = useState(''); const [loading, setLoading] = useState(false);
+  const [ack, setAck] = useState(false); const [exported, setExported] = useState(null); const [error, setError] = useState(''); const [loading, setLoading] = useState(false); const [reportOpen, setReportOpen] = useState(false);
   const snapshot = ctx.workspace.snapshot;
+  const completed = ctx.workspace.completion;
   const exportId = exported || (ctx.operation?.command === 'export_snapshot' && ctx.operation.repositoryId === ctx.selection.repositoryId ? ctx.operation.operationId : null);
-  return <section className="service-cycle-actions"><div><h2>{ctx.workspace.completion ? 'Review completion recorded' : 'Complete this review snapshot'}</h2><p>Open follow-up work and processing limitations remain separate from review completion.</p></div><label className="service-checkbox"><Checkbox checked={ack} onChange={e => setAck(e.target.checked)} />I acknowledge the disclosed coverage and method limitations.</label><div className="service-toolbar"><Button disabled={!ctx.canWrite || ctx.busy || !ack || snapshot.pendingReviewCount > 0 || !!ctx.workspace.completion || ctx.workspace.mode !== 'active'} onClick={() => ctx.submit(contextEnvelope(ctx.selection,{viewId:ctx.repositoryViewId},'complete_cycle',{snapshotId:snapshot.id,acknowledgedLimitations:snapshot.limitations}))}>Record review completion</Button><Button variant="secondary" disabled={ctx.busy} onClick={async () => { const response=await ctx.submit(contextEnvelope(ctx.selection,{viewId:ctx.repositoryViewId},'export_snapshot',{snapshotId:snapshot.id,format:'json'})); if(response)setExported(response.result.operationId); }}><Download size={14} />Prepare JSON export</Button>{exportId && <Button variant="secondary" disabled={loading} onClick={async () => {setLoading(true);try {const result=await ctx.api.query(ctx.selection.repositoryId,'read_export',{operationId:exportId});if(result.document){const url=URL.createObjectURL(new Blob([JSON.stringify(result.document,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download=`continuum-${result.snapshotId}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}else setError(`Export is ${result.status}. Check again when processing completes.`);}catch(e){setError(e.message);}finally{setLoading(false);}}}>Check export & download</Button>}</div>{error && <p role="status">{error}</p>}</section>;
+  const downloadMarkdown = () => {
+    const md = buildAuditReportMarkdown(ctx);
+    const url = URL.createObjectURL(new Blob([md], { type: 'text/markdown;charset=utf-8' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `continuum-audit-${snapshot.selection.targetRevision.commitId.slice(0, 7)}.md`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+  return <section className={`service-cycle-actions ${completed ? 'is-complete' : ''}`}>
+    <div className="service-cycle-actions__head">
+      <div>
+        <h2>{completed ? 'Review completion recorded' : 'Complete review & export audit report'}</h2>
+        <p>{completed ? `Recorded at ${completed.recordedAt}. Pending follow-up tasks and coverage limits remain tracked separately.` : 'Sign off on this snapshot once pending links are resolved, or download a readable report at any time.'}</p>
+      </div>
+      {completed && <span className="service-status-pill service-status-pill--accent"><CheckCircle2 size={14} />Completed</span>}
+    </div>
+    {!completed && <label className="service-checkbox"><Checkbox checked={ack} onChange={e => setAck(e.target.checked)} />I acknowledge the disclosed coverage and method limitations.</label>}
+    <div className="service-toolbar">
+      <Button disabled={!ctx.canWrite || ctx.busy || !ack || snapshot.pendingReviewCount > 0 || !!completed || ctx.workspace.mode !== 'active'} onClick={() => ctx.submit(contextEnvelope(ctx.selection,{viewId:ctx.repositoryViewId},'complete_cycle',{snapshotId:snapshot.id,acknowledgedLimitations:snapshot.limitations}))}>Record review completion</Button>
+      <Button variant="secondary" onClick={downloadMarkdown}><FileDown size={14} />Download Markdown report</Button>
+      <Button variant="secondary" onClick={() => setReportOpen(true)}><Printer size={14} />Print / PDF report</Button>
+      <Button variant="secondary" disabled={ctx.busy} onClick={async () => { const response=await ctx.submit(contextEnvelope(ctx.selection,{viewId:ctx.repositoryViewId},'export_snapshot',{snapshotId:snapshot.id,format:'json'})); if(response)setExported(response.result.operationId); }}><Download size={14} />Prepare JSON export</Button>
+      {exportId && <Button variant="secondary" disabled={loading} onClick={async () => {setLoading(true);setError('');try {const result=await ctx.api.query(ctx.selection.repositoryId,'read_export',{operationId:exportId});if(result.document){const url=URL.createObjectURL(new Blob([JSON.stringify(result.document,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download=`continuum-${result.snapshotId}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}else setError(`Export is ${result.status}. Check again when processing completes.`);}catch(e){setError(e.message);}finally{setLoading(false);}}}>Check export &amp; download</Button>}
+    </div>
+    {snapshot.pendingReviewCount > 0 && !completed && <p className="service-method">Resolve all {snapshot.pendingReviewCount} pending relationship reviews before recording completion.</p>}
+    {error && <p className="inline-notice" role="status">{error}</p>}
+    {reportOpen && <AuditReportDialog ctx={ctx} open={reportOpen} onOpenChange={setReportOpen} />}
+  </section>;
 }

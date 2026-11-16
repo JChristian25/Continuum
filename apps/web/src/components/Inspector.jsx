@@ -36,6 +36,7 @@ export default function Inspector({ ctx }) {
     suggestAiDraft,
     confirmAiDraft,
     saveJudgment,
+    saveJudgmentAndNext,
     undoReview,
     getActiveUser,
     isAuthorized,
@@ -467,6 +468,17 @@ export default function Inspector({ ctx }) {
                       >
                         Save review judgment
                       </Button>
+                      {pending.some(item => item.id !== art.id) && (
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          disabled={!authorized || art.draftIsAi || !(art.draftRationale ?? art.savedRationale ?? '').trim()}
+                          onClick={saveJudgmentAndNext}
+                        >
+                          Save &amp; next
+                        </Button>
+                      )}
                     </div>
                   </div>
                 </div>

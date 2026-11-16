@@ -7,7 +7,7 @@ from sqlalchemy import select
 from .models import ArtifactVersion, Receipt, ReviewEvent
 from .pipeline_models import Activity, Operation, RepositoryView, Selection, Snapshot
 from .schemas import Strict, Id
-from .review import scoped, reason_data
+from .review import load_scoped_map, reason_data, scoped
 from .security import digest, fail, utc
 
 class CompleteInput(Strict):
@@ -74,18 +74,28 @@ def execute(db, actor, repository, envelope):
 def publish_export(db, operation):
     snapshot = scoped(db, Snapshot, operation.result_metadata['snapshotId'], operation.repository_id)
     header = snapshot.document['snapshot']
+    assertions = snapshot.document['assertions']
+    high_water_by_ctx = {item['projection']['contextId']: item['historySequence'] for item in assertions}
+    eff_ids = [item['projection']['effectiveJudgmentEventId'] for item in assertions if item['projection']['effectiveJudgmentEventId']]
+    eff_events = load_scoped_map(db, ReviewEvent, eff_ids, operation.repository_id)
+    events_by_ctx = {}
+    if high_water_by_ctx:
+        for retained in db.scalars(select(ReviewEvent).where(ReviewEvent.context_id.in_(high_water_by_ctx)).order_by(ReviewEvent.context_id, ReviewEvent.sequence)):
+            if retained.sequence <= high_water_by_ctx[retained.context_id]:
+                events_by_ctx.setdefault(retained.context_id, []).append(retained)
     judgments, references = [], []
-    for item in snapshot.document['assertions']:
-        event = scoped(db, ReviewEvent, item['projection']['effectiveJudgmentEventId'], operation.repository_id) if item['projection']['effectiveJudgmentEventId'] else None
+    for item in assertions:
+        eff_id = item['projection']['effectiveJudgmentEventId']
+        event = eff_events[eff_id] if eff_id else None
         judgments.append({**item, 'effectiveEvent': {'id': event.id, **reason_data(event.reason), 'actorId': event.actor_id, 'recordedAt': event.recorded_at, 'payload': event.payload} if event else None})
-        for retained in db.scalars(select(ReviewEvent).where(ReviewEvent.context_id == item['projection']['contextId'], ReviewEvent.sequence <= item['historySequence']).order_by(ReviewEvent.sequence)):
+        version_ids = [e['versionId'] for e in [item['assertion']['source'], item['assertion']['target']] if e['versionId']]
+        for retained in events_by_ctx.get(item['projection']['contextId'], ()):
             references.append({'eventId': retained.id, 'contextId': retained.context_id, 'assertionRevisionId': retained.assertion_revision_id,
-                'artifactVersionIds': [e['versionId'] for e in [item['assertion']['source'], item['assertion']['target']] if e['versionId']], 'evidenceIds': item['assertion']['evidenceIds']})
-    unavailable = []
-    for row in snapshot.document['artifacts']:
-        source = scoped(db, ArtifactVersion, row['versionId'], operation.repository_id)
-        if digest(source.content) != source.digest:
-            unavailable.append(row['versionId'])
+                'artifactVersionIds': version_ids, 'evidenceIds': item['assertion']['evidenceIds']})
+    artifact_rows = snapshot.document['artifacts']
+    sources_by_id = load_scoped_map(db, ArtifactVersion, [row['versionId'] for row in artifact_rows], operation.repository_id)
+    unavailable = [row['versionId'] for row in artifact_rows
+                   if digest(sources_by_id[row['versionId']].content) != sources_by_id[row['versionId']].digest]
     document = {'schemaVersion': '0.1.0', 'exportId': operation.id, 'snapshotId': snapshot.id, 'snapshotVersion': snapshot.snapshot_version,
         'selection': header['selection'], 'provenance': header['provenance'], 'releaseRecordId': None,
         'judgments': judgments, 'followUps': snapshot.document['followUps'], 'historyReferences': references,

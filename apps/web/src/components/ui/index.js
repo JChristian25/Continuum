@@ -8,3 +8,4 @@ export * from './tabs.jsx';
 export * from './separator.jsx';
 export * from './select.jsx';
 export * from './checkbox.jsx';
+export * from './disclosure.jsx';

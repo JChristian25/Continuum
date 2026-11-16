@@ -71,8 +71,8 @@ export class ContinuumApi {
     } }).then(data => data.result);
   }
   command(envelope) { return this.request('/commands', { body: envelope }); }
-  context(repositoryId, contextId, viewId, signal) {
-    return this.request(`/repositories/${encodeURIComponent(repositoryId)}/contexts/${encodeURIComponent(contextId)}?viewId=${encodeURIComponent(viewId)}`, { signal });
+  context(repositoryId, contextId, viewId, signal, { includeExcerpts = false } = {}) {
+    return this.request(`/repositories/${encodeURIComponent(repositoryId)}/contexts/${encodeURIComponent(contextId)}?viewId=${encodeURIComponent(viewId)}${includeExcerpts ? '&includeExcerpts=true' : ''}`, { signal });
   }
   version(repositoryId, versionId, signal) {
     return this.request(`/repositories/${encodeURIComponent(repositoryId)}/versions/${encodeURIComponent(versionId)}`, { signal });

@@ -6,14 +6,14 @@ from sqlalchemy import func, select
 
 from .acquisition import WORKSPACE, contained, load_accepted, sha256
 from .discovery import load_profile, load_sources
-from .models import (Artifact, ArtifactVersion, AssertionRevision, Evidence, FollowUp,
+from .models import (Artifact, ArtifactVersion, Assertion, AssertionRevision, Evidence, FollowUp,
                      Receipt, ReviewContext, ReviewEvent, View, new_id)
 from .pipeline_models import (Activity, InputRegistration, Operation, ProfileRegistration, RepositoryView, RevisionOrigin, SelectedRecord,
                               ResultPage, ReviewViewBinding, Selection, SelectionArtifact,
                               SelectionContext, Snapshot)
 from .pipeline_schemas import (ActivityInput, OperationInput, ProcessingInput, ResultsInput, ReviewViewInput,
                                SelectionInput, SnapshotInput, SnapshotListInput, WorkspaceInput)
-from .review import assertion_data, evidence_data, follow_up, projection, scoped
+from .review import assertion_data_from, evidence_data, follow_up, load_scoped_map, projection, scoped
 from .security import digest, fail
 
 
@@ -143,17 +143,32 @@ def make_snapshot(db, selection):
         "provenance": "real", "contextVersions": [{"contextId": row.id, "projectionVersion": row.projection_version} for row in contexts],
         "coverage": coverage, "pendingReviewCount": sum(row.resolution == "open" and row.validity in {"candidate", "stale"} for row in contexts),
         "openFollowUpCount": sum(row.status == "open" for row in works), "limitations": sorted(limitations)}
+    revision_ids = [context.assertion_revision_id for context in contexts]
+    revisions_by_id = load_scoped_map(db, AssertionRevision, revision_ids, selection.repository_id)
+    assertions_by_id = load_scoped_map(db, Assertion, [rev.assertion_id for rev in revisions_by_id.values()], selection.repository_id)
+    evidence_by_id = load_scoped_map(db, Evidence, [eid for rev in revisions_by_id.values() for eid in rev.evidence_ids], selection.repository_id)
+    origins_by_rev = {row.revision_id: row for row in db.scalars(select(RevisionOrigin).where(RevisionOrigin.revision_id.in_(revision_ids)))} if revision_ids else {}
+    activity_ids = list({origin.activity_id for origin in origins_by_rev.values()})
+    activities_by_id = {row.id: row for row in db.scalars(select(Activity).where(Activity.id.in_(activity_ids)))} if activity_ids else {}
+    max_seq_by_ctx = dict(db.execute(select(ReviewEvent.context_id, func.max(ReviewEvent.sequence))
+                                     .where(ReviewEvent.context_id.in_(context_ids)).group_by(ReviewEvent.context_id)).all()) if context_ids else {}
+    artifacts_by_id = load_scoped_map(db, Artifact, [version.artifact_id for version in versions], selection.repository_id)
+
     assertions = []
     for context in contexts:
-        revision = scoped(db, AssertionRevision, context.assertion_revision_id, selection.repository_id)
-        origin = db.get(RevisionOrigin, revision.id)
-        assertions.append({"assertion": assertion_data(db, revision), "projection": projection(context),
-                           "evidence": [evidence_data(scoped(db, Evidence, identity, selection.repository_id)) for identity in revision.evidence_ids],
-                           "provenance": db.get(Activity, origin.activity_id).document if origin else None,
-                           "historySequence": db.scalar(select(func.max(ReviewEvent.sequence)).where(ReviewEvent.context_id == context.id)) or 0})
+        revision = revisions_by_id[context.assertion_revision_id]
+        origin = origins_by_rev.get(revision.id)
+        activity = activities_by_id.get(origin.activity_id) if origin else None
+        assertions.append({
+            "assertion": assertion_data_from(assertions_by_id[revision.assertion_id], revision),
+            "projection": projection(context),
+            "evidence": [evidence_data(evidence_by_id[identity]) for identity in revision.evidence_ids],
+            "provenance": activity.document if activity else None,
+            "historySequence": max_seq_by_ctx.get(context.id) or 0,
+        })
     artifacts = []
     for version in versions:
-        artifact = scoped(db, Artifact, version.artifact_id, selection.repository_id)
+        artifact = artifacts_by_id[version.artifact_id]
         artifacts.append({"artifactId": artifact.id, "kind": artifact.kind, "path": artifact.path,
                           "versionId": version.id, "identity": version.identity, "contentDigest": version.digest})
     row = Snapshot(id=header["id"], repository_id=selection.repository_id, selection_id=selection.id,
@@ -212,9 +227,13 @@ def query(db, repository, envelope):
         data = WorkspaceInput.model_validate(envelope.input)
         snapshot = scoped(db, Snapshot, data.snapshotId, repository.id)
         selection = scoped(db, Selection, snapshot.selection_id, repository.id)
+        from .comparison import enrich_comparison
         from .cycle import completion
         from .progress import workspace_progress
-        return {**snapshot.document, "progress": workspace_progress(db, snapshot, selection), "completion": completion(db, snapshot), "currentSnapshotVersion": selection.snapshot_version,
+        doc = snapshot.document
+        if doc.get("comparison"):
+            doc = {**doc, "comparison": enrich_comparison(db, doc["comparison"])}
+        return {**doc, "progress": workspace_progress(db, snapshot, selection), "completion": completion(db, snapshot), "currentSnapshotVersion": selection.snapshot_version,
                 "mode": "active" if selection.snapshot_version == snapshot.snapshot_version else "historical"}
     if envelope.query == "list_snapshots":
         data = SnapshotListInput.model_validate(envelope.input)

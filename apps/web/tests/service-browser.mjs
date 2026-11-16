@@ -59,12 +59,16 @@ try {
   await page.getByRole('button', { name: 'Review relationships', exact: true }).click();
   await expect(page.locator('.service-row')).toHaveCount(19);
   await expect(page.locator('body')).not.toContainText('src/bbb.py');
+  await expect(page.locator('.service-group-card').first()).toBeVisible();
+  await page.getByRole('button', { name: 'Flat', exact: true }).click();
+  await expect(page.locator('.service-group-card')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Grouped', exact: true }).click();
+  await expect(page.locator('.service-group-card').first()).toBeVisible();
   await page.locator('.service-row').first().click();
   await expect(page.getByRole('heading', { name: 'Recorded evidence' })).toBeVisible();
   await expect(page.locator('.service-inspector .code-box')).toHaveCount(2);
   await page.getByRole('tab', { name: 'review', exact: true }).click();
-  await page.getByRole('combobox', { name: 'Relationship judgment' }).click();
-  await page.getByRole('option', { name: 'confirm', exact: true }).click();
+  await page.getByRole('radio', { name: 'confirm', exact: true }).click();
   await page.getByLabel(/^Reason(?: \(optional\))?$/, { exact: true }).fill('Isolated browser verification of exact-source review; not a research assessment.');
   await page.getByRole('checkbox', { name: 'I inspected the exact sources and recorded evidence.' }).check();
   // Draft survives leaving the context and a browser reload.
@@ -76,7 +80,7 @@ try {
   await expect(page.getByRole('heading', { name: 'Recorded evidence' })).toBeVisible();
   await page.getByRole('tab', { name: 'review', exact: true }).click();
   await expect.poll(() => page.getByRole('textbox', { name: /^Reason(?: \(optional\))?$/, exact: true }).inputValue()).toContain('Isolated browser verification');
-  await expect(page.getByRole('combobox', { name: 'Relationship judgment' })).toHaveText('confirm');
+  await expect(page.getByRole('radio', { name: 'confirm', exact: true })).toHaveAttribute('aria-checked', 'true');
   // Another successful operation makes the displayed projection stale.
   const session = await context.request.get(`${url}/api/v1/auth/session`).then(r => r.json());
   const competing = await context.request.post(`${url}/api/v1/commands`, { headers: { Origin: url, 'X-CSRF-Token': session.csrfToken }, data: {
@@ -114,8 +118,7 @@ try {
   await page.locator('.service-row').filter({ hasText: 'candidate' }).first().click();
   await expect(page.getByRole('heading', { name: 'Recorded evidence' })).toBeVisible();
   await page.getByRole('tab', { name: 'review', exact: true }).click();
-  await page.getByRole('combobox', { name: 'Relationship judgment' }).click();
-  await page.getByRole('option', { name: 'confirm', exact: true }).click();
+  await page.getByRole('radio', { name: 'confirm', exact: true }).click();
   await expect(page.getByLabel('Reason (optional)', { exact: true })).toHaveValue('');
   await page.getByRole('checkbox', { name: 'I inspected the exact sources and recorded evidence.' }).check();
   await page.getByRole('button', { name: 'Save judgment', exact: true }).click();
@@ -129,11 +132,18 @@ try {
   await page.locator('.service-row').filter({ hasText: 'candidate' }).first().click();
   await expect(page.getByRole('heading', { name: 'Recorded evidence' })).toBeVisible();
   await page.getByRole('tab', { name: 'review', exact: true }).click();
-  await page.getByRole('combobox', { name: 'Relationship judgment' }).click();
-  await page.getByRole('option', { name: 'reject', exact: true }).click();
+  await page.getByRole('radio', { name: 'reject', exact: true }).click();
   await expect(page.getByLabel('Reason (optional)', { exact: true })).toHaveValue('');
   await page.getByRole('button', { name: 'Save judgment', exact: true }).click();
   await expect(page.locator('.service-row').filter({ hasText: 'rejected' })).toHaveCount(1);
+  // Check batch confirmation dialog evidence loading, then cancel without changing confirmed count.
+  const firstCandidateWrap = page.locator('.service-row-wrap').filter({ hasText: 'candidate' }).first();
+  await firstCandidateWrap.getByRole('checkbox').check();
+  await page.getByRole('button', { name: /Review & confirm \(1\)/ }).click();
+  const batchDialog = page.getByRole('dialog', { name: /Review & confirm 1 relationships/ });
+  await expect(batchDialog.locator('.service-batch-item')).toHaveCount(1);
+  await batchDialog.getByRole('button', { name: 'Close batch review' }).click();
+  await firstCandidateWrap.getByRole('checkbox').uncheck();
   // Reopen the selected context after save and inspect its retained absence state.
   await page.getByRole('button', { name: 'Workspace', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Repository progress' })).toContainText('reviewed');
@@ -166,6 +176,9 @@ try {
   await page.getByRole('button', { name: 'Compare and review impact' }).click();
   await expect(page.getByText(/changed paths · .* affected relationships/)).toBeVisible({ timeout: 20000 });
   await expect(page.locator('.service-row').first()).toBeVisible();
+  await page.locator('.service-row').first().click();
+  await expect(page.locator('.service-diff-box').first()).toBeVisible();
+  await page.getByRole('button', { name: 'Close inspector' }).click();
   // Typed authored records remain explicit manual claims, and revision needs new review.
   await page.getByRole('button', { name: 'Record intent', exact: true }).click();
   const recordDialog = page.getByRole('dialog', { name: 'Record intent', exact: true });
@@ -211,6 +224,7 @@ try {
   await expect(page.locator('.react-flow__node')).toHaveCount(2);
   await expect(page.locator('.react-flow__edge')).toHaveCount(1);
   await page.locator('.react-flow__edge-interaction').click({ force: true });
+  await page.locator('.service-inspector').getByRole('button', { name: 'Read captured source' }).nth(1).click();
   await expect(page.locator('.service-inspector')).toContainText('Updated captured requirement');
   await page.getByRole('button', { name: 'Close inspector' }).click();
   // Finish the baseline through separate exact-context UI judgments, then compare again.
@@ -220,19 +234,23 @@ try {
   await page.getByRole('button', { name: 'Review relationships', exact: true }).click();
   await expect(page.locator('.service-row')).toHaveCount(19);
   let remaining = await page.locator('.service-row').filter({ hasText: 'candidate' }).count();
-  while (remaining) {
-    await page.locator('.service-row').filter({ hasText: 'candidate' }).first().click();
-    await expect(page.getByRole('heading', { name: 'Recorded evidence' })).toBeVisible();
-    await page.getByRole('tab', { name: 'review', exact: true }).click();
-    await page.getByRole('combobox', { name: 'Relationship judgment' }).click();
-    await page.getByRole('option', { name: 'reject', exact: true }).click();
-    await page.getByRole('button', { name: 'Save judgment', exact: true }).click();
-    await expect(page.locator('.service-row').filter({ hasText: 'candidate' })).toHaveCount(--remaining);
-  }
+  await page.locator('.service-row-wrap').filter({ hasText: 'candidate' }).first().getByRole('button', { name: /^Dismiss / }).click();
+  await expect(page.locator('.service-row').filter({ hasText: 'candidate' })).toHaveCount(--remaining);
+  await page.getByRole('checkbox', { name: /Select all open candidates/ }).check();
+  await page.getByRole('button', { name: new RegExp(`Reject selected \\(${remaining}\\)`) }).click();
+  await expect(page.locator('.service-row').filter({ hasText: 'rejected' })).toHaveCount(17, { timeout: 60000 });
+  await expect(page.locator('.service-row').filter({ hasText: 'candidate' })).toHaveCount(0);
   await page.getByRole('button', { name: 'Review summary', exact: true }).click();
   await page.getByRole('checkbox', { name: 'I acknowledge the disclosed coverage and method limitations.' }).check();
   await page.getByRole('button', { name: 'Record review completion', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Review completion recorded', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Print / PDF report', exact: true }).click();
+  await expect(page.locator('.service-report-table')).toBeVisible();
+  await page.getByRole('button', { name: 'Close audit report', exact: true }).click();
+  const mdDownloadEvent = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Download Markdown report', exact: true }).click();
+  const mdDownload = await mdDownloadEvent;
+  if (!mdDownload.suggestedFilename().endsWith('.md')) throw new Error('Expected Markdown audit report');
   const exportedResponse = page.waitForResponse(response => response.url().endsWith('/api/v1/commands') && response.request().postDataJSON()?.command === 'export_snapshot');
   await page.getByRole('button', { name: 'Prepare JSON export', exact: true }).click();
   const exportId = (await (await exportedResponse).json()).result.operationId;

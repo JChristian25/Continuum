@@ -21,7 +21,13 @@ export default function ServiceContinuumProvider({ children }) {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
-  const [theme, setTheme] = useState('light');
+  const [theme, setTheme] = useState(() => {
+    try {
+      const saved = localStorage.getItem('CONTINUUM_THEME');
+      if (saved === 'dark' || saved === 'light') return saved;
+    } catch { /* Storage optional */ }
+    return 'light';
+  });
   const [modalOpen, setModalOpen] = useState(false);
   const [isCommandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [pending, setPending] = useState(null);
@@ -29,10 +35,16 @@ export default function ServiceContinuumProvider({ children }) {
   const [retainedSnapshots, setRetainedSnapshots] = useState([]);
   const [formDrafts, setFormDrafts] = useState({});
   const [operation, setOperation] = useState(null);
-  useEffect(() => { document.documentElement.setAttribute('data-theme', theme); }, [theme]);
+  const selectionRef = useRef(null);
+  const repoViewRef = useRef(null);
+  const workspaceRef = useRef(null);
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    try { localStorage.setItem('CONTINUUM_THEME', theme); } catch { /* Storage optional */ }
+  }, [theme]);
   function report(e) {
     setError(e.message);
-    if (e.status === 401) { ++epoch.current; setSession(null); setDetail(null); setWorkspace(null); }
+    if (e.status === 401) { ++epoch.current; setSession(null); setDetail(null); setWorkspace(null); selectionRef.current = null; repoViewRef.current = null; workspaceRef.current = null; }
   }
   function persist(next) { store.current.save(next); drafts.current = next; }
   async function loadWorkspace(chosen) {
@@ -42,11 +54,15 @@ export default function ServiceContinuumProvider({ children }) {
     try {
       const selected = await api.query(chosen.repositoryId, 'select_context', chosen);
       const data = await api.query(chosen.repositoryId, 'read_workspace', { snapshotId: selected.snapshot.id });
-      if (generation !== epoch.current) return;
+      if (generation !== epoch.current) return null;
       const retained = await api.query(chosen.repositoryId, 'list_snapshots', { repositoryViewId: selected.repositoryViewId });
-      if (generation !== epoch.current) return;
+      if (generation !== epoch.current) return null;
+      selectionRef.current = selected.selection;
+      repoViewRef.current = selected.repositoryViewId;
+      workspaceRef.current = data;
       setRetainedSnapshots(retained.items); setSelection(selected.selection); setRepositoryViewId(selected.repositoryViewId); setWorkspace(data);
-    } catch (e) { if (generation === epoch.current) report(e); }
+      return data;
+    } catch (e) { if (generation === epoch.current) report(e); return null; }
     finally { if (generation === epoch.current) setBusy(false); }
   }
   async function enter(actor) {
@@ -77,16 +93,26 @@ export default function ServiceContinuumProvider({ children }) {
   }
   async function selectArtifact(contextId) {
     const generation = ++epoch.current;
+    const currentSelection = selectionRef.current || selection;
+    const currentViewId = repoViewRef.current || repositoryViewId;
+    const currentWorkspace = workspaceRef.current || workspace;
+    if (!currentSelection || !currentViewId || !currentWorkspace) return;
     setDetail(null); setError('');
     setState(s => ({ ...s, selectedArtifactId: contextId, inspectorOpen: true }));
     try {
-      const view = await api.query(selection.repositoryId, 'open_review_view', { repositoryViewId, snapshotId: workspace.snapshot.id, contextId });
-      const [context, history] = await Promise.all([api.context(selection.repositoryId, contextId, view.viewId), api.history(selection.repositoryId, contextId, view.viewId)]);
-      const versions = [...new Set([context.assertion.source.versionId, context.assertion.target.versionId].filter(Boolean))];
-      const [sources, evidence] = await Promise.all([Promise.all(versions.map(id => api.version(selection.repositoryId, id))), Promise.all(context.evidence.map(e => api.evidence(selection.repositoryId, e.id)))]);
+      const view = await api.query(currentSelection.repositoryId, 'open_review_view', { repositoryViewId: currentViewId, snapshotId: currentWorkspace.snapshot.id, contextId });
+      const [context, history] = await Promise.all([api.context(currentSelection.repositoryId, contextId, view.viewId, undefined, { includeExcerpts: true }), api.history(currentSelection.repositoryId, contextId, view.viewId)]);
+      const versions = [...new Set([
+        context.assertion.source.versionId,
+        context.assertion.target.versionId,
+        context.assertion.source.priorVersionId,
+        context.assertion.target.priorVersionId,
+      ].filter(Boolean))];
+      const sources = await Promise.all(versions.map(id => api.version(currentSelection.repositoryId, id)));
+      const evidence = context.evidence;
       if (generation !== epoch.current) return;
       const data = { ...context, history, sources, evidence };
-      setDetail(data); setDraft({ ...emptyDraft(), ...drafts.current[draftKey(selection, data)] });
+      setDetail(data); setDraft({ ...emptyDraft(), ...drafts.current[draftKey(currentSelection, data)] });
     } catch (e) { if (generation === epoch.current) report(e); }
   }
   async function openPriorDecision() {
@@ -100,8 +126,8 @@ export default function ServiceContinuumProvider({ children }) {
       const item = earlier.assertions.find(i => i.projection.contextId === impact.baseContextId);
       if (!item) throw new Error('The retained prior context is unavailable.');
       const context = await api.query(selection.repositoryId, 'read_assertion', { snapshotId: earlier.snapshot.id, contextId: impact.baseContextId, assertionRevisionId: item.assertion.id, historical: true });
-      const [history, sources, evidence] = await Promise.all([api.history(selection.repositoryId, impact.baseContextId, context.viewId), Promise.all([...new Set([context.assertion.source.versionId, context.assertion.target.versionId].filter(Boolean))].map(id => api.version(selection.repositoryId, id))), Promise.all(context.evidence.map(e => api.evidence(selection.repositoryId, e.id)))]);
-      if (generation === epoch.current) setDetail({ ...context, history, sources, evidence, returnContextId });
+      const [detailContext, history, sources] = await Promise.all([api.context(selection.repositoryId, impact.baseContextId, context.viewId, undefined, { includeExcerpts: true }), api.history(selection.repositoryId, impact.baseContextId, context.viewId), Promise.all([...new Set([context.assertion.source.versionId, context.assertion.target.versionId].filter(Boolean))].map(id => api.version(selection.repositoryId, id)))]);
+      if (generation === epoch.current) setDetail({ ...context, evidence: detailContext.evidence, history, sources, returnContextId });
     } catch (e) { if (generation === epoch.current) report(e); }
     finally { if (generation === epoch.current) setBusy(false); }
   }
@@ -144,19 +170,124 @@ export default function ServiceContinuumProvider({ children }) {
       report(e);
     } finally { lock.current = false; setBusy(false); }
   }
-  async function saveJudgment() {
-    try { await submit(contextEnvelope(selection, detail, 'record_judgment', judgmentInput(detail, draft)), draftKey(selection, detail)); }
-    catch (e) { report(e); }
+  async function selectNextOpen(afterContextId = detail?.projection?.contextId) {
+    const allRows = reviewRows(workspaceRef.current || workspace);
+    const openRows = allRows.filter(r => r.projection.resolution === 'open' && r.id !== afterContextId);
+    if (!openRows.length) return;
+    const currentIdx = allRows.findIndex(r => r.id === afterContextId);
+    const nextRow = openRows.find(r => allRows.findIndex(x => x.id === r.id) > currentIdx) || openRows[0];
+    if (nextRow) await selectArtifact(nextRow.id);
+  }
+  async function saveJudgment(andAdvance = false) {
+    const currentId = detail?.projection?.contextId;
+    try {
+      const response = await submit(contextEnvelope(selection, detail, 'record_judgment', judgmentInput(detail, draft)), draftKey(selection, detail));
+      if (response && andAdvance === true) await selectNextOpen(currentId);
+    } catch (e) { report(e); }
+  }
+  async function quickReject(row) {
+    const currentSelection = selectionRef.current || selection;
+    const currentViewId = repoViewRef.current || repositoryViewId;
+    const currentWorkspace = workspaceRef.current || workspace;
+    if (!row || !currentSelection || !currentViewId || !currentWorkspace || lock.current) return;
+    if (pending) { report(new Error('Resolve the retained request before submitting another command.')); return; }
+    try {
+      const view = await api.query(currentSelection.repositoryId, 'open_review_view', {
+        repositoryViewId: currentViewId, snapshotId: currentWorkspace.snapshot.id, contextId: row.projection.contextId,
+      });
+      const envelope = contextEnvelope(currentSelection, { viewId: view.viewId }, 'record_judgment', {
+        contextId: row.projection.contextId,
+        assertionRevisionId: row.projection.assertionRevisionId,
+        expectedProjectionVersion: row.projection.projectionVersion,
+        decision: 'reject',
+        reason: null,
+        reviewedEvidenceIds: [],
+        contentConcern: null,
+        followUpDisposition: { kind: 'none' },
+      });
+      return await submit(envelope, draftKey(currentSelection, row));
+    } catch (e) { report(e); return null; }
+  }
+  async function loadBatchEvidence(targetRows, signal) {
+    const currentSelection = selectionRef.current || selection;
+    const currentViewId = repoViewRef.current || repositoryViewId;
+    const currentWorkspace = workspaceRef.current || workspace;
+    if (!currentSelection || !currentViewId || !currentWorkspace) return [];
+    const results = [];
+    for (const row of targetRows) {
+      const view = await api.query(currentSelection.repositoryId, 'open_review_view', {
+        repositoryViewId: currentViewId, snapshotId: currentWorkspace.snapshot.id, contextId: row.projection.contextId,
+      }, signal);
+      const context = await api.context(currentSelection.repositoryId, row.projection.contextId, view.viewId, signal, { includeExcerpts: true });
+      const evidence = context.evidence.slice(0, 3);
+      results.push({ row, viewId: view.viewId, totalEvidence: context.evidence.length, evidenceIds: context.evidence.map(e => e.id), evidence });
+    }
+    return results;
+  }
+  async function submitBatchJudgments(targetRows, { decision, reason = '' }) {
+    const currentSelection = selectionRef.current || selection;
+    const currentViewId = repoViewRef.current || repositoryViewId;
+    const currentWorkspace = workspaceRef.current || workspace;
+    if (lock.current || !currentSelection || !currentViewId || !currentWorkspace || !targetRows.length) return { succeeded: 0, failed: [] };
+    if (pending) { report(new Error('Resolve the retained request before submitting another command.')); return { succeeded: 0, failed: [] }; }
+    lock.current = true; setBusy(true); setError(''); setNotice('');
+    let succeeded = 0;
+    const failed = [];
+    try {
+      let activeRepoViewId = currentViewId;
+      let activeSnapshotId = currentWorkspace.snapshot.id;
+      for (let i = 0; i < targetRows.length; i += 1) {
+        const item = targetRows[i];
+        const row = item.row || item;
+        setNotice(`Saving ${decision} judgment ${i + 1} of ${targetRows.length}…`);
+        try {
+          if (succeeded > 0) {
+            const fresh = await api.query(currentSelection.repositoryId, 'select_context', currentSelection);
+            activeRepoViewId = fresh.repositoryViewId;
+            activeSnapshotId = fresh.snapshot.id;
+          }
+          const view = await api.query(currentSelection.repositoryId, 'open_review_view', {
+            repositoryViewId: activeRepoViewId, snapshotId: activeSnapshotId, contextId: row.projection.contextId,
+          });
+          const evidenceIds = decision === 'confirm' ? (item.evidenceIds || row.assertion.evidenceIds) : [];
+          const envelope = contextEnvelope(currentSelection, { viewId: view.viewId }, 'record_judgment', {
+            contextId: row.projection.contextId,
+            assertionRevisionId: row.projection.assertionRevisionId,
+            expectedProjectionVersion: row.projection.projectionVersion,
+            decision,
+            reason: reason.trim() ? reason : null,
+            reviewedEvidenceIds: evidenceIds,
+            contentConcern: null,
+            followUpDisposition: { kind: 'none' },
+          });
+          await api.command(envelope);
+          const next = { ...drafts.current };
+          delete next[draftKey(currentSelection, row)];
+          try { persist(next); } catch { /* Keep memory state if draft storage unavailable */ }
+          succeeded += 1;
+        } catch (e) {
+          if (e.status === 401) { report(e); return { succeeded, failed }; }
+          failed.push({ id: row.id, label: `${row.sourceLabel || row.sourcePath} → ${row.targetLabel || row.targetPath}`, message: e.message });
+        }
+      }
+      if (succeeded > 0) await loadWorkspace(currentSelection);
+      if (succeeded > 0) setNotice(`Recorded ${succeeded} ${decision} judgment${succeeded === 1 ? '' : 's'}${failed.length ? `; ${failed.length} failed` : ''}.`);
+      if (failed.length) setError(`${failed.length} item${failed.length === 1 ? '' : 's'} could not be saved: ${failed[0].message}`);
+      return { succeeded, failed };
+    } finally {
+      lock.current = false;
+      setBusy(false);
+    }
   }
   const activeRepository = descriptor?.repositories.find(r => r.id === state.activeRepoId);
   const canWrite = activeRepository?.role === 'reviewer' && workspace?.mode === 'active' && storageReady && !pending;
   const value = { serviceMode: true, api, session, checking, signIn, signOut, state, setState, descriptor, selection, repositoryViewId, workspace, detail, draft, updateDraft,
-    rows: reviewRows(workspace), openPriorDecision, loadMoreHistory, openSource: artifactId => { setState(s => ({ ...s, activeModule: 'files', sourceArtifactId: artifactId, inspectorOpen: false })); setCommandPaletteOpen(false); }, error, notice, busy, canWrite, pending, report, submit, saveJudgment,
+    rows: reviewRows(workspace), openPriorDecision, loadMoreHistory, selectNextOpen, quickReject, loadBatchEvidence, submitBatchJudgments, openSource: artifactId => { setState(s => ({ ...s, activeModule: 'files', sourceArtifactId: artifactId, inspectorOpen: false })); setCommandPaletteOpen(false); }, error, notice, busy, canWrite, pending, report, submit, saveJudgment,
     retryPending: () => pending && submit(pending.envelope, pending.draftKey),
     refresh: () => selection && loadWorkspace(selection),
     retainedSnapshots, openSnapshot: async snapshotId => {
       const generation = ++epoch.current; setDetail(null); setError(''); setBusy(true); setState(s => ({ ...s, inspectorOpen: false }));
-      try { const data = await api.query(selection.repositoryId, 'read_workspace', { snapshotId }); if (generation === epoch.current) setWorkspace(data); }
+      try { const data = await api.query(selection.repositoryId, 'read_workspace', { snapshotId }); if (generation === epoch.current) { workspaceRef.current = data; setWorkspace(data); } }
       catch (e) { if (generation === epoch.current) report(e); }
       finally { if (generation === epoch.current) setBusy(false); }
     },

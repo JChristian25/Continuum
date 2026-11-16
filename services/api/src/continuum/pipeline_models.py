@@ -1,4 +1,4 @@
-from sqlalchemy import ForeignKey, JSON, String, Text
+from sqlalchemy import ForeignKey, Index, JSON, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .models import Base, new_id
@@ -59,6 +59,10 @@ class SelectionContext(Base):
 
 class Operation(Base):
     __tablename__ = "operations"
+    __table_args__ = (
+        Index("ix_operations_selection_kind_status", "selection_id", "kind", "status"),
+        Index("ix_operations_status_lease", "status", "lease_until"),
+    )
     id: Mapped[str] = mapped_column(String(80), primary_key=True, default=new_id)
     repository_id: Mapped[str] = mapped_column(ForeignKey("repositories.id"), index=True)
     selection_id: Mapped[str] = mapped_column(ForeignKey("selections.id"))
@@ -80,6 +84,7 @@ class Operation(Base):
 
 class Snapshot(Base):
     __tablename__ = "snapshots"
+    __table_args__ = (Index("ix_snapshots_selection_version", "selection_id", "snapshot_version"),)
     id: Mapped[str] = mapped_column(String(80), primary_key=True, default=new_id)
     repository_id: Mapped[str] = mapped_column(ForeignKey("repositories.id"), index=True)
     selection_id: Mapped[str] = mapped_column(ForeignKey("selections.id"))

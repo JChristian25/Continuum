@@ -8,7 +8,7 @@ from .pipeline import stable
 from .pipeline_models import (Activity, EvidenceOrigin, RecordCurrent, RepositoryView,
                               RevisionOrigin, SelectedRecord, Selection, SelectionArtifact, SelectionContext)
 from .pipeline_schemas import ArtifactSource, CaptureCandidate, CaptureRecord, ReviseRecord
-from .review import projection, scoped, validate_evidence
+from .review import load_scoped_map, projection, scoped, validate_evidence
 from .security import digest, fail, utc
 
 
@@ -115,7 +115,8 @@ def capture_candidate(db, actor, repository, selection, data):
     current = next((context for context in contexts if context.resolution != "superseded"), None)
     if current:
         revision = scoped(db, AssertionRevision, current.assertion_revision_id, repository.id)
-        previous = [scoped(db, Evidence, identity, repository.id) for identity in revision.evidence_ids]
+        prev_map = load_scoped_map(db, Evidence, revision.evidence_ids, repository.id)
+        previous = [prev_map[identity] for identity in revision.evidence_ids]
         prior_anchors = sorted((row.artifact_version_id, json.dumps(row.locator, sort_keys=True), row.excerpt_digest) for row in previous)
         if (not predecessor and current.validity in {"rejected", "retired"}
                 or revision.source["versionId"] != source.id or revision.target["versionId"] != target.id or prior_anchors != anchors):

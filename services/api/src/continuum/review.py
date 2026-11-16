@@ -16,6 +16,17 @@ def scoped(db, model, identity, repository_id):
     return row
 
 
+def load_scoped_map(db, model, identities, repository_id):
+    """Fetch unique rows scoped to repository_id in one query, failing 404 if any are missing or out of scope."""
+    unique_ids = list(dict.fromkeys(identities))
+    if not unique_ids:
+        return {}
+    rows = {row.id: row for row in db.scalars(select(model).where(model.id.in_(unique_ids)))}
+    if len(rows) != len(unique_ids) or any(row.repository_id != repository_id for row in rows.values()):
+        fail("not_found", 404)
+    return rows
+
+
 def reason_data(reason):
     supplied = isinstance(reason, str) and bool(reason.strip())
     return {'reason': reason if supplied else None, 'reasonStatus': 'provided' if supplied else 'not_provided'}
@@ -41,8 +52,7 @@ def follow_up(row):
             "status": row.status, "resolutionEventId": row.resolution_event_id}
 
 
-def assertion_data(db, revision):
-    assertion = scoped(db, Assertion, revision.assertion_id, revision.repository_id)
+def assertion_data_from(assertion, revision):
     return {"id": revision.id, "assertionId": assertion.id,
             "predecessorAssertionId": assertion.predecessor_id,
             "repositoryId": revision.repository_id, "type": assertion.type,
@@ -50,6 +60,11 @@ def assertion_data(db, revision):
             "evidenceIds": revision.evidence_ids, "methodId": revision.method_id,
             "limitations": revision.limitations,
             "supersedesRevisionId": revision.supersedes_revision_id}
+
+
+def assertion_data(db, revision):
+    assertion = scoped(db, Assertion, revision.assertion_id, revision.repository_id)
+    return assertion_data_from(assertion, revision)
 
 
 def evidence_data(row):
@@ -69,13 +84,28 @@ def available_version(db, repository_id, endpoint):
     return version
 
 
-def evidence_excerpt(db, evidence):
+def _verified_version(db, version_id, repository_id, evidence_id, version_cache=None):
+    if version_cache is not None and version_id in version_cache:
+        cached = version_cache[version_id]
+        if cached is None:
+            fail("missing_evidence", details={"evidenceIds": [evidence_id]})
+        return cached
+    version = scoped(db, ArtifactVersion, version_id, repository_id)
+    if digest(version.content) != version.digest:
+        if version_cache is not None:
+            version_cache[version_id] = None
+        fail("missing_evidence", details={"evidenceIds": [evidence_id]})
+    entry = (version, version.content.splitlines())
+    if version_cache is not None:
+        version_cache[version_id] = entry
+    return entry
+
+
+def evidence_excerpt(db, evidence, *, version_cache=None):
     if evidence.availability != "available":
         fail("missing_evidence", details={"evidenceIds": [evidence.id]})
-    version = scoped(db, ArtifactVersion, evidence.artifact_version_id, evidence.repository_id)
+    version, lines = _verified_version(db, evidence.artifact_version_id, evidence.repository_id, evidence.id, version_cache)
     locator = evidence.locator
-    if digest(version.content) != version.digest:
-        fail("missing_evidence", details={"evidenceIds": [evidence.id]})
     if locator == {"kind": "field", "fieldPath": "identity.path"}:
         path = version.identity.get("path")
         if not isinstance(path, str) or digest(path) != evidence.excerpt_digest:
@@ -84,7 +114,6 @@ def evidence_excerpt(db, evidence):
     if locator.get("kind") != "lines":
         fail("missing_evidence", details={"evidenceIds": [evidence.id]})
     start, end = locator.get("startLine"), locator.get("endLine")
-    lines = version.content.splitlines()
     if type(start) is not int or type(end) is not int or start < 1 or end < start or end > len(lines):
         fail("missing_evidence", details={"evidenceIds": [evidence.id]})
     excerpt = "\n".join(lines[start - 1:end])
@@ -93,11 +122,11 @@ def evidence_excerpt(db, evidence):
     return excerpt
 
 
-def readable_evidence(db, row, include_excerpt=False):
+def readable_evidence(db, row, include_excerpt=False, *, version_cache=None):
     result, excerpt = evidence_data(row), None
     if row.availability == "available":
         try:
-            excerpt = evidence_excerpt(db, row)
+            excerpt = evidence_excerpt(db, row, version_cache=version_cache)
         except HTTPException as exc:
             if exc.detail["code"] != "missing_evidence":
                 raise
@@ -112,11 +141,16 @@ def validate_evidence(db, revision, reviewed_ids):
         fail("invalid_input", details={"fields": ["reviewedEvidenceIds"]})
     source = available_version(db, revision.repository_id, revision.source)
     target = available_version(db, revision.repository_id, revision.target)
+    version_cache = {
+        source.id: (source, source.content.splitlines()),
+        target.id: (target, target.content.splitlines()),
+    }
+    evidence_map = load_scoped_map(db, Evidence, reviewed_ids, revision.repository_id)
     for evidence_id in reviewed_ids:
-        evidence = scoped(db, Evidence, evidence_id, revision.repository_id)
+        evidence = evidence_map[evidence_id]
         if evidence.artifact_version_id not in {source.id, target.id}:
             fail("invalid_input", details={"fields": ["reviewedEvidenceIds"]})
-        evidence_excerpt(db, evidence)
+        evidence_excerpt(db, evidence, version_cache=version_cache)
 
 
 def append_event(db, context, actor, event_type, reason, payload):
@@ -124,7 +158,7 @@ def append_event(db, context, actor, event_type, reason, payload):
     event = ReviewEvent(repository_id=context.repository_id, context_id=context.id,
                         assertion_revision_id=context.assertion_revision_id,
                         actor_id=actor.id, recorded_at=utc(), sequence=previous + 1,
-                        type=event_type, reason=reason, payload=payload)
+                        type=event_type, reason="" if reason is None else reason, payload=payload)
     db.add(event)
     db.flush()
     return event
@@ -351,13 +385,14 @@ def history(db, repository_id, view_id, context_id, cursor, page_size):
             fail("invalid_input", details={"fields": ["cursor"]})
         high_water, after = page.high_water, page.after_sequence
     else:
-        high_water = db.scalar(select(func.max(ReviewEvent.sequence)).where(ReviewEvent.context_id == context_id)) or 0
         from .pipeline_models import ReviewViewBinding, Snapshot
         binding = db.get(ReviewViewBinding, view_id)
         if binding:
             retained = db.get(Snapshot, binding.snapshot_id)
             item = next(row for row in retained.document["assertions"] if row["projection"]["contextId"] == context_id)
             high_water = item["historySequence"]
+        else:
+            high_water = db.scalar(select(func.max(ReviewEvent.sequence)).where(ReviewEvent.context_id == context_id)) or 0
         after = 0
     events = list(db.scalars(select(ReviewEvent).where(ReviewEvent.context_id == context_id,
                   ReviewEvent.sequence > after, ReviewEvent.sequence <= high_water)

@@ -97,24 +97,34 @@ def publish_capture(db, operation, selection, sources):
                                    "contentSha256": source.digest} for source in sources]
     db.add(Activity(id=operation.id, repository_id=selection.repository_id, document=activity))
     db.flush()
+    staged_artifacts, staged_versions, artifact_entries = {}, {}, []
     for source in sources:
         artifact_id = stable(selection.repository_id, "artifact", source.path)
         version_id = stable(artifact_id, source.commit, source.blob)
-        if not db.get(Artifact, artifact_id):
-            db.add(Artifact(id=artifact_id, repository_id=selection.repository_id, kind=source.kind, path=source.path))
-            db.flush()
-        version = db.get(ArtifactVersion, version_id)
-        if version is None:
-            version = ArtifactVersion(id=version_id, artifact_id=artifact_id, repository_id=selection.repository_id,
-                identity={"kind": "file", "repositoryId": selection.repository_id, "path": source.path,
-                          "commit": {"objectAlgorithm": "sha1", "commitId": source.commit}, "blobId": source.blob,
-                          "format": source.format, "provenance": activity}, content=source.text, digest=source.digest)
-            db.add(version)
-            db.flush()
-        elif version.digest != source.digest or version.content != source.text:
+        staged_artifacts[artifact_id] = Artifact(id=artifact_id, repository_id=selection.repository_id, kind=source.kind, path=source.path)
+        staged_versions[version_id] = (source, ArtifactVersion(id=version_id, artifact_id=artifact_id, repository_id=selection.repository_id,
+            identity={"kind": "file", "repositoryId": selection.repository_id, "path": source.path,
+                      "commit": {"objectAlgorithm": "sha1", "commitId": source.commit}, "blobId": source.blob,
+                      "format": source.format, "provenance": activity}, content=source.text, digest=source.digest))
+        artifact_entries.append((source, artifact_id, version_id))
+    existing_artifacts = set(db.scalars(select(Artifact.id).where(Artifact.id.in_(staged_artifacts)))) if staged_artifacts else set()
+    db.add_all([row for identity, row in staged_artifacts.items() if identity not in existing_artifacts])
+    db.flush()
+    existing_versions = {row.id: row for row in db.scalars(select(ArtifactVersion).where(ArtifactVersion.id.in_(staged_versions)))} if staged_versions else {}
+    new_versions = []
+    for version_id, (source, staged_version) in staged_versions.items():
+        prior = existing_versions.get(version_id)
+        if prior is None:
+            new_versions.append(staged_version)
+        elif prior.digest != source.digest or prior.content != source.text:
             raise AcquisitionError("Retained version identity conflicts with source")
-        if not db.get(SelectionArtifact, (selection.id, artifact_id)):
-            db.add(SelectionArtifact(selection_id=selection.id, artifact_id=artifact_id, version_id=version_id))
+    if new_versions:
+        db.add_all(new_versions)
+        db.flush()
+    existing_links = set(db.scalars(select(SelectionArtifact.artifact_id).where(SelectionArtifact.selection_id == selection.id)))
+    db.add_all([SelectionArtifact(selection_id=selection.id, artifact_id=artifact_id, version_id=version_id)
+                for _, artifact_id, version_id in artifact_entries if artifact_id not in existing_links])
+    for source, artifact_id, version_id in artifact_entries:
         result.append({"path": source.path, "artifactId": artifact_id, "artifactVersionId": version_id,
                        "outcome": "captured", "coverage": [{"function": "ingestion", "status": "complete", "eligibleCount": 1,
                        "processedCount": 1, "excludedCount": 0, "limitations": []}], "provenance": activity, "reason": None})

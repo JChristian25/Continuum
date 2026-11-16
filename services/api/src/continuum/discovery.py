@@ -72,32 +72,73 @@ def load_profile(path, acceptance_path, manifest_digest, *, root=WORKSPACE):
     return profile, sha256(raw)
 
 
-def tokens(value, profile):
+WORD_PATTERN = re.compile(r"[A-Za-z0-9]+")
+
+
+@dataclass(frozen=True)
+class _TokenRules:
+    acronym_re: re.Pattern[str]
+    camel_re: re.Pattern[str]
+    minimum_length: int
+    stop_words: frozenset[str]
+    reserved_words: frozenset[str]
+
+
+def _compile_rules(profile):
     rule = profile["tokenization"]
-    value = re.sub(rule["splitAcronymBoundaryRegex"], r"\1 \2", value)
-    value = re.sub(rule["splitLowerToUpperBoundaryRegex"], r"\1 \2", value)
-    stop = set(rule["stopWords"])
-    return {part.lower() for part in re.findall(r"[A-Za-z0-9]+", value)
-            if len(part) >= rule["minimumLength"] and part.lower() not in stop}
+    return _TokenRules(
+        acronym_re=re.compile(rule["splitAcronymBoundaryRegex"]),
+        camel_re=re.compile(rule["splitLowerToUpperBoundaryRegex"]),
+        minimum_length=rule["minimumLength"],
+        stop_words=frozenset(rule["stopWords"]),
+        reserved_words=frozenset(rule["pythonReservedWords"]),
+    )
 
 
-def code_index(source, profile, expired=lambda: False):
+def _extract_tokens(value, rules):
+    value = rules.acronym_re.sub(r"\1 \2", value)
+    value = rules.camel_re.sub(r"\1 \2", value)
+    return {part.lower() for part in WORD_PATTERN.findall(value)
+            if len(part) >= rules.minimum_length and part.lower() not in rules.stop_words}
+
+
+def tokens(value, profile):
+    return _extract_tokens(value, _compile_rules(profile))
+
+
+def code_index(source, profile, expired=lambda: False, *, _rules=None):
+    rules = _rules or _compile_rules(profile)
     index = {}
-    reserved = set(profile["tokenization"]["pythonReservedWords"])
     for item in tokenize.generate_tokens(io.StringIO(source.text).readline):
         if expired():
             raise TimeoutError("Identifier indexing reached maximumAttemptSeconds")
-        if item.type != tokenize.NAME or item.string in reserved:
+        if item.type != tokenize.NAME or item.string in rules.reserved_words:
             continue
-        for token in tokens(item.string, profile):
+        for token in _extract_tokens(item.string, rules):
             index.setdefault(token, {"kind": "lines", "startLine": item.start[0], "endLine": item.end[0]})
-    for token in tokens(PurePosixPath(source.path).stem, profile):
+    for token in _extract_tokens(PurePosixPath(source.path).stem, rules):
         index.setdefault(token, {"kind": "field", "fieldPath": "identity.path"})
     return index
 
 
+def _reference_for_lines(source, lines, locator):
+    if locator["kind"] == "lines":
+        excerpt = "\n".join(lines[locator["startLine"] - 1:locator["endLine"]])
+    else:
+        excerpt = source.path
+    return {"path": source.path, "commitId": source.commit, "blobId": source.blob,
+            "contentSha256": source.digest, "locator": locator, "excerptSha256": sha256(excerpt.encode("utf-8"))}
+
+
+def _locator_key(locator):
+    if locator["kind"] == "lines":
+        return ("lines", locator["startLine"], locator["endLine"])
+    return ("field", locator.get("fieldPath"))
+
+
 def discover(sources, profile, profile_digest, manifest_digest, *, clock=time.monotonic, heartbeat=lambda: True):
     limits, started = profile["limits"], clock()
+    rules = _compile_rules(profile)
     require(len(sources) <= limits["maximumPaths"], "Discovery input exceeds the declared path limit")
     require(len({source.path for source in sources}) == len(sources), "Duplicate source path")
     require(len({source.commit for source in sources}) <= 1, "Discovery cannot mix selected revisions")
@@ -106,7 +147,7 @@ def discover(sources, profile, profile_digest, manifest_digest, *, clock=time.mo
     require(sum(unique.values()) <= limits["maximumUniqueInputBytes"], "Discovery input byte limit exceeded")
     code = {source.path: source for source in sources if source.kind == "code"}
     documents = sorted((source for source in sources if source.kind == "document"), key=lambda source: source.path)
-    indexes, outcomes, candidates, unresolved, limitations = {}, [], {}, [], set(profile["limitations"])
+    indexes, outcomes, candidates, seen_evidence, unresolved, limitations = {}, [], {}, {}, [], set(profile["limitations"])
     complete = True
 
     def expired():
@@ -115,7 +156,7 @@ def discover(sources, profile, profile_digest, manifest_digest, *, clock=time.mo
 
     for path, source in sorted(code.items()):
         try:
-            indexes[path] = code_index(source, profile, expired)
+            indexes[path] = code_index(source, profile, expired, _rules=rules)
             outcomes.append({"path": path, "function": "code_identifier_index", "status": "complete"})
         except (tokenize.TokenError, IndentationError, SyntaxError):
             complete = False
@@ -126,7 +167,22 @@ def discover(sources, profile, profile_digest, manifest_digest, *, clock=time.mo
             limitations.add("maximumAttemptSeconds reached during identifier indexing.")
             outcomes.append({"path": path, "function": "code_identifier_index", "status": "partial"})
 
-    def evidence(document, line, target, rule, token=None, locator=None):
+    token_targets = {}
+    for path in sorted(indexes):
+        for token, locator in indexes[path].items():
+            token_targets.setdefault(token, []).append((path, locator))
+    code_lines = {path: src.text.splitlines() for path, src in code.items()}
+    code_refs = {}
+
+    def get_code_ref(target, locator):
+        key = (target.path, _locator_key(locator))
+        ref = code_refs.get(key)
+        if ref is None:
+            ref = _reference_for_lines(target, code_lines[target.path], locator)
+            code_refs[key] = ref
+        return ref
+
+    def evidence(document, doc_ref_cache, doc_lines, line, target, rule, token=None, locator=None):
         nonlocal complete
         pair = (document.path, target.path)
         if pair not in candidates:
@@ -137,19 +193,28 @@ def discover(sources, profile, profile_digest, manifest_digest, *, clock=time.mo
             candidates[pair] = {"type": "documents", "sourcePath": document.path, "targetPath": target.path,
                 "sourceBlobId": document.blob, "targetBlobId": target.blob, "commitId": document.commit,
                 "origin": "automatic", "validity": "candidate", "methodId": profile["methodId"], "evidence": []}
+            seen_evidence[pair] = set()
+        resolved_locator = locator or {"kind": "field", "fieldPath": "identity.path"}
+        dedup_key = (rule, token, line, _locator_key(resolved_locator))
+        seen = seen_evidence[pair]
+        if dedup_key in seen:
+            return
         retained = candidates[pair]["evidence"]
-        item = {"rule": rule, "token": token,
-                "document": document.reference({"kind": "lines", "startLine": line, "endLine": line}),
-                "code": target.reference(locator or {"kind": "field", "fieldPath": "identity.path"})}
-        if item not in retained:
-            if len(retained) >= limits["maximumEvidenceItemsPerCandidate"]:
-                complete = False
-                limitations.add("maximumEvidenceItemsPerCandidate reached; evidence aggregation is incomplete.")
-            else:
-                retained.append(item)
+        if len(retained) >= limits["maximumEvidenceItemsPerCandidate"]:
+            complete = False
+            limitations.add("maximumEvidenceItemsPerCandidate reached; evidence aggregation is incomplete.")
+            return
+        doc_ref = doc_ref_cache.get(line)
+        if doc_ref is None:
+            doc_ref = _reference_for_lines(document, doc_lines, {"kind": "lines", "startLine": line, "endLine": line})
+            doc_ref_cache[line] = doc_ref
+        seen.add(dedup_key)
+        retained.append({"rule": rule, "token": token, "document": doc_ref,
+                         "code": get_code_ref(target, resolved_locator)})
 
     for document in documents:
         lines = document.text.splitlines()
+        doc_ref_cache = {}
         document_complete = True
         if len(lines) > limits["maximumDocumentLinesPerFile"]:
             complete = document_complete = False
@@ -166,11 +231,11 @@ def discover(sources, profile, profile_digest, manifest_digest, *, clock=time.mo
                     unresolved.append({"documentPath": document.path, "line": number, "referencedPath": path,
                                        "reason": "Repository-relative path does not resolve in the selected code inventory."})
                 else:
-                    evidence(document, number, target, "explicit_path")
-            line_tokens = tokens(line, profile)
-            for path, index in sorted(indexes.items()):
-                for token in sorted(line_tokens.intersection(index)):
-                    evidence(document, number, code[path], "lexical", token, index[token])
+                    evidence(document, doc_ref_cache, lines, number, target, "explicit_path")
+            line_tokens = _extract_tokens(line, rules)
+            for token in sorted(line_tokens & token_targets.keys()):
+                for path, locator in token_targets[token]:
+                    evidence(document, doc_ref_cache, lines, number, code[path], "lexical", token, locator)
         outcomes.append({"path": document.path, "function": "document_line_scan", "status": "complete" if document_complete else "partial"})
     for candidate in candidates.values():
         candidate["evidence"].sort(key=lambda item: (item["document"]["locator"]["startLine"], item["rule"], item["token"] or "",

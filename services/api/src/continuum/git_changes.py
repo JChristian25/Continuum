@@ -8,6 +8,15 @@ from .acquisition import WORKSPACE
 from .security import fail
 
 
+from functools import lru_cache
+
+
+@lru_cache(maxsize=4)
+def _git_version(executable):
+    env = {"PATH": os.environ.get("PATH", ""), "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": os.devnull, "GIT_TERMINAL_PROMPT": "0"}
+    return subprocess.run([executable, "--version"], env=env, capture_output=True, timeout=5, check=True).stdout.decode().strip()
+
+
 def compare_files(before, after):
     executable = shutil.which("git")
     if not executable:
@@ -42,7 +51,7 @@ def compare_files(before, after):
                 root = roots[1] if kind == "A" else roots[0]
                 relative = Path(name).relative_to(root).as_posix()
                 changes.append({"path": relative, "kind": {"A": "added", "D": "deleted", "M": "modified", "T": "modified"}[kind]})
-        version = subprocess.run([executable, "--version"], env=env, capture_output=True, timeout=5, check=True).stdout.decode().strip()
+        version = _git_version(executable)
         return sorted(changes, key=lambda row: row["path"]), {"technology": "Git", "version": version, "mode": "diff --no-index --no-renames", "scope": "retained accepted file bytes"}
     except (OSError, subprocess.SubprocessError, UnicodeError, ValueError):
         fail("change_detection_unavailable", 503)

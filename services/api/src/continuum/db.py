@@ -3,6 +3,8 @@ from sqlalchemy.orm import sessionmaker
 
 
 def make_engine(url, **kwargs):
+    kwargs.setdefault("pool_size", 10)
+    kwargs.setdefault("max_overflow", 20)
     engine = create_engine(url, pool_pre_ping=True, **kwargs)
 
     @event.listens_for(engine, "connect")

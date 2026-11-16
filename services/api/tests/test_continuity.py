@@ -167,6 +167,12 @@ def test_guided_continuity_keeps_prior_reason_and_authority(captured):
     incoming,_,receipt=compare(captured,base,target,target_snapshot)
     selected=ask(captured,captured['headers'],'select_context',receipt['result']['selection'])
     stale=next(r for r in incoming['assertions'] if r['projection']['validity']=='stale')
+    impact=next(i for i in incoming['comparison']['impacts'] if i['contextId']==stale['projection']['contextId'])
+    assert impact['priorDecision']['validity']=='confirmed' and impact['priorDecision']['decision']=='confirm'
+    assert impact['priorDecision']['reason']=='Synthetic guided-task baseline reason.'
+    stale_view=ask(captured,captured['headers'],'open_review_view',{'repositoryViewId':selected['repositoryViewId'],'snapshotId':incoming['snapshot']['id'],'contextId':stale['projection']['contextId']})
+    stale_detail=captured['client'].get(f"/api/v1/repositories/repo/contexts/{stale['projection']['contextId']}",params={'viewId':stale_view['viewId']}).json()
+    assert stale_detail['priorDecision']['reason']=='Synthetic guided-task baseline reason.'
     decision='reconfirm' if all(e['availability']=='available' for e in stale['evidence']) else 'retire'
     judge(receipt['result']['selection'],selected['repositoryViewId'],incoming['snapshot'],stale,decision,'Synthetic incoming review reason; not a practitioner assessment.')
     prior=ask(captured,captured['headers'],'read_assertion',{'snapshotId':base['id'],'contextId':row['projection']['contextId'],'assertionRevisionId':row['assertion']['id'],'historical':True})

@@ -5,7 +5,7 @@ from pydantic import Field
 from sqlalchemy import select
 from .models import ArtifactVersion, ReviewEvent, ReviewContext, View
 from .pipeline_models import ResultPage, ReviewViewBinding, Selection, Snapshot
-from .review import scoped
+from .review import load_scoped_map, scoped
 from .schemas import Strict, Id
 from .relations import RelationType
 from .security import digest, fail
@@ -68,24 +68,31 @@ def search(db, repository, data):
     def build(snapshot):
         text, hits = data.text.casefold(), []
         # Only history at this retained snapshot's high-water marks is eligible.
-        reasons = {}
+        high_water_by_ctx = {}
+        endpoints_by_ctx = {}
         for item in snapshot.document['assertions']:
-            projection, assertion = item['projection'], item['assertion']
-            for event in db.scalars(select(ReviewEvent).where(ReviewEvent.context_id == projection['contextId'], ReviewEvent.sequence <= item['historySequence']).order_by(ReviewEvent.sequence)):
-                if event.reason and text in event.reason.casefold():
-                    for endpoint in [assertion['source'], assertion['target']]:
-                        reasons.setdefault(endpoint['artifactId'], []).append({'field': 'rationale', 'locator': None,
-                            'excerpt': event.reason[:500], 'eventId': event.id, 'contextId': projection['contextId']})
-        for row in sorted(snapshot.document['artifacts'], key=lambda a: (a['artifactId'], a['versionId'])):
-            if row['kind'] not in data.kinds:
-                continue
-            version = scoped(db, ArtifactVersion, row['versionId'], repository.id)
+            proj, assertion = item['projection'], item['assertion']
+            cid = proj['contextId']
+            if item['historySequence'] > 0:
+                high_water_by_ctx[cid] = item['historySequence']
+                endpoints_by_ctx[cid] = [assertion['source']['artifactId'], assertion['target']['artifactId']]
+        reasons = {}
+        if high_water_by_ctx:
+            for event in db.scalars(select(ReviewEvent).where(ReviewEvent.context_id.in_(high_water_by_ctx)).order_by(ReviewEvent.context_id, ReviewEvent.sequence)):
+                if event.sequence <= high_water_by_ctx[event.context_id] and event.reason and text in event.reason.casefold():
+                    match = {'field': 'rationale', 'locator': None, 'excerpt': event.reason[:500], 'eventId': event.id, 'contextId': event.context_id}
+                    for artifact_id in endpoints_by_ctx[event.context_id]:
+                        reasons.setdefault(artifact_id, []).append(match)
+        candidate_artifacts = [row for row in sorted(snapshot.document['artifacts'], key=lambda a: (a['artifactId'], a['versionId'])) if row['kind'] in data.kinds]
+        versions_by_id = load_scoped_map(db, ArtifactVersion, [row['versionId'] for row in candidate_artifacts], repository.id)
+        for row in candidate_artifacts:
+            version = versions_by_id[row['versionId']]
             readable = digest(version.content) == version.digest
             matches = list(reasons.get(row['artifactId'], []))
             for field, value in [('path', row['path']), ('title', row['identity'].get('title', ''))]:
                 if text in value.casefold():
                     matches.append({'field': field, 'locator': {'kind': 'field', 'fieldPath': field}, 'excerpt': value[:500]})
-            if readable:
+            if readable and len(matches) < 20:
                 for line, value in enumerate(version.content.splitlines(), 1):
                     if text in value.casefold():
                         matches.append({'field': 'content', 'locator': {'kind': 'lines', 'startLine': line, 'endLine': line}, 'excerpt': value[:500]})
