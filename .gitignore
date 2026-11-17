@@ -53,4 +53,5 @@ playwright-report/
 /outputs/
 /graphify-out/
 /inputs/healthchecks/
+/inputs/custom/
 /apps/web/continuum_original_backup.html
