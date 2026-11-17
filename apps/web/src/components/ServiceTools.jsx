@@ -1,8 +1,14 @@
-import { useEffect, useState, lazy, Suspense } from 'react';
-import { FileText, ChevronRight, Search, ArrowLeft, Download, CheckCircle2, Network, Plus, X, Printer, FileDown } from 'lucide-react';
+import { useEffect, useMemo, useState, lazy, Suspense } from 'react';
+import {
+  FileText, ChevronRight, Search, ArrowLeft, Download, CheckCircle2, Network, Plus, X, Printer, FileDown,
+  AlertTriangle, GitCompare, Layers, Clock
+} from 'lucide-react';
+import Tooltip from './Tooltip.jsx';
 import { Button, Input, Textarea, Select, Checkbox, Dialog, DialogContent, DialogTitle, DialogDescription, Disclosure } from './ui/index.js';
+import SourceLinePicker from './SourceLinePicker.jsx';
 import { contextEnvelope, reasonLabel } from '../data/serviceModel.js';
 import { buildAuditReportMarkdown } from '../data/auditReport.js';
+import { buildImpactGraphData } from '../data/impactGraph.js';
 const TraceabilityFlow = lazy(() => import('./TraceabilityFlow.jsx'));
 const relationKinds = { documents: ['document', 'code'], implements: ['code', 'requirement'], motivates: ['decision', 'code'] };
 const relationLabels = { documents: 'Document describes code', implements: 'Code implements requirement', motivates: 'Decision motivates code' };
@@ -13,12 +19,19 @@ export function RelationshipEditor({ ctx, correction = false, successor = false 
   const current = ctx.formDrafts[key] || { type: correction || successor ? ctx.detail.assertion.type : 'documents', source: correction || successor ? ctx.detail.assertion.source.artifactId : '', target: correction || successor ? ctx.detail.assertion.target.artifactId : '', reason: '', anchor: 'source', start: 1, end: 1, newAnchor: false };
   const change = patch => ctx.saveFormDraft(key, { ...current, ...patch });
   const [message, setMessage] = useState('');
+  const isOpen = open || (!correction && !successor && Boolean(ctx.relationshipSeed));
+  const closeDialog = () => {
+    setOpen(false);
+    if (!correction && !successor && ctx.relationshipSeed) ctx.setRelationshipSeed(null);
+  };
+
   const sourceItems = ctx.workspace.artifacts.filter(a => a.kind === relationKinds[current.type][0]);
   const targetItems = ctx.workspace.artifacts.filter(a => a.kind === relationKinds[current.type][1]);
   const source = sourceItems.find(a => a.artifactId === current.source) || sourceItems[0];
   const target = targetItems.find(a => a.artifactId === current.target) || targetItems[0];
   const eligible = ctx.canWrite && !ctx.busy && ctx.workspace.mode === 'active' && (!correction || ctx.detail.mode === 'active');
   const title = correction ? 'Correct this relationship' : successor ? 'Propose an unconfirmed successor' : 'Add a relationship';
+  const anchoredArtifact = current.anchor === 'source' ? source : target;
 
   const formContent = <form className="journey-form" onSubmit={async event => {
     event.preventDefault(); setMessage(''); if (!source || !target) return;
@@ -28,7 +41,7 @@ export function RelationshipEditor({ ctx, correction = false, successor = false 
     const saved = await ctx.submit(contextEnvelope(ctx.selection, correction ? ctx.detail : { viewId: ctx.repositoryViewId }, correction ? 'correct_assertion' : 'capture_candidate', input), key);
     if (saved) {
       setMessage('Saved as an unconfirmed claim. A separate judgment is required.');
-      if (!correction && !successor) setOpen(false);
+      if (!correction && !successor) closeDialog();
     }
   }}>
     <label>Relationship meaning<Select value={current.type} disabled={!eligible} onChange={e => change({ type: e.target.value, source: '', target: '' })}>{Object.keys(relationKinds).map(type => <option value={type} key={type}>{relationLabels[type]}</option>)}</Select></label>
@@ -36,11 +49,19 @@ export function RelationshipEditor({ ctx, correction = false, successor = false 
     <label>Target artifact<Select value={target?.artifactId ?? ''} disabled={!eligible || !target} onChange={e => change({ target: e.target.value })}>{targetItems.map(a => <option key={a.artifactId} value={a.artifactId}>{a.identity.title || a.path}</option>)}</Select></label>
     {!source || !target ? <p className="inline-notice">Capture the required artifact kinds before adding this relationship.</p> : null}
     {correction && <label className="service-checkbox"><Checkbox checked={current.newAnchor} onChange={e => change({newAnchor:e.target.checked})} />Replace evidence with new line anchors</label>}
-    {(!correction || current.newAnchor) && <><label>Evidence from<Select value={current.anchor} disabled={!eligible} onChange={e => change({ anchor: e.target.value })}><option value="source">Source artifact</option><option value="target">Target artifact</option></Select></label>{(() => {
-      const anchored = current.anchor === 'source' ? source : target;
-      const loadedSource = anchored ? ctx.detail?.sources?.find(s => s.id === anchored.versionId) : null;
-      return anchored ? <>{loadedSource ? <Disclosure trigger={`Preview ${anchored.path} lines`} variant="subtle" className="service-line-preview"><div className="service-line-preview__body">{loadedSource.content.split('\n').slice(0, 80).map((line, i) => <div key={i} className="service-line-preview__row"><span>{i + 1}</span><code>{line || ' '}</code></div>)}</div></Disclosure> : <small className="service-id">Anchoring on {anchored.path}</small>}</> : null;
-    })()}<div className="service-evidence-range"><label>Start line<Input type="number" min="1" required value={current.start} onChange={e => change({ start: e.target.value })} /></label><label>End line<Input type="number" min={current.start} required value={current.end} onChange={e => change({ end: e.target.value })} /></label></div></>}
+    {(!correction || current.newAnchor) && <>
+      <label>Evidence from<Select value={current.anchor} disabled={!eligible} onChange={e => change({ anchor: e.target.value, start: 1, end: 1 })}><option value="source">Source artifact</option><option value="target">Target artifact</option></Select></label>
+      <SourceLinePicker
+        ctx={ctx}
+        repositoryId={ctx.selection.repositoryId}
+        artifact={anchoredArtifact}
+        startLine={current.start}
+        endLine={current.end}
+        disabled={!eligible}
+        defaultOpen={true}
+        onChangeRange={(start, end) => change({ start, end })}
+      />
+    </>}
     {correction && !current.newAnchor && <p>Correction retains the displayed evidence references. Both replacement endpoints must be compatible with that exact evidence. Select Replace evidence to supply new exact line anchors.</p>}
     <label>{correction ? 'Correction reason' : 'Relationship reason'}<Textarea required maxLength={4000} value={current.reason} disabled={!eligible} onChange={e => change({ reason: e.target.value })} /></label>
     <Button type="submit" disabled={!eligible || !source || !target || !current.reason.trim()}>{correction ? 'Save correction for review' : 'Save candidate relationship'}</Button>{message && <p role="status">{message}</p>}
@@ -52,9 +73,9 @@ export function RelationshipEditor({ ctx, correction = false, successor = false 
 
   return <>
     <Button variant="secondary" size="sm" onClick={() => { setMessage(''); setOpen(true); }}><Plus size={14} />{title}</Button>
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={isOpen} onOpenChange={next => { if (!next) closeDialog(); else setOpen(true); }}>
       <DialogContent className="service-dialog" padded={false} showClose={false} aria-labelledby="add-relationship-title" aria-describedby="add-relationship-desc">
-        <Button variant="unstyled" className="btn service-dialog-close" onClick={() => setOpen(false)} aria-label="Close relationship dialog"><X size={18} /></Button>
+        <Button variant="unstyled" className="btn service-dialog-close" onClick={closeDialog} aria-label="Close relationship dialog"><X size={18} /></Button>
         <DialogTitle id="add-relationship-title">{title}</DialogTitle>
         <DialogDescription id="add-relationship-desc">Propose an explicit typed relationship anchored to captured source lines. New claims enter as unconfirmed candidates.</DialogDescription>
         {formContent}
@@ -99,36 +120,105 @@ export function ServiceSearch({ ctx }) {
 }
 
 export function ServiceGraph({ ctx }) {
-  const [root, setRoot] = useState(null); const [result, setResult] = useState(null); const [error, setError] = useState(''); const [loading, setLoading] = useState(false);
+  const [root, setRoot] = useState(null);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [graphScope, setGraphScope] = useState('all');
+
   useEffect(() => {
     if (!root) return;
     const abort = new AbortController();
     ctx.api.query(ctx.selection.repositoryId, 'read_graph', { snapshotId: ctx.workspace.snapshot.id, rootArtifactId: root, relationTypes: ['documents','implements','motivates'], direction: 'both', depth: 1, pageSize: 100 }, abort.signal).then(setResult).catch(e => { if(e.name !== 'AbortError') setError(e.message); });
     return () => abort.abort();
   }, [root, ctx.api, ctx.selection.repositoryId, ctx.workspace.snapshot.id]);
+
+  const impact = useMemo(
+    () => buildImpactGraphData(ctx.workspace, ctx.rows),
+    [ctx.workspace, ctx.rows]
+  );
+
   const currentVersion = new Map(ctx.workspace.artifacts.map(a => [a.artifactId, a.versionId]));
+  const supersededIds = new Set(ctx.rows.filter(r => r.projection.resolution === 'superseded').map(r => r.id));
   const unresolvedRows = ctx.rows.filter(r => [r.assertion.source, r.assertion.target].some(e => e.availability !== 'available' || currentVersion.get(e.artifactId) !== e.versionId));
-  const edges = root && result ? result.edges.map(e => ({ id:e.contextId, from:e.sourceArtifactId, to:e.targetArtifactId, label:`${e.type} · ${e.validity}`, kind:e.validity })) : ctx.rows.filter(r => !unresolvedRows.includes(r)).map(r => ({ id:r.id, from:r.assertion.source.artifactId, to:r.assertion.target.artifactId, label:`${r.assertion.type} · ${r.projection.validity}`, kind:r.projection.validity }));
-  const nodes = ctx.workspace.artifacts.filter(a => !root || !result || result.nodes.some(n => n.artifactId === a.artifactId) || a.artifactId === root);
+  const allEdges = root && result
+    ? result.edges
+        .filter(e => !supersededIds.has(e.contextId))
+        .map(e => ({
+          id: e.contextId,
+          from: e.sourceArtifactId,
+          to: e.targetArtifactId,
+          label: `${e.type} · ${e.validity}`,
+          kind: e.validity,
+          impacted: impact.impactedContextIds.has(e.contextId) || e.validity === 'stale',
+        }))
+    : ctx.rows
+        .filter(r => r.projection.resolution !== 'superseded' && !unresolvedRows.includes(r))
+        .map(r => ({
+        id: r.id,
+        from: r.assertion.source.artifactId,
+        to: r.assertion.target.artifactId,
+        label: `${r.assertion.type} · ${r.projection.validity}`,
+        kind: r.projection.validity,
+        impacted: impact.impactedContextIds.has(r.id) || r.projection.validity === 'stale',
+      }));
+
+  const allNodes = ctx.workspace.artifacts.filter(a => !root || !result || result.nodes.some(n => n.artifactId === a.artifactId) || a.artifactId === root);
+  const impactOnly = !root && graphScope === 'impact' && impact.hasImpact;
+  const nodes = impactOnly ? allNodes.filter(a => impact.affectedIds.has(a.artifactId)) : allNodes;
+  const edges = impactOnly ? allEdges.filter(e => impact.affectedIds.has(e.from) && impact.affectedIds.has(e.to)) : allEdges;
+
   const rootArtifact = root ? ctx.workspace.artifacts.find(a => a.artifactId === root) : null;
   const kindCounts = ['code', 'document', 'requirement', 'decision'].map(k => ({ kind: k, count: nodes.filter(n => n.kind === k).length })).filter(x => x.count > 0);
+
   return <>
     <div className="service-graph-bar">
       <div className="service-graph-bar__info">
-        <Network size={16} />
+        <Network size={16} aria-hidden="true" />
         <div>
-          <strong>{rootArtifact ? `One-hop neighborhood: ${rootArtifact.identity.title || rootArtifact.path}` : 'Full snapshot relationship graph'}</strong>
-          <p className="service-explore-note">Select an edge to inspect that exact relationship. Select a node for its typed one-hop neighborhood.</p>
+          <strong>{rootArtifact ? `1-hop: ${rootArtifact.identity.title || rootArtifact.path}` : (impactOnly ? 'Change impact subgraph' : 'Full snapshot graph')}</strong>
+          <div className="service-graph-legend" aria-label="Graph legend">
+            {impact.changesByArtifactId.size > 0 && (
+              <Tooltip content="Artifact modified, added, revised, or removed in the comparison">
+                <span className="service-legend-chip is-changed"><AlertTriangle size={11} aria-hidden="true" />Changed ({impact.changesByArtifactId.size})</span>
+              </Tooltip>
+            )}
+            {impact.affectedIds.size > 0 && (
+              <Tooltip content="Downstream or upstream artifact connected to a changed node">
+                <span className="service-legend-chip is-affected"><GitCompare size={11} aria-hidden="true" />Affected ({impact.affectedIds.size})</span>
+              </Tooltip>
+            )}
+            <Tooltip content="Automated or manual proposal awaiting human decision">
+              <span className="service-legend-chip is-candidate"><Clock size={11} aria-hidden="true" />Candidate</span>
+            </Tooltip>
+            <Tooltip content="Confirmed relationship backed by inspected evidence">
+              <span className="service-legend-chip is-confirmed"><CheckCircle2 size={11} aria-hidden="true" />Confirmed</span>
+            </Tooltip>
+          </div>
         </div>
       </div>
       <div className="service-graph-bar__meta">
+        {!root && impact.hasImpact && (
+          <div className="service-view-toggle" role="group" aria-label="Graph scope">
+            <Tooltip content="Show all artifacts and links in this snapshot">
+              <button type="button" className={graphScope === 'all' ? 'is-active' : ''} onClick={() => setGraphScope('all')}>
+                <Layers size={12} aria-hidden="true" /> All ({allNodes.length})
+              </button>
+            </Tooltip>
+            <Tooltip content="Isolate changed artifacts and impacted neighbors">
+              <button type="button" className={graphScope === 'impact' ? 'is-active' : ''} onClick={() => setGraphScope('impact')}>
+                <AlertTriangle size={12} aria-hidden="true" /> Affected ({impact.affectedIds.size})
+              </button>
+            </Tooltip>
+          </div>
+        )}
         {kindCounts.map(({ kind, count }) => <span className="service-breakdown-pill" key={kind}>{count} {kind}</span>)}
         <span className="service-breakdown-pill">{edges.length} {edges.length === 1 ? 'link' : 'links'}</span>
         {root && <Button variant="secondary" size="sm" onClick={() => { setRoot(null); setResult(null); setError(''); }}><ArrowLeft size={13} />Show full snapshot</Button>}
       </div>
     </div>
     {error && <p className="inline-notice form-error" role="alert">{error}</p>}
-    <div className="service-graph"><Suspense fallback={<div className="service-graph-loading" role="status">Loading graph layout…</div>}><TraceabilityFlow compact rawNodes={nodes.map(a => ({ id:a.artifactId,title:a.identity.title || a.path.split('/').at(-1),sub:a.path,category:a.kind }))} rawEdges={edges} onSelectNode={id => { if (id !== root) { setError(''); setResult(null); setRoot(id); } }} onSelectEdge={id => ctx.selectArtifact(id)} selectedArtifactId={root} theme={ctx.theme} /></Suspense></div>
+    <div className="service-graph"><Suspense fallback={<div className="service-graph-loading" role="status">Loading graph layout…</div>}><TraceabilityFlow compact rawNodes={nodes.map(impact.enrichNode)} rawEdges={edges} onSelectNode={id => { if (id !== root) { setError(''); setResult(null); setRoot(id); } }} onSelectEdge={id => ctx.selectArtifact(id)} selectedArtifactId={root} theme={ctx.theme} /></Suspense></div>
     {result?.nextCursor && <div className="service-toolbar"><Button variant="secondary" disabled={loading} onClick={async () => {
       const cursor = result.nextCursor; setLoading(true); setError('');
       try {

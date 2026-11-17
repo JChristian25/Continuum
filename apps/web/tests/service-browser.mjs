@@ -64,6 +64,20 @@ try {
   await expect(page.locator('.service-group-card')).toHaveCount(0);
   await page.getByRole('button', { name: 'Grouped', exact: true }).click();
   await expect(page.locator('.service-group-card').first()).toBeVisible();
+  await expect(page.locator('.service-signal-badge').first()).toBeVisible();
+  await page.screenshot({ path: fileURLToPath(new URL('../../../outputs/frontend-integration/signal-triage.png', import.meta.url)), fullPage: true });
+  await page.getByRole('combobox', { name: 'Filter by signal tier' }).click();
+  await page.getByRole('option', { name: 'Low signal only', exact: true }).click();
+  const lowCount = await page.locator('.service-row').count();
+  if (lowCount < 1 || lowCount >= 19) throw new Error(`Expected 1..18 low-signal rows, got ${lowCount}`);
+  await expect(page.locator('.service-filter-disclosure')).toContainText('open links remain required before cycle completion');
+  await page.getByRole('combobox', { name: 'Filter by signal tier' }).click();
+  await page.getByRole('option', { name: 'All signals', exact: true }).click();
+  await expect(page.locator('.service-row')).toHaveCount(19);
+  await page.getByRole('button', { name: /^Select low-signal \(/ }).click();
+  await expect(page.locator('.service-batch-count')).toContainText('selected');
+  await page.getByRole('button', { name: 'Clear', exact: true }).click();
+  await expect(page.locator('.service-batch-count')).toHaveCount(0);
   await page.locator('.service-row').first().click();
   await expect(page.getByRole('heading', { name: 'Recorded evidence' })).toBeVisible();
   await expect(page.locator('.service-inspector .code-box')).toHaveCount(2);
@@ -178,6 +192,7 @@ try {
   await expect(page.locator('.service-row').first()).toBeVisible();
   await page.locator('.service-row').first().click();
   await expect(page.locator('.service-diff-box').first()).toBeVisible();
+  await page.screenshot({ path: fileURLToPath(new URL('../../../outputs/frontend-integration/change-impact-graph.png', import.meta.url)), fullPage: true });
   await page.getByRole('button', { name: 'Close inspector' }).click();
   // Typed authored records remain explicit manual claims, and revision needs new review.
   await page.getByRole('button', { name: 'Record intent', exact: true }).click();
@@ -194,6 +209,7 @@ try {
   await page.getByRole('option', { name: 'Code implements requirement' }).click();
   await page.getByRole('combobox', { name: 'Evidence from' }).click();
   await page.getByRole('option', { name: 'Target artifact', exact: true }).click();
+  await page.locator('.service-line-picker-row').first().click();
   await page.getByRole('textbox', { name: 'Relationship reason', exact: true }).fill('Synthetic manually anchored typed relationship.');
   await page.getByRole('button', { name: 'Save candidate relationship' }).click();
   await expect(page.locator('.service-row').filter({ hasText: 'Browser requirement' })).toBeVisible();
@@ -271,6 +287,110 @@ try {
   await page.getByText('Compare revisions', { exact: true }).click();
   await page.getByRole('button', { name: 'Compare and review impact' }).click();
   await expect(page.getByText(/changed paths · .* affected relationships/)).toBeVisible();
+  // Custom workspace creation, AST/Markdown outline, anchored RecordDialog, and R0->R1 diff.
+  await page.getByRole('button', { name: 'Team & governance', exact: true }).click();
+  await page.getByRole('button', { name: 'New custom workspace', exact: true }).click();
+  const wsDialog = page.getByRole('dialog', { name: 'Import or create workspace' });
+  await wsDialog.getByRole('textbox', { name: 'Workspace name', exact: true }).fill('acme/billing-demo');
+  await wsDialog.getByRole('textbox', { name: 'Relative path', exact: true }).fill('src/billing.py');
+  await wsDialog.getByRole('textbox', { name: 'File content', exact: true }).fill('class BillingService:\n    def charge_invoice(self, amount):\n        return amount * 100\n');
+  await wsDialog.getByRole('button', { name: 'Add file to bundle', exact: true }).click();
+  await wsDialog.getByRole('textbox', { name: 'Relative path', exact: true }).fill('docs/billing.md');
+  await wsDialog.getByRole('textbox', { name: 'File content', exact: true }).fill('# Billing Service\n\n`BillingService.charge_invoice` converts dollar amounts to cents.\n');
+  await wsDialog.getByRole('button', { name: 'Add file to bundle', exact: true }).click();
+  await expect(wsDialog.locator('.service-bundle-item')).toHaveCount(2);
+  await wsDialog.getByRole('button', { name: 'Create & capture workspace', exact: true }).click();
+  await expect(wsDialog).toHaveCount(0, { timeout: 40000 });
+  await expect(page.locator('.service-notice-banner')).toContainText('is captured and ready.', { timeout: 40000 });
+  await page.getByRole('button', { name: 'Code explorer', exact: true }).click();
+  await page.locator('.service-file-row').filter({ hasText: 'billing.py' }).click();
+  await expect(page.locator('.service-structure-panel')).toContainText('Python AST outline');
+  await page.locator('.service-structure-chip').filter({ hasText: 'BillingService.charge_invoice' }).click();
+  await expect(page.locator('.service-anchor-bar')).toContainText('Lines 2–3 selected');
+  await page.screenshot({ path: fileURLToPath(new URL('../../../outputs/frontend-integration/custom-workspace-ast.png', import.meta.url)), fullPage: true });
+  await page.getByRole('button', { name: 'Record intent for lines', exact: true }).click();
+  const anchoredRecord = page.getByRole('dialog', { name: 'Record intent', exact: true });
+  await expect(anchoredRecord.getByRole('combobox', { name: 'Source attachment' })).toContainText('Anchor to captured artifact');
+  await anchoredRecord.getByRole('combobox', { name: 'Kind' }).click();
+  await page.getByRole('option', { name: 'Requirement', exact: true }).click();
+  await anchoredRecord.getByRole('textbox', { name: 'Title', exact: true }).fill('Cents conversion rule');
+  await anchoredRecord.getByRole('textbox', { name: 'Content', exact: true }).fill('Invoice settlement converts dollars cleanly to integer cents.');
+  await anchoredRecord.getByRole('textbox', { name: 'Candidate link rationale', exact: true }).fill('Directly anchored to BillingService.charge_invoice lines 2-3.');
+  await anchoredRecord.getByRole('button', { name: 'Save record', exact: true }).click();
+  await expect(anchoredRecord).toHaveCount(0);
+  await expect(page.locator('.service-file-header-card')).toContainText('src/billing.py');
+  await page.getByRole('button', { name: 'Review relationships', exact: true }).click();
+  await page.locator('.service-row').filter({ hasText: 'Cents conversion rule' }).click();
+  await expect(page.getByRole('heading', { name: 'Recorded evidence' })).toBeVisible();
+  await expect(page.locator('.service-locator-pill').first()).toContainText('in BillingService.charge_invoice()');
+  await page.screenshot({ path: fileURLToPath(new URL('../../../outputs/frontend-integration/custom-inspector-ast.png', import.meta.url)), fullPage: true });
+  await page.getByRole('tab', { name: 'review', exact: true }).click();
+  await page.getByRole('radio', { name: 'confirm', exact: true }).click();
+  await page.getByLabel(/^Reason(?: \(optional\))?$/, { exact: true }).fill('Verified AST-anchored billing rule in custom workspace.');
+  await page.getByRole('checkbox', { name: 'I inspected the exact sources and recorded evidence.' }).check();
+  await page.getByRole('button', { name: 'Save judgment', exact: true }).click();
+  await expect(page.locator('.service-row').filter({ hasText: 'Cents conversion rule' })).toContainText('confirmed');
+  await page.getByRole('button', { name: 'Team & governance', exact: true }).click();
+  await page.getByRole('button', { name: 'Add revision to workspace', exact: true }).click();
+  const revDialog = page.getByRole('dialog', { name: /Add revision to acme\/billing-demo/ });
+  await revDialog.getByRole('textbox', { name: 'Relative path', exact: true }).fill('src/billing.py');
+  await revDialog.getByRole('textbox', { name: 'File content', exact: true }).fill('class BillingService:\n    def charge_invoice(self, amount):\n        if amount <= 0:\n            raise ValueError("Positive amount required")\n        return amount * 100\n');
+  await revDialog.getByRole('button', { name: 'Add file to bundle', exact: true }).click();
+  await revDialog.getByRole('textbox', { name: 'Relative path', exact: true }).fill('docs/billing.md');
+  await revDialog.getByRole('textbox', { name: 'File content', exact: true }).fill('# Billing Service\n\n`BillingService.charge_invoice` converts dollar amounts to cents.\n');
+  await revDialog.getByRole('button', { name: 'Add file to bundle', exact: true }).click();
+  await revDialog.getByRole('button', { name: 'Capture new revision', exact: true }).click();
+  await expect(revDialog).toHaveCount(0, { timeout: 40000 });
+  await expect(page.locator('.service-notice-banner')).toContainText('Revision added to', { timeout: 40000 });
+  await page.getByText('Compare revisions', { exact: true }).click();
+  await page.getByRole('button', { name: 'Compare and review impact' }).click();
+  await expect(page.getByText(/1 changed paths · .* affected relationships/)).toBeVisible({ timeout: 20000 });
+  await expect(page.locator('.service-comparison-banner')).toContainText('Cents conversion rule');
+  await page.getByRole('button', { name: 'Review relationships', exact: true }).click();
+  await expect(page.locator('.service-row').filter({ hasText: 'Cents conversion rule' })).toContainText('stale');
+  await page.locator('.service-row').filter({ hasText: 'Cents conversion rule' }).click();
+  await expect(page.locator('.service-locator-pill').first()).toContainText('Prior: in BillingService.charge_invoice()');
+  await expect(page.locator('.service-reconfirm-hint')).toBeVisible();
+  await expect(page.getByRole('radio', { name: 'reconfirm', exact: true })).toBeDisabled();
+  await page.getByRole('button', { name: 'Correct this relationship' }).click();
+  await page.getByRole('checkbox', { name: 'Replace evidence with new line anchors' }).check();
+  await expect(page.locator('.service-picker .service-structure-chip').first()).toBeVisible({ timeout: 10000 });
+  await page.locator('.service-picker .service-structure-chip').filter({ hasText: 'BillingService.charge_invoice' }).click();
+  await page.getByRole('textbox', { name: 'Correction reason', exact: true }).fill('Updated anchor to R1 BillingService.charge_invoice validation block.');
+  await page.getByRole('button', { name: 'Save correction for review', exact: true }).click();
+  const correctedBilling = page.locator('.service-row').filter({ hasText: 'Cents conversion rule' }).filter({ hasText: 'candidate' });
+  await expect(correctedBilling).toBeVisible({ timeout: 15000 });
+  await correctedBilling.click();
+  await expect(page.getByRole('heading', { name: 'Recorded evidence' })).toBeVisible();
+  await page.getByRole('tab', { name: 'review', exact: true }).click();
+  await page.getByRole('radio', { name: 'confirm', exact: true }).click();
+  await page.getByLabel(/^Reason(?: \(optional\))?$/, { exact: true }).fill('Confirmed R1 line anchors on BillingService.charge_invoice.');
+  await page.getByRole('checkbox', { name: 'I inspected the exact sources and recorded evidence.' }).check();
+  await page.getByRole('button', { name: 'Save judgment', exact: true }).click();
+  await expect(page.locator('.service-row').filter({ hasText: 'Cents conversion rule' }).filter({ hasText: 'confirmed' })).toBeVisible();
+  await page.getByRole('button', { name: 'Team & governance', exact: true }).click();
+  await page.getByRole('button', { name: 'Add revision to workspace', exact: true }).click();
+  const rev2Dialog = page.getByRole('dialog', { name: /Add revision to acme\/billing-demo/ });
+  await expect(rev2Dialog.getByRole('textbox', { name: 'Revision label', exact: true })).toHaveValue('R2');
+  await rev2Dialog.getByRole('textbox', { name: 'Relative path', exact: true }).fill('src/billing.py');
+  await rev2Dialog.getByRole('textbox', { name: 'File content', exact: true }).fill('class BillingService:\n    def charge_invoice(self, amount):\n        if amount <= 0:\n            raise ValueError("Positive amount required")\n        return int(round(amount * 100))\n');
+  await rev2Dialog.getByRole('button', { name: 'Add file to bundle', exact: true }).click();
+  await rev2Dialog.getByRole('textbox', { name: 'Relative path', exact: true }).fill('docs/billing.md');
+  await rev2Dialog.getByRole('textbox', { name: 'File content', exact: true }).fill('# Billing Service\n\n`BillingService.charge_invoice` converts dollar amounts to integer cents.\n');
+  await rev2Dialog.getByRole('button', { name: 'Add file to bundle', exact: true }).click();
+  await rev2Dialog.getByRole('button', { name: 'Capture new revision', exact: true }).click();
+  await expect(rev2Dialog).toHaveCount(0, { timeout: 40000 });
+  await expect(page.locator('.service-notice-banner')).toContainText('Revision added to', { timeout: 40000 });
+  await page.getByText('Compare revisions', { exact: true }).click();
+  const cmp2Dialog = page.getByRole('dialog', { name: 'Compare revisions' });
+  await expect(cmp2Dialog.getByRole('combobox', { name: 'Baseline' })).toContainText('Revalidated R0 → R1');
+  await cmp2Dialog.getByRole('button', { name: 'Compare and review impact' }).click();
+  await expect(page.getByText(/2 changed paths · .* affected relationships/)).toBeVisible({ timeout: 20000 });
+  await page.getByRole('button', { name: 'Review relationships', exact: true }).click();
+  await expect(page.locator('.service-row').filter({ hasText: 'Cents conversion rule' }).filter({ hasText: 'stale' })).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)) throw new Error('Custom workspace overflows mobile');
+  await page.setViewportSize({ width: 1280, height: 720 });
   await page.getByRole('button', { name: 'Account', exact: true }).click();
   await page.getByRole('button', { name: 'Sign out', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Welcome back to Continuum.' })).toBeVisible();
@@ -298,5 +418,17 @@ try {
   await expect(demo.getByLabel('Demo email', { exact: true })).toBeVisible();
   await demoContext.close();
   if (errors.length) throw new Error(errors.join('\n'));
-  console.log(JSON.stringify({ passed: true, cases: ['first-load capture and discovery', 'reason-free confirmation and rejection', 'desktop/mobile progress', 'cookie login', 'demo isolation', 'real snapshot', 'exact sources', 'durable draft', 'stale projection preserves draft', 'lost response identical retry', 'persisted judgment and history', 'typed manual requirement link', 'record revision revalidation', 'prior evidence read-only', 'server content search', 'retained historical read-only', 'file explorer', 'viewer read-only', 'logout', 'offline fails closed'], pageErrors: errors }));
+  console.log(JSON.stringify({ passed: true, cases: ['first-load capture and discovery', 'signal tier filter and select low-signal', 'reason-free confirmation and rejection', 'desktop/mobile progress', 'cookie login', 'demo isolation', 'real snapshot', 'exact sources', 'durable draft', 'stale projection preserves draft', 'lost response identical retry', 'persisted judgment and history', 'interactive SourceLinePicker', 'typed manual requirement link', 'record revision revalidation', 'prior evidence read-only', 'server content search', 'retained historical read-only', 'file explorer', 'custom workspace AST/Markdown outline', 'anchored record with candidate link', 'custom workspace R0-to-R1 comparison', 'viewer read-only', 'logout', 'offline fails closed'], pageErrors: errors }));
+} catch (err) {
+  try {
+    await page.screenshot({ path: fileURLToPath(new URL('../../../outputs/frontend-integration/failure-debug.png', import.meta.url)), fullPage: true });
+    const diag = await page.evaluate(() => ({
+      activeTag: document.activeElement?.tagName,
+      dialogs: [...document.querySelectorAll('[role="dialog"]')].map(d => d.getAttribute('aria-labelledby') || d.textContent?.slice(0, 80)),
+      headings: [...document.querySelectorAll('h1,h2')].map(h => h.textContent),
+      alerts: [...document.querySelectorAll('[role="alert"]')].map(a => a.textContent),
+    }));
+    console.error('DIAGNOSTIC:', JSON.stringify({ errors, diag }));
+  } catch { /* ignore */ }
+  throw err;
 } finally { await browser.close(); }

@@ -1,9 +1,11 @@
 """A real browser and TCP API, accepted source, isolated synthetic accounts/schema."""
 import json
 import os
+from pathlib import Path
 import shutil
 import socket
 import subprocess
+import tempfile
 from threading import Thread
 import time
 from urllib.request import urlopen
@@ -34,7 +36,16 @@ def test_real_frontend_session_snapshot_and_review(pipeline):
     assert run_operation(captured['db'], admission['result']['operationId'])
     web_port, api_port = port(), port()
     origin = f'http://127.0.0.1:{web_port}'
-    settings = Settings(str(captured['engine'].url.render_as_string(hide_password=False)), origin=origin, local_http=True)
+    custom_tmp_root = WORKSPACE / 'outputs' / 'browser-custom-tmp'
+    custom_tmp_root.mkdir(parents=True, exist_ok=True)
+    custom_dir = Path(tempfile.mkdtemp(dir=custom_tmp_root))
+    settings = Settings(
+        str(captured['engine'].url.render_as_string(hide_password=False)),
+        origin=origin,
+        local_http=True,
+        allow_custom_workspaces=True,
+        custom_inputs_root=str(custom_dir),
+    )
     app = create_app(settings, captured['engine'], worker_enabled=True)
     server = uvicorn.Server(uvicorn.Config(app, host='127.0.0.1', port=api_port, log_level='error'))
     thread = Thread(target=server.run, daemon=True)
@@ -63,8 +74,15 @@ def test_real_frontend_session_snapshot_and_review(pipeline):
             assert evidence['passed']
             (output / 'browser-result.json').write_text(json.dumps(evidence, indent=2))
             with captured['db']() as db:
-                assert db.scalar(select(func.count()).select_from(ReviewEvent).where(ReviewEvent.type == 'judgment')) == 19
+                repo_id = captured['selection']['repositoryId']
+                assert db.scalar(select(func.count()).select_from(ReviewEvent).where(ReviewEvent.type == 'judgment', ReviewEvent.repository_id == repo_id)) == 19
+                assert db.scalar(select(func.count()).select_from(ReviewEvent).where(ReviewEvent.type == 'judgment', ReviewEvent.repository_id != repo_id)) >= 1
         finally:
+            shutil.rmtree(custom_dir, ignore_errors=True)
+            try:
+                custom_tmp_root.rmdir()
+            except OSError:
+                pass
             vite.terminate()
             vite.wait(timeout=10)
             server.should_exit = True

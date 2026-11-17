@@ -6,6 +6,91 @@ export function initialServiceState() {
     revisionMode: 'R1', onboardingComplete: true, artifacts: {}, repositories: [], teamMembers: [], activeUserId: null };
 }
 
+export function allSelections(repository) {
+  if (!repository?.inputs?.length) return [];
+  const items = [];
+  for (const input of repository.inputs) {
+    const profile = input.profiles?.[0];
+    if (!profile) continue;
+    for (const revision of input.revisions || []) {
+      items.push({
+        label: revision.label,
+        isCustom: Boolean(input.isCustom),
+        selection: {
+          repositoryId: repository.id,
+          targetRevision: { objectAlgorithm: revision.objectAlgorithm, commitId: revision.commitId },
+          baseRevision: null,
+          inventoryId: input.id,
+          configurationId: profile.id,
+        },
+      });
+    }
+  }
+  return items;
+}
+
+/**
+ * Builds CompareDialog Baseline/Target options and picks the settled comparison
+ * snapshot targeting the preceding commit (e.g. revalidated R0 -> R1 before R2)
+ * when available so chained revalidations are preserved across comparisons.
+ */
+export function buildCompareOptions({ revisionChoices = [], capturedChoices = [], currentSelection = null, targetCommit = '' }) {
+  const labelByCommit = new Map(revisionChoices.map(r => [r.selection.targetRevision.commitId, r.label]));
+  const isInitCaptured = commitId =>
+    capturedChoices.some(choice => !choice.selection?.baseRevision && choice.selection?.targetRevision?.commitId === commitId)
+    || capturedChoices.some(choice => choice.selection?.targetRevision?.commitId === commitId);
+
+  const initialOptions = revisionChoices.map(r => {
+    const commitId = r.selection.targetRevision.commitId;
+    return {
+      key: `init:${commitId}`,
+      kind: 'initial',
+      commitId,
+      selection: r.selection,
+      label: `${r.label} · ${commitId.slice(0, 7)}`,
+      captured: isInitCaptured(commitId),
+    };
+  });
+
+  const comparisonOptions = [];
+  const seenComparisonSnapshots = new Set();
+  for (const choice of capturedChoices) {
+    const sel = choice?.selection;
+    if (!sel?.baseRevision || !choice.snapshotId || seenComparisonSnapshots.has(choice.snapshotId)) continue;
+    if (targetCommit && sel.targetRevision?.commitId === targetCommit) continue;
+    seenComparisonSnapshots.add(choice.snapshotId);
+    const baseLbl = labelByCommit.get(sel.baseRevision.commitId) || sel.baseRevision.commitId.slice(0, 7);
+    const tgtLbl = labelByCommit.get(sel.targetRevision.commitId) || sel.targetRevision.commitId.slice(0, 7);
+    comparisonOptions.push({
+      key: `snap:${choice.snapshotId}`,
+      kind: 'comparison',
+      snapshotId: choice.snapshotId,
+      commitId: sel.targetRevision.commitId,
+      selection: sel,
+      label: `Revalidated ${baseLbl} → ${tgtLbl} · ${sel.targetRevision.commitId.slice(0, 7)}`,
+      captured: true,
+    });
+  }
+
+  const baselineOptions = [...comparisonOptions, ...initialOptions];
+  const capturedInitials = initialOptions.filter(o => o.captured);
+  const activeCommit = currentSelection?.targetRevision?.commitId || targetCommit;
+  const currentIdx = capturedInitials.findIndex(o => o.commitId === activeCommit);
+  const prevInitial = (currentIdx > 0
+    ? capturedInitials[currentIdx - 1]
+    : capturedInitials.find(o => o.commitId !== activeCommit)) || initialOptions[0];
+
+  const comparisonForPrev = prevInitial
+    ? comparisonOptions.find(c => c.commitId === prevInitial.commitId)
+    : null;
+
+  const defaultBaseKey = currentSelection?.baseRevision
+    ? 'current'
+    : (comparisonForPrev?.key || prevInitial?.key || '');
+
+  return { baselineOptions, initialOptions, comparisonOptions, defaultBaseKey };
+}
+
 export function chooseSelection(repository, preferred) {
   const input = repository?.inputs.find(item => item.id === preferred?.inventoryId && item.profiles.length) || repository?.inputs.find(item => item.profiles.length);
   if (!input) return null;

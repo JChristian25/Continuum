@@ -138,3 +138,120 @@ export function rankEvidenceItems(evidence, sources, sourceArt, targetArt) {
 
   return { items: annotated, summary, directCount, tokenHistogram: topTokens };
 }
+
+/**
+ * Finds the narrowest structural symbol or Markdown section containing an evidence locator.
+ */
+export function findEnclosingStructureItem(structureItems, locator) {
+  if (!Array.isArray(structureItems) || !structureItems.length || locator?.kind !== 'lines') {
+    return null;
+  }
+  const start = Number(locator.startLine || 0);
+  if (!start) return null;
+  const matches = structureItems.filter(
+    item => Number(item.startLine) <= start && start <= Number(item.endLine)
+  );
+  if (!matches.length) return null;
+  matches.sort((a, b) => {
+    const spanA = (Number(a.endLine) - Number(a.startLine));
+    const spanB = (Number(b.endLine) - Number(b.startLine));
+    if (spanA !== spanB) return spanA - spanB;
+    return (Number(b.level || 0) - Number(a.level || 0));
+  });
+  const best = matches[0];
+  if (best.kind === 'section') {
+    return { ...best, label: `§ ${best.name}` };
+  }
+  if (best.kind === 'code_block') {
+    return { ...best, label: `in \`\`\`${best.name}` };
+  }
+  return { ...best, label: `in ${best.qualifiedName || best.name}()` };
+}
+
+/**
+ * Resolves the structural symbol/section label for an evidence anchor.
+ * When evidence is unresolved after a change, attributes lines to the prior
+ * version's AST/Markdown structure instead of misattributing to shifted target lines.
+ */
+export function resolveEvidenceEnclosingLabel(evidenceItem, sourceObjById, priorVersionByCurrentId) {
+  if (!evidenceItem) return null;
+  if (evidenceItem.availability === 'available') {
+    const current = sourceObjById?.get(evidenceItem.artifactVersionId);
+    const hit = findEnclosingStructureItem(current?.structure?.items, evidenceItem.locator);
+    return hit ? { ...hit, isUnresolved: false } : null;
+  }
+  const priorVersionId = priorVersionByCurrentId?.get(evidenceItem.artifactVersionId);
+  if (!priorVersionId) return null;
+  const prior = sourceObjById?.get(priorVersionId);
+  const hit = findEnclosingStructureItem(prior?.structure?.items, evidenceItem.locator);
+  return hit ? { ...hit, label: `Prior: ${hit.label}`, isUnresolved: true } : null;
+}
+
+/**
+ * Classifies a relationship candidate into high, moderate, or low signal tiers
+ * without suppressing or rewriting underlying discovery records.
+ */
+export function classifyCandidateSignal(row, allRows = []) {
+  if (!row?.assertion) {
+    return { tier: 'moderate', label: 'Moderate', reason: 'Standard relationship context', topTokens: [] };
+  }
+  const type = row.assertion.type;
+  const methodId = row.assertion.methodId;
+  const validity = row.projection?.validity;
+  const meta = row.signalMeta || null;
+  const topTokens = Array.isArray(meta?.topTokens) ? meta.topTokens : [];
+  const evidence = Array.isArray(row.evidence) ? row.evidence : [];
+  const evCount = evidence.length;
+  const hasField = evidence.some(e => e.locator?.kind === 'field');
+
+  if (type !== 'documents') {
+    return { tier: 'high', label: 'High signal', reason: `Typed authored ${type} link`, topTokens };
+  }
+  if (methodId && methodId !== 'lexical-file-v1') {
+    return { tier: 'high', label: 'High signal', reason: 'Manual or comparison-verified anchor', topTokens };
+  }
+  if (validity === 'confirmed' || validity === 'stale') {
+    return { tier: 'high', label: 'High signal', reason: 'Confirmed or impacted by revision change', topTokens };
+  }
+  if (meta?.hasExplicitPath || hasField) {
+    return { tier: 'high', label: 'High signal', reason: 'Explicit file path or filename anchor', topTokens };
+  }
+
+  if (meta && typeof meta.uniqueTokenCount === 'number') {
+    const unique = meta.uniqueTokenCount;
+    const rare = Number(meta.rareTokenCount || 0);
+    const stem = Boolean(meta.stemOverlap);
+    if ((unique >= 12 && rare >= 4) || (stem && unique >= 6)) {
+      return {
+        tier: 'high',
+        label: 'High signal',
+        reason: stem ? `Filename & ${unique} shared terms` : `${rare} specific shared terms`,
+        topTokens,
+      };
+    }
+    if ((unique >= 5 && evCount >= 8 && rare >= 2) || (unique >= 3 && allRows.length <= 6 && rare >= 1)) {
+      return {
+        tier: 'moderate',
+        label: 'Moderate',
+        reason: `${unique} shared terms (${evCount} anchors)`,
+        topTokens,
+      };
+    }
+    return {
+      tier: 'low',
+      label: 'Low signal',
+      reason: unique <= 2
+        ? `Only ${unique} generic token${unique === 1 ? '' : 's'}`
+        : `Weak lexical overlap (${evCount} anchors)`,
+      topTokens,
+    };
+  }
+
+  if (evCount >= 40) {
+    return { tier: 'high', label: 'High signal', reason: `${evCount} lexical anchors`, topTokens };
+  }
+  if (evCount >= 12) {
+    return { tier: 'moderate', label: 'Moderate', reason: `${evCount} lexical anchors`, topTokens };
+  }
+  return { tier: 'low', label: 'Low signal', reason: `Weak lexical overlap (${evCount} anchors)`, topTokens };
+}

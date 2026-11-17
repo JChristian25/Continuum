@@ -65,6 +65,10 @@ export class ContinuumApi {
   }
 
   workspace(signal) { return this.request('/workspace', { signal }); }
+  createWorkspace(payload) { return this.request('/workspaces', { body: payload }); }
+  addRevision(repositoryId, payload) {
+    return this.request(`/repositories/${encodeURIComponent(repositoryId)}/revisions`, { body: payload });
+  }
   query(repositoryId, query, input, signal) {
     return this.request('/queries', { signal, body: {
       schemaVersion: '0.1.0', requestId: crypto.randomUUID(), repositoryId, query, input,

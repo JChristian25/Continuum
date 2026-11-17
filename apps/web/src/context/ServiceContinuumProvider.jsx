@@ -29,6 +29,9 @@ export default function ServiceContinuumProvider({ children }) {
     return 'light';
   });
   const [modalOpen, setModalOpen] = useState(false);
+  const [modalSeed, setModalSeed] = useState(null);
+  const [workspaceModalMode, setWorkspaceModalMode] = useState(null); // null | 'create' | 'add_revision'
+  const [relationshipSeed, setRelationshipSeed] = useState(null);
   const [isCommandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [pending, setPending] = useState(null);
   const [storageReady, setStorageReady] = useState(false);
@@ -65,6 +68,14 @@ export default function ServiceContinuumProvider({ children }) {
     } catch (e) { if (generation === epoch.current) report(e); return null; }
     finally { if (generation === epoch.current) setBusy(false); }
   }
+  function formatRepositories(data) {
+    return (data?.repositories || []).map(r => ({
+      ...r,
+      fullName: r.inputs[0]?.repositoryFullName || r.name,
+      language: r.inputs[0]?.language || 'Repository',
+      isCustom: r.inputs.some(i => i.isCustom),
+    }));
+  }
   async function enter(actor) {
     setSession(actor);
     store.current = new DraftStore(localStorage, actor.actorId);
@@ -72,7 +83,7 @@ export default function ServiceContinuumProvider({ children }) {
     catch { drafts.current = {}; setStorageReady(false); setError('Saved drafts could not be read. Existing browser storage is preserved; writes are disabled.'); }
     const data = await api.workspace();
     setDescriptor(data);
-    const repositories = data.repositories.map(r => ({ ...r, fullName: r.inputs[0]?.repositoryFullName || r.name, language: r.inputs[0]?.language || 'Repository' }));
+    const repositories = formatRepositories(data);
     setState(s => ({ ...initialServiceState(), activeModule: s.activeModule, repositories, activeUserId: actor.actorId,
       teamMembers: [{ id: actor.actorId, name: actor.displayName, shortName: actor.displayName, initials: actor.displayName.slice(0, 2).toUpperCase(), authority: repositories[0]?.role === 'reviewer' ? 'Authorized Reviewer' : 'Read-Only Viewer' }] }));
     const chosen = chooseSelection(data.repositories[0]);
@@ -279,10 +290,163 @@ export default function ServiceContinuumProvider({ children }) {
       setBusy(false);
     }
   }
+  async function pollOperationUntilSettled(repositoryId, operationId) {
+    for (let attempt = 0; attempt < 90; attempt += 1) {
+      const op = await api.query(repositoryId, 'read_operation', { operationId });
+      if (['complete', 'partial', 'failed'].includes(op.status)) return op;
+      await new Promise(resolve => setTimeout(resolve, 250));
+    }
+    throw new Error('Background processing is still running. Refresh in a moment to inspect progress.');
+  }
+  async function createCustomWorkspace(payload, { runDiscovery = true } = {}) {
+    if (lock.current) return null;
+    lock.current = true; setBusy(true); setError(''); setNotice('');
+    try {
+      const response = await api.createWorkspace({ schemaVersion: '0.1.0', requestId: crypto.randomUUID(), ...payload });
+      const created = response.result;
+      for (const cap of created.captureOperations || []) {
+        setNotice(`Capturing ${cap.label}…`);
+        const op = await pollOperationUntilSettled(created.repositoryId, cap.operationId);
+        if (op.status === 'failed') throw new Error(op.limitations?.[0] || `Capture failed for ${cap.label}.`);
+        if (runDiscovery) {
+          setNotice(`Discovering relationships in ${cap.label}…`);
+          const disc = await api.command({
+            schemaVersion: '0.1.0',
+            requestId: crypto.randomUUID(),
+            repositoryId: created.repositoryId,
+            viewId: cap.repositoryViewId,
+            command: 'discover_candidates',
+            input: {
+              targetRevision: cap.selection.targetRevision,
+              inventoryId: cap.selection.inventoryId,
+              configurationId: cap.selection.configurationId,
+            },
+          });
+          await pollOperationUntilSettled(created.repositoryId, disc.result.operationId);
+        }
+      }
+      const nextDescriptor = await api.workspace();
+      setDescriptor(nextDescriptor);
+      const repositories = formatRepositories(nextDescriptor);
+      setState(s => ({ ...s, repositories, activeModule: 'dashboard' }));
+      await loadWorkspace(created.selection);
+      setNotice(`Workspace "${created.name}" is captured and ready.`);
+      return created;
+    } catch (e) { report(e); return null; }
+    finally { lock.current = false; setBusy(false); }
+  }
+  async function addCustomRevision(repositoryId, payload, { runDiscovery = false } = {}) {
+    if (lock.current) return null;
+    lock.current = true; setBusy(true); setError(''); setNotice('');
+    try {
+      const response = await api.addRevision(repositoryId, { schemaVersion: '0.1.0', requestId: crypto.randomUUID(), ...payload });
+      const added = response.result;
+      for (const cap of added.captureOperations || []) {
+        setNotice(`Capturing ${cap.label}…`);
+        const op = await pollOperationUntilSettled(added.repositoryId, cap.operationId);
+        if (op.status === 'failed') throw new Error(op.limitations?.[0] || `Capture failed for ${cap.label}.`);
+        if (runDiscovery) {
+          setNotice(`Discovering relationships in ${cap.label}…`);
+          const disc = await api.command({
+            schemaVersion: '0.1.0',
+            requestId: crypto.randomUUID(),
+            repositoryId: added.repositoryId,
+            viewId: cap.repositoryViewId,
+            command: 'discover_candidates',
+            input: {
+              targetRevision: cap.selection.targetRevision,
+              inventoryId: cap.selection.inventoryId,
+              configurationId: cap.selection.configurationId,
+            },
+          });
+          await pollOperationUntilSettled(added.repositoryId, disc.result.operationId);
+        }
+      }
+      const nextDescriptor = await api.workspace();
+      setDescriptor(nextDescriptor);
+      const repositories = formatRepositories(nextDescriptor);
+      setState(s => ({ ...s, repositories }));
+      await loadWorkspace(added.selection);
+      setNotice(`Revision added to "${added.name}". You can compare revisions anytime.`);
+      return added;
+    } catch (e) { report(e); return null; }
+    finally { lock.current = false; setBusy(false); }
+  }
   const activeRepository = descriptor?.repositories.find(r => r.id === state.activeRepoId);
   const canWrite = activeRepository?.role === 'reviewer' && workspace?.mode === 'active' && storageReady && !pending;
   const value = { serviceMode: true, api, session, checking, signIn, signOut, state, setState, descriptor, selection, repositoryViewId, workspace, detail, draft, updateDraft,
     rows: reviewRows(workspace), openPriorDecision, loadMoreHistory, selectNextOpen, quickReject, loadBatchEvidence, submitBatchJudgments, openSource: artifactId => { setState(s => ({ ...s, activeModule: 'files', sourceArtifactId: artifactId, inspectorOpen: false })); setCommandPaletteOpen(false); }, error, notice, busy, canWrite, pending, report, submit, saveJudgment,
+    createCustomWorkspace, addCustomRevision,
+    workspaceModalMode, openWorkspaceModal: (mode = 'create') => setWorkspaceModalMode(mode), closeWorkspaceModal: () => setWorkspaceModalMode(null),
+    relationshipSeed, setRelationshipSeed, openNewRelationshipWithSeed: seed => {
+      if (seed?.artifact && selection) {
+        const art = seed.artifact;
+        const inferredType = art.kind === 'code' ? 'implements' : art.kind === 'decision' ? 'motivates' : 'documents';
+        const anchorSide = art.kind === 'code' && inferredType === 'documents' ? 'target' : 'source';
+        const key = JSON.stringify(['relationship', 'new', selection.repositoryId, selection.targetRevision.commitId, selection.comparisonId || null]);
+        const existing = formDrafts[key] || { type: 'documents', source: '', target: '', reason: '', anchor: 'source', start: 1, end: 1, newAnchor: false };
+        const nextDraft = {
+          ...existing,
+          type: inferredType,
+          ...(anchorSide === 'source' ? { source: art.artifactId } : { target: art.artifactId }),
+          anchor: anchorSide,
+          start: seed.startLine || 1,
+          end: seed.endLine || seed.startLine || 1,
+        };
+        const nextForms = { ...formDrafts, [key]: nextDraft };
+        try { persist({ ...drafts.current, $forms: nextForms }); setFormDrafts(nextForms); } catch (e) { report(e); }
+      }
+      setRelationshipSeed(Boolean(seed));
+      setState(s => ({ ...s, activeModule: 'changes' }));
+    },
+    modalSeed, openRecordWithSeed: seed => { setModalSeed(seed || null); setModalOpen(true); },
+    submitRecordIntent: async ({ recordInput, linkSpec = null, draftKey: formDraftKey = null }) => {
+      const activeSelection = selectionRef.current || selection;
+      const activeViewId = repoViewRef.current || repositoryViewId;
+      if (!activeSelection || !activeViewId) return null;
+      const recRes = await submit(
+        contextEnvelope(activeSelection, { viewId: activeViewId }, 'capture_record', recordInput),
+        linkSpec ? null : formDraftKey
+      );
+      if (!recRes?.result?.artifactId) return null;
+      if (!linkSpec) return recRes;
+      const created = recRes.result;
+      const freshSelection = selectionRef.current || activeSelection;
+      const freshViewId = repoViewRef.current || activeViewId;
+      const isDecision = recordInput.kind === 'decision';
+      const endpoints = isDecision
+        ? {
+            type: 'motivates',
+            sourceArtifactId: created.artifactId,
+            sourceVersionId: created.artifactVersionId,
+            targetArtifactId: linkSpec.target.artifactId,
+            targetVersionId: linkSpec.target.versionId,
+          }
+        : {
+            type: 'implements',
+            sourceArtifactId: linkSpec.target.artifactId,
+            sourceVersionId: linkSpec.target.versionId,
+            targetArtifactId: created.artifactId,
+            targetVersionId: created.artifactVersionId,
+          };
+      const evidenceAnchor = linkSpec.evidenceOn === 'record'
+        ? { artifactVersionId: created.artifactVersionId, locator: { kind: 'lines', startLine: 1, endLine: 1 } }
+        : {
+            artifactVersionId: linkSpec.target.versionId,
+            locator: { kind: 'lines', startLine: Number(linkSpec.startLine || 1), endLine: Number(linkSpec.endLine || 1) },
+          };
+      const candRes = await submit(
+        contextEnvelope(freshSelection, { viewId: freshViewId }, 'capture_candidate', {
+          ...endpoints,
+          targetRevision: freshSelection.targetRevision,
+          evidence: [evidenceAnchor],
+          reason: linkSpec.reason,
+          predecessorContextId: null,
+        }),
+        formDraftKey
+      );
+      return candRes || recRes;
+    },
     retryPending: () => pending && submit(pending.envelope, pending.draftKey),
     refresh: () => selection && loadWorkspace(selection),
     retainedSnapshots, openSnapshot: async snapshotId => {
@@ -293,17 +457,22 @@ export default function ServiceContinuumProvider({ children }) {
     },
     formDrafts, saveFormDraft: (key, data) => { try { const next = { ...formDrafts, [key]: data }; persist({ ...drafts.current, $forms: next }); setFormDrafts(next); } catch (e) { report(e); } },
     operation, checkOperation: async () => {
-      try { const result = await api.query(operation.repositoryId, 'read_operation', { operationId: operation.operationId });
-        const next = { ...operation, ...result }; persist({ ...drafts.current, $operation: next }); setOperation(next);
-        if (selection?.repositoryId === operation.repositoryId) await loadWorkspace(selection);
+      if (lock.current || !operation) return;
+      const target = operation;
+      setBusy(true);
+      try { const result = await api.query(target.repositoryId, 'read_operation', { operationId: target.operationId });
+        if (drafts.current.$operation?.operationId && drafts.current.$operation.operationId !== target.operationId) return;
+        const next = { ...target, ...result }; persist({ ...drafts.current, $operation: next }); setOperation(next);
+        if (selection?.repositoryId === target.repositoryId) await loadWorkspace(selection);
       } catch (e) { report(e); }
+      finally { setBusy(false); }
     },
     changeSelection: chosen => { if (!lock.current) loadWorkspace(chosen); },
     handleSwitchRepo: id => { const chosen = chooseSelection(descriptor.repositories.find(r => r.id === id)); if (chosen) loadWorkspace(chosen); },
     selectArtifact, closeInspector: () => { ++epoch.current; setDetail(null); setState(s => ({ ...s, inspectorOpen: false })); },
     switchModule: activeModule => setState(s => ({ ...s, activeModule })),
     pendingCount: workspace?.snapshot.pendingReviewCount || 0, theme, toggleTheme: () => setTheme(t => t === 'light' ? 'dark' : 'light'),
-    modalOpen, openModal: () => setModalOpen(true), closeModal: () => setModalOpen(false),
+    modalOpen, openModal: () => { setModalSeed(null); setModalOpen(true); }, closeModal: () => { setModalOpen(false); setModalSeed(null); },
     isCommandPaletteOpen, setCommandPaletteOpen, openCommandPalette: () => setCommandPaletteOpen(true), closeCommandPalette: () => setCommandPaletteOpen(false),
   };
   return <ContinuumContext.Provider value={value}>{children}</ContinuumContext.Provider>;

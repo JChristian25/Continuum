@@ -7,6 +7,7 @@ import {
 import { useContinuum } from '../context/ContinuumContext.jsx';
 import Tooltip from './Tooltip.jsx';
 import { Badge, Button, Select } from './ui/index.js';
+import { allSelections } from '../data/serviceModel.js';
 import { Menu } from '@base-ui/react/menu';
 import { motion } from 'motion/react';
 
@@ -110,7 +111,32 @@ export default function Shell({
           </Menu.Trigger>
         </Tooltip>
 
-        {serviceMode && ctx.selection && <label className="revision-switch"><span className="revision-switch__text"><small>Selected revision</small><Select aria-label="Selected revision" value={ctx.selection.targetRevision.commitId} disabled={ctx.busy} onChange={e => ctx.changeSelection({ ...ctx.selection, baseRevision: null, comparisonId: undefined, targetRevision: { objectAlgorithm: 'sha1', commitId: e.target.value } })}>{ctx.descriptor?.repositories.find(r => r.id === state.activeRepoId)?.inputs.find(i => i.id === ctx.selection.inventoryId)?.revisions.map(r => <option key={r.label} value={r.commitId}>{r.label} · {r.commitId.slice(0, 7)}</option>)}</Select></span></label>}
+        {serviceMode && ctx.selection && (() => {
+          const repoDesc = ctx.descriptor?.repositories.find(r => r.id === state.activeRepoId);
+          const choices = allSelections(repoDesc);
+          return (
+            <label className="revision-switch">
+              <span className="revision-switch__text">
+                <small>Selected revision</small>
+                <Select
+                  aria-label="Selected revision"
+                  value={ctx.selection.targetRevision.commitId}
+                  disabled={ctx.busy}
+                  onChange={e => {
+                    const matched = choices.find(c => c.selection.targetRevision.commitId === e.target.value);
+                    if (matched) ctx.changeSelection(matched.selection);
+                  }}
+                >
+                  {choices.map(c => (
+                    <option key={`${c.selection.inventoryId}-${c.selection.targetRevision.commitId}`} value={c.selection.targetRevision.commitId}>
+                      {c.label} · {c.selection.targetRevision.commitId.slice(0, 7)}
+                    </option>
+                  ))}
+                </Select>
+              </span>
+            </label>
+          );
+        })()}
         {/* Revision Cycle Segmented Toggle */}
         {!serviceMode && <Tooltip
           title="Review Cycle Context"
@@ -168,6 +194,26 @@ export default function Shell({
               })}
             </div>
             <div className="rail-popover__footer">
+              {serviceMode && ctx.descriptor?.capabilities?.customWorkspaces && (
+                <>
+                  <Menu.Item nativeButton render={<Button variant="unstyled" />}
+                    type="button"
+                    className="rail-popover__action"
+                    onClick={() => { setRepoOpen(false); ctx.openWorkspaceModal?.('create'); }}
+                  >
+                    <Plus size={14} /> New custom workspace
+                  </Menu.Item>
+                  {activeRepo?.isCustom && isAuthorized && (
+                    <Menu.Item nativeButton render={<Button variant="unstyled" />}
+                      type="button"
+                      className="rail-popover__action"
+                      onClick={() => { setRepoOpen(false); ctx.openWorkspaceModal?.('add_revision'); }}
+                    >
+                      <GitCommit size={14} /> Add revision
+                    </Menu.Item>
+                  )}
+                </>
+              )}
               <Menu.Item nativeButton render={<Button variant="unstyled" />}
                 type="button"
                 className="rail-popover__action"
