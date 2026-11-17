@@ -73,6 +73,12 @@ The command envelope, sessions, CSRF, repository grants, optimistic projection
 versions and idempotency receipts remain mandatory. No additional public account
 or fallback demonstration data is introduced.
 
+## Usability and precision continuation (2026-11-17)
+
+- **Structural parsing metadata:** `GET /api/v1/repositories/{repository_id}/versions/{version_id}` includes additive `structure` (`engine`, `hasError`, `items`) derived from `tree-sitter` / `tree-sitter-python` (`class`, `method`, `function` 1-based spans) and `docling` (`DocumentConverter` section and code-block spans aligned to raw Markdown lines, with explicit `plain_text` fallback for `.txt` and authored records). Committed Neo4j `:ContinuumArtifact` nodes project `structureEngine`, `symbolCount`, and `sectionCount` without altering SHA-256 `contentDigest` or frozen `P-08` discovery output.
+- **Discovery signal metadata:** Snapshot read projections attach per-candidate `signalMeta` (`uniqueTokenCount`, `rareTokenCount`, `stemOverlap`, `hasExplicitPath`, `topTokens`) alongside the unmutated `lexical-file-v1` candidate rows so reviewers can separate generic overlaps from stronger path/identifier signals without waiving open candidate review gates before `complete_cycle`.
+- **Bounded custom workspaces and local Git:** When `CONTINUUM_ALLOW_CUSTOM_WORKSPACES=1` (enabled in local HTTP dev via `Load-LocalEnv.ps1`; off by default in `Settings()`), `POST /api/v1/workspaces` and `POST /api/v1/repositories/{repository_id}/revisions` accept bounded `.py`/`.md`/`.txt` bundles (`<= 25` files, `<= 1 MiB` per file, `<= 4 MiB` total, strict UTF-8, path traversal and symlink rejection) stored as JSON manifests under ignored `inputs/custom/`. Optional local Git commit reading requires `CONTINUUM_ALLOW_LOCAL_GIT=1` paired with explicit `CONTINUUM_LOCAL_GIT_ROOTS`. Custom repositories grant access only to the creating account and keep frozen Healthchecks inputs and outputs separate. Cross-inventory `R0` to `R1` Git diff comparisons are permitted only when both selections share the same custom repository (`custom-acceptance-0.1.0`) and `lexical-file-v1`.
+
 ## Reproduce development checks
 
 From the repository root, with the existing local PostgreSQL test configuration:

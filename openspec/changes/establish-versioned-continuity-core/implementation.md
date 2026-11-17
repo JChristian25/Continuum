@@ -207,3 +207,57 @@ correction with new exact evidence, terminal decisions and concurrent comparison
 No semantic accuracy, productivity or practitioner usability findings are claimed.
 No additional acquisition, deployment, live migration or user-data reset occurred.
 See services/api/CONTINUITY.md and services/api/GUIDED-TASKS.md for reproduction.
+
+## Stack reconciliation and release refresh, 2026-11-17
+
+Manuscript `§3.7.3` Table 5 / `§3.7.4` Figure 7 substitutions (React 19 + Vite JS,
+PostgreSQL polling worker and relational/JSONB graph tables, Python `tokenize`
+at file scope, strict UTF-8 line scanning, and native `git diff --no-index --no-renames`
+instead of Next.js, Redis/RQ, Tree-sitter, Docling, or Neo4j) are documented in
+`specs/architecture-reconciliation.md` with copy-ready Chapter 3/4 text and
+explicit non-claims. `openspec/specs/frontend-service/spec.md` (`WEB-04`) and
+`services/api/src/continuum/release.py` (`supportMatrix`) reflect the live
+comparison diff, evidence ranking display, batch initial confirmation, and
+client-side Markdown/print-PDF Continuity & Change Audit Report capabilities.
+
+Observed final verification after all source and specification edits:
+- `pytest services/api/tests -q`: 150 passed, 1 Starlette deprecation warning in 275.37s (isolated PostgreSQL schemas + Playwright browser suite).
+- `node --test apps/web/src/data/service.test.js apps/web/src/data/workflow.test.js`: 15 passed, 0 failed.
+- `npm --prefix apps/web run lint`: 0 errors, 1 pre-existing `DemoContinuumProvider.jsx` effect warning; `npm --prefix apps/web run build`: built in 4.01s; `pip check`: no broken requirements; `openspec validate --all`: 4 passed, 0 failed.
+- Local API restarted cleanly on `127.0.0.1:8787` (managed daemon PID 19940; restart Vite at `http://localhost:5173` if ending this agent session closes the daemon) with `http://127.0.0.1:8787/api/v1/health` and `http://localhost:5173/api/v1/health` returning `{"status":"ok","version":"0.1.0"}` without migrating or resetting PostgreSQL data.
+- Regenerated release `continuity-core-359590bbfcb10e05e2ae4b73` (`recordedAt: 2026-11-16T16:09:58.769563Z`, 107 hashed files in `services/api/RELEASE.json` and `services/api/releases/continuity-core-359590bbfcb10e05e2ae4b73.json`), verified `currentSourceMatchesRecord == True`.
+
+## Manuscript Table 5 technology integration (Neo4j, Redis/RQ, Tree-sitter, Docling), 2026-11-17
+
+On 2026-11-17, the user authorized integrating Neo4j, Redis/RQ, Tree-sitter, and Docling into the Continuum backend while preserving PostgreSQL 17, FastAPI, native Git, the React 19 + Vite UI, and existing local data:
+- **Docker Compose & Environment (`services/api/compose.yaml`, `config.py`, `Load-LocalEnv.ps1`):** Added `redis:7-alpine` (`127.0.0.1:56379`) and `neo4j:5-community` (`Neo4j Kernel 5.26.33`, `127.0.0.1:57474` / `bolt://127.0.0.1:57687`) alongside PostgreSQL 17 (`127.0.0.1:55432`).
+- **Tree-sitter & Docling (`services/api/src/continuum/discovery.py`):** Integrated `tree-sitter` + `tree-sitter-python` AST identifier indexing and syntax validation alongside `tokenize`, and `docling` (`DocumentConverter` + `docling-core` `DoclingDocument`) Markdown extraction with plain-text fallback and exact 1-based line anchors. All four frozen Healthchecks discovery reports (`codeBase`, `codeTarget`, `docsBase`, `docsTarget`) reproduced with identical SHA-256 digests (`healthchecks-processing-verification.json`).
+- **Redis & RQ (`services/api/src/continuum/worker.py`, `pipeline.py`, `cycle.py`):** Integrated schema-scoped `rq.Queue` job enqueuing on PostgreSQL transaction `after_commit` and Windows/thread-safe `ContinuumRQWorker` (`rq.SimpleWorker` with `TimerDeathPenalty`), coordinated with PostgreSQL schema advisory locks and transactional lease fencing.
+- **Neo4j Graph Store (`services/api/src/continuum/graph_store.py`, `db.py`, `pipeline.py`, `access.py`):** Added Neo4j driver v6 singleton lifecycle, constraints/indexes in `db.py:initialize`, immutable snapshot projection (`:ContinuumSnapshot`, `:ContinuumArtifact`, `:ContinuumAssertionContext`, `:DOCUMENTS`, `:IMPLEMENTS`, `:MOTIVATES`) on `make_snapshot` `after_commit`, and Cypher-backed `read_graph` one-hop neighborhood queries. Synced 61 existing local PostgreSQL snapshots into Neo4j.
+- **Reconciliation & Release Metadata:** Updated `specs/architecture-reconciliation.md` and `services/api/src/continuum/release.py` (`operatingRequirements`, `supportMatrix`).
+
+Observed final verification after all source and specification edits:
+- `pytest services/api/tests -q`: 154 passed, 1 Starlette deprecation warning in 321.19s (isolated PostgreSQL schemas, live Redis/RQ, Neo4j 5 Community, Tree-sitter, Docling, and Playwright browser suite).
+- `node --test apps/web/src/data/service.test.js apps/web/src/data/workflow.test.js`: 15 passed, 0 failed.
+- `npm --prefix apps/web run lint`: 0 errors, 1 pre-existing `DemoContinuumProvider.jsx` effect warning; `npm --prefix apps/web run build`: built in 6.38s; `pip check`: no broken requirements; `openspec validate --all`: 4 passed, 0 failed.
+- Regenerated release `continuity-core-2f97488d973accea8fcf004f` (`recordedAt: 2026-11-16T17:51:23.445910Z`, 109 hashed files in `services/api/RELEASE.json` and `services/api/releases/continuity-core-2f97488d973accea8fcf004f.json`), verified `currentSourceMatchesRecord == True`.
+- Local API restarted on `127.0.0.1:8787` (daemon PID 23148) with `http://127.0.0.1:8787/api/v1/health` and `http://localhost:5173/api/v1/health` returning `{"status":"ok","version":"0.1.0"}` without migrating or resetting PostgreSQL data.
+
+## UI hierarchy, symbol/tooltip clarity, and visual change-impact graph refinement, 2026-11-17
+
+On 2026-11-17, the authenticated service frontend was refined for clearer information hierarchy, explicit workflow ordering, reduced prose via icons and Radix tooltips, and visual change-impact graph feedback across both overview and review screens:
+
+- `apps/web/src/data/impactGraph.js`: Extracted shared `buildImpactGraphData(workspace, rows)` helper mapping `comparison.changedPaths`, direct impacted contexts, and affected endpoint artifacts (`changeKind`, `impactRole`, `impactCount`, `staleCount`, `candidateCount`, `confirmedCount`) consistently across components.
+- `apps/web/src/components/TraceabilityFlow.jsx` and `apps/web/src/components/ServiceTools.jsx`: Updated artifact nodes and relationship edges with visual impact roles (`Modified`/`Added`/`Removed`, `Affected`, stale/candidate/confirmed edge states), added an `All` vs `Affected` blast-radius filter and icon legend with tooltips in `ServiceGraph`, added `height`/`showMiniMap` props for compact inline embedding, and added a `ResizeObserver` + `minZoom={0.15}` auto-fit handler so opening the side inspector reframes the graph inside narrowed panes.
+- `apps/web/src/components/ServiceApp.jsx`, `apps/web/src/components/service.css`, and `apps/web/src/context/ServiceContinuumProvider.jsx`:
+  - Added numbered icon-and-tooltip workflow ordering (`STEP_META`) in `WorkspaceProgress`, compact icon pipeline attribution (`ArchitecturePipelineStrip`), concise `ValidityChip`/`DecisionIcon` indicators with accessible labels preserved, and a visual source-to-target endpoint diagram plus top-aligned `Prior baseline decision` card in `Inspector`.
+  - Added `ComparisonImpactCard` with changed-path pills, basename-shortened impacted link pills (full paths in `<Tooltip>`), and a collapsible inline `<TraceabilityFlow compact>` impact graph (unmounted when `Explore context` is active to keep graph inspection unambiguous).
+  - Guarded `checkOperation()` in `ServiceContinuumProvider.jsx` and added `disabled={ctx.busy}` to `Check processing status` in `ServiceApp.jsx` so fast polling cannot overwrite a newly submitted operation with an earlier operation's status.
+  - Added `outputs/frontend-integration/change-impact-graph.png` capture to `apps/web/tests/service-browser.mjs` and verified desktop/mobile layouts with zero mobile overflow.
+
+Observed final verification after all source and specification edits:
+- `npx --yes impeccable detect --json apps/web/src/components/ServiceApp.jsx apps/web/src/components/ServiceTools.jsx apps/web/src/components/TraceabilityFlow.jsx apps/web/src/components/service.css`: `[]` (0 craft-floor violations).
+- `node --test apps/web/src/data/service.test.js apps/web/src/data/workflow.test.js`: 15 passed, 0 failed.
+- `npm --prefix apps/web run lint`: 0 errors, 1 pre-existing `DemoContinuumProvider.jsx` effect warning; `npm --prefix apps/web run build`: built in 3.77s; `pip check`: no broken requirements; `openspec validate --all`: 4 passed, 0 failed.
+- `pytest services/api/tests -q`: 154 passed, 1 Starlette deprecation warning in 281.63s (including PostgreSQL, Redis/RQ, Neo4j 5, Tree-sitter, Docling, and the Playwright browser E2E suite).
+- Regenerated release `continuity-core-45641d5f4dd147347f4d0cf5` (`recordedAt: 2026-11-16T18:52:37.466856Z`, 110 hashed files in `services/api/RELEASE.json` and `services/api/releases/continuity-core-45641d5f4dd147347f4d0cf5.json`), verified `currentSourceMatchesRecord == True`.

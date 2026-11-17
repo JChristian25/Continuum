@@ -2,11 +2,13 @@
 
 ## Purpose
 
-Record implemented service-backed behavior checked on 2026-11-13. Sources are
-`apps/web/src/components/ServiceApp.jsx`, `apps/web/src/context/ServiceContinuumProvider.jsx`,
+Record implemented service-backed behavior checked on 2026-11-13 and reconciled on 2026-11-17. Sources are
+`apps/web/src/components/ServiceApp.jsx`, `apps/web/src/components/ServiceTools.jsx`,
+`apps/web/src/context/ServiceContinuumProvider.jsx`, `apps/web/src/data/diff.js`,
+`apps/web/src/data/evidenceSignal.js`, `apps/web/src/data/auditReport.js`,
 the service adapter/model tests, `services/api/tests/test_frontend_browser.py`
 and `services/api/FRONTEND.md`. This is a bounded local integration; it does not
-establish the complete proposed continuity cycle or production deployment.
+establish production deployment or practitioner evaluation findings.
 
 ## Requirements
 
@@ -55,9 +57,11 @@ dispatch and require explicit retry after uncertain delivery.
 - **AND** the browser preserves the draft for inspection after refresh
 
 ### Requirement: WEB-04 Truthful knowledge access
-The frontend SHALL use snapshot artifacts and relationships for lists, filtering,
-graphs, counts and coverage. Unsupported comparison, completion and export
-capabilities SHALL NOT present success controls or synthetic results.
+The frontend SHALL use snapshot artifacts, relationships, server search, typed
+neighborhoods, comparison diffs, completion records and queued JSON / client-side
+Markdown & print-PDF audit reports strictly from retained service state in live
+mode. Synthetic AI previews and unimplemented extensions SHALL NOT appear outside
+`?mode=demo` or present synthetic success results.
 
 #### Scenario: Browse a captured file
 - **WHEN** a user opens a snapshot artifact in Code explorer
