@@ -22,8 +22,16 @@ from .pipeline import admit, query
 from .pipeline_schemas import QueryEnvelope
 from .pipeline_models import ReviewViewBinding, Selection, Snapshot
 from .pipeline_models import Activity, EvidenceOrigin, InputRegistration, ProfileRegistration, RevisionOrigin
-from .acquisition import WORKSPACE, load_accepted, sha256
-from .discovery import load_profile
+from .acquisition import WORKSPACE, sha256
+from .discovery import extract_artifact_structure, load_profile
+from .local_repo import (
+    RevisionAddInput,
+    WorkspaceCreateInput,
+    add_custom_revision,
+    create_custom_workspace,
+    is_custom_manifest,
+    load_any_accepted,
+)
 from .capture import execute as capture_command
 from .comparison import compare, prior_decision_map
 from .security import check_csrf, cookie, current_actor, digest, error, fail, login_attempt, repository_access, utc
@@ -54,12 +62,14 @@ def create_app(settings=None, engine=None, *, worker_enabled=True):
     async def boundaries(request, call_next):
         request.state.request_id = str(uuid.uuid4())
         if request.method in {"POST", "PUT", "PATCH"}:
+            is_bundle_upload = request.url.path == "/api/v1/workspaces" or request.url.path.endswith("/revisions")
+            max_bytes = 5 * 1024 * 1024 if is_bundle_upload else 262144
             chunks, size = [], 0
             async for chunk in request.stream():
                 size += len(chunk)
-                if size > 262144:
+                if size > max_bytes:
                     return JSONResponse(status_code=413, content={"schemaVersion": "0.1.0", "requestId": request.state.request_id,
-                        "error": error("limit_exceeded", {"limitName": "requestBytes", "maximum": 262144, "unit": "bytes"})},
+                        "error": error("limit_exceeded", {"limitName": "requestBytes", "maximum": max_bytes, "unit": "bytes"})},
                         headers={"Cache-Control": "no-store"})
                 chunks.append(chunk)
             request._body = b"".join(chunks)
@@ -156,7 +166,7 @@ def create_app(settings=None, engine=None, *, worker_enabled=True):
                 role = db.get(Grant, (actor.id, identity)).role
                 inputs = []
                 for registered in db.scalars(select(InputRegistration).where(InputRegistration.repository_id == identity).order_by(InputRegistration.id)):
-                    manifest, _, manifest_digest, acceptance_digest, _ = load_accepted(
+                    manifest, acceptance, manifest_digest, acceptance_digest, _ = load_any_accepted(
                         WORKSPACE / registered.manifest_path, WORKSPACE / registered.acceptance_path, WORKSPACE)
                     if manifest_digest != registered.manifest_digest or acceptance_digest != registered.acceptance_digest:
                         fail("unavailable", 503)
@@ -169,12 +179,43 @@ def create_app(settings=None, engine=None, *, worker_enabled=True):
                             fail("unavailable", 503)
                         profiles.append({"id": configured.id, "methodId": profile["methodId"],
                                          "digest": profile_digest, "limitations": profile["limitations"]})
-                    inputs.append({"id": registered.id, "repositoryFullName": manifest["repository"]["fullName"],
-                        "manifestDigest": manifest_digest, "pathCount": len(manifest["entries"]), "language": "Python",
-                        "revisions": [{"label": label, "objectAlgorithm": revision["objectAlgorithm"], "commitId": revision["commitId"]}
-                                      for label, revision in manifest["revisions"].items()], "profiles": profiles})
-                repositories.append({"id": identity, "name": repository.name, "role": role, "inputs": inputs})
-            return {"actorId": actor.id, "displayName": actor.display_name, "repositories": repositories}
+                    is_custom = is_custom_manifest(WORKSPACE / registered.acceptance_path, WORKSPACE)
+                    inputs.append((
+                        (1 if is_custom else 0, str(acceptance.get("acceptedAt") or ""), registered.id),
+                        {"id": registered.id, "repositoryFullName": manifest["repository"]["fullName"],
+                         "manifestDigest": manifest_digest, "pathCount": len(manifest["entries"]), "language": "Python",
+                         "isCustom": is_custom,
+                         "revisions": [{"label": label, "objectAlgorithm": revision["objectAlgorithm"], "commitId": revision["commitId"]}
+                                       for label, revision in manifest["revisions"].items()], "profiles": profiles},
+                    ))
+                inputs.sort(key=lambda item: item[0])
+                repositories.append({"id": identity, "name": repository.name, "role": role, "inputs": [item[1] for item in inputs]})
+            return {
+                "actorId": actor.id,
+                "displayName": actor.display_name,
+                "capabilities": {
+                    "customWorkspaces": settings.allow_custom_workspaces,
+                    "localGit": settings.allow_local_git,
+                },
+                "repositories": repositories,
+            }
+
+    @app.post("/api/v1/workspaces")
+    def create_workspace_route(request: Request, body: WorkspaceCreateInput):
+        request.state.request_id = body.requestId
+        with factory.begin() as db:
+            actor, _ = current_actor(db, request, settings, write=True)
+            result = create_custom_workspace(db, actor, body, settings)
+        return {"schemaVersion": "0.1.0", "requestId": body.requestId, "result": result}
+
+    @app.post("/api/v1/repositories/{repository_id}/revisions")
+    def add_revision_route(repository_id: str, request: Request, body: RevisionAddInput):
+        request.state.request_id = body.requestId
+        with factory.begin() as db:
+            actor, _ = current_actor(db, request, settings, write=True)
+            repository = repository_access(db, actor, repository_id, write=True)
+            result = add_custom_revision(db, actor, repository, body, settings)
+        return {"schemaVersion": "0.1.0", "requestId": body.requestId, "result": result}
 
     @app.post("/api/v1/auth/logout")
     def logout(request: Request):
@@ -279,11 +320,13 @@ def create_app(settings=None, engine=None, *, worker_enabled=True):
             actor, _ = current_actor(db, request, settings)
             repository_access(db, actor, repository_id)
             version = scoped(db, ArtifactVersion, version_id, repository_id)
-            scoped(db, Artifact, version.artifact_id, repository_id)
+            artifact = scoped(db, Artifact, version.artifact_id, repository_id)
             if digest(version.content) != version.digest:
                 fail("missing_evidence", details={"evidenceIds": []})
+            structure = extract_artifact_structure(artifact.kind, artifact.path, version.identity, version.content)
             return {"id": version.id, "artifactId": version.artifact_id, "identity": version.identity,
-                    "content": version.content, "contentDigest": {"algorithm": "sha256", "value": version.digest}}
+                    "content": version.content, "contentDigest": {"algorithm": "sha256", "value": version.digest},
+                    "structure": structure}
 
     @app.get("/api/v1/repositories/{repository_id}/evidence/{evidence_id}")
     def read_evidence(repository_id: str, evidence_id: str, request: Request):

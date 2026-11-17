@@ -1,12 +1,20 @@
 import logging
+import os
+import threading
 import time
+import uuid
 from fastapi import HTTPException
+import redis
+import rq
 
 from sqlalchemy import and_, or_, select, text
 from sqlalchemy.exc import SQLAlchemyError
 
 from .acquisition import AcquisitionError, WORKSPACE
-from .discovery import discover, load_sources
+from .config import env_value
+from .db import make_engine, session_factory
+from .discovery import discover
+from .local_repo import load_any_sources
 from .models import (Account, Artifact, ArtifactVersion, Assertion, AssertionRevision,
                      Evidence, Grant, Repository, ReviewContext)
 from .pipeline import make_snapshot, registered_inputs, stable
@@ -255,7 +263,7 @@ def run_operation(factory, operation_id):
         if claimed["kind"] == "export":
             return publish(factory, claimed, [])
         label = next(label for label, value in claimed["manifest"]["revisions"].items() if value["commitId"] == claimed["commitId"])
-        _, sources = load_sources(claimed["manifestPath"], claimed["acceptancePath"], label)
+        _, sources = load_any_sources(claimed["manifestPath"], claimed["acceptancePath"], label)
         if not pulse():
             return False
         generated = None
@@ -271,10 +279,129 @@ def run_operation(factory, operation_id):
         return False
 
 
+_worker_context = threading.local()
+
+
+def queue_name_for_schema(schema: str | None = None) -> str:
+    if not schema or schema == "public":
+        return "continuum"
+    return f"continuum:{schema}"
+
+
+def get_redis_connection(redis_url: str | None = None):
+    url = redis_url or env_value("CONTINUUM_REDIS_URL", "redis://127.0.0.1:56379/0")
+    if not url:
+        return None
+    try:
+        connection = redis.from_url(url, socket_connect_timeout=1.0, socket_timeout=2.0)
+        connection.ping()
+        return connection
+    except (redis.RedisError, OSError) as exc:
+        logging.warning("Redis unavailable; falling back to PostgreSQL durable polling: %s", exc)
+        return None
+
+
+def get_rq_queue(redis_conn=None, queue_name: str | None = None, *, schema: str | None = None):
+    connection = redis_conn or get_redis_connection()
+    if connection is None:
+        return None
+    return rq.Queue(queue_name or queue_name_for_schema(schema), connection=connection)
+
+
+def rq_execute_operation(operation_id: str, schema: str | None = None, database_url: str | None = None) -> bool:
+    factory = getattr(_worker_context, "factory", None)
+    if factory is not None:
+        return run_operation(factory, operation_id)
+    url = database_url or os.getenv("CONTINUUM_TEST_DATABASE_URL") or env_value("CONTINUUM_DATABASE_URL")
+    if not url:
+        raise RuntimeError("CONTINUUM_DATABASE_URL is not configured for RQ worker execution")
+    connect_args = {"options": f"-csearch_path={schema}"} if schema and schema != "public" else {}
+    engine = make_engine(url, connect_args=connect_args)
+    try:
+        return run_operation(session_factory(engine), operation_id)
+    finally:
+        engine.dispose()
+
+
+def enqueue_operation(operation_id: str, *, schema: str | None = None, database_url: str | None = None, redis_url: str | None = None):
+    connection = get_redis_connection(redis_url)
+    if connection is None:
+        return None
+    queue = get_rq_queue(connection, schema=schema)
+    job_id = f"continuum-op-{operation_id}"
+    try:
+        existing = queue.fetch_job(job_id)
+        if existing is not None:
+            status = existing.get_status(refresh=True)
+            if status in {"queued", "started"}:
+                return existing.id
+            existing.delete()
+        job = queue.enqueue(
+            rq_execute_operation,
+            args=(operation_id, schema, database_url),
+            job_id=job_id,
+            job_timeout=360,
+            result_ttl=600,
+            failure_ttl=600,
+        )
+        return job.id
+    except (redis.RedisError, OSError) as exc:
+        logging.warning("Failed to enqueue RQ operation %s: %s", operation_id, exc)
+        return None
+
+
+def cleanup_rq_queue(schema: str):
+    if not schema or schema == "public":
+        return
+    connection = get_redis_connection()
+    if connection is None:
+        return
+    try:
+        queue = get_rq_queue(connection, schema=schema)
+        queue.empty()
+        connection.delete(queue.key)
+    except (redis.RedisError, OSError):
+        pass
+
+
+class ContinuumRQWorker(rq.SimpleWorker):
+    def _install_signal_handlers(self):
+        if threading.current_thread() is threading.main_thread():
+            super()._install_signal_handlers()
+
+
+def run_rq_burst(factory, queue, target_job_id=None):
+    _worker_context.factory = factory
+    try:
+        rq_worker = ContinuumRQWorker(
+            [queue],
+            name=f"continuum-{queue.name}-{uuid.uuid4().hex[:8]}",
+            connection=queue.connection,
+            default_result_ttl=600,
+        )
+        while True:
+            worked = rq_worker.work(burst=True, max_jobs=1, logging_level="WARNING")
+            if not worked:
+                return False
+            if target_job_id is not None:
+                job = queue.fetch_job(target_job_id)
+                if job is not None:
+                    status = job.get_status(refresh=True)
+                    if status == "finished":
+                        return bool(job.return_value())
+                    if status in {"failed", "stopped", "canceled"}:
+                        return False
+            else:
+                return True
+    finally:
+        _worker_context.factory = None
+
+
 def worker_once(factory):
     # One session advisory lock per schema enforces the accepted single-worker limit.
     with factory.kw["bind"].connect() as connection:
         acquired = connection.scalar(text("SELECT pg_try_advisory_lock(hashtext(current_schema()), hashtext('continuum-worker-v1'))"))
+        schema = connection.scalar(text("SELECT current_schema()"))
         connection.commit()
         if not acquired:
             return False
@@ -283,7 +410,14 @@ def worker_once(factory):
                 now = int(time.time())
                 identity = db.scalar(select(Operation.id).where(or_(Operation.status == "queued",
                     and_(Operation.status == "running", Operation.lease_until <= now))).order_by(Operation.id).limit(1))
-            return run_operation(factory, identity) if identity else False
+            if not identity:
+                return False
+            queue = get_rq_queue(schema=schema)
+            if queue is not None:
+                job_id = enqueue_operation(identity, schema=schema)
+                if job_id is not None:
+                    return run_rq_burst(factory, queue, job_id)
+            return run_operation(factory, identity)
         finally:
             connection.execute(text("SELECT pg_advisory_unlock(hashtext(current_schema()), hashtext('continuum-worker-v1'))"))
             connection.commit()

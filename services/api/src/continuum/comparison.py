@@ -3,7 +3,9 @@ import json
 
 from sqlalchemy import select
 
+from .acquisition import WORKSPACE
 from .git_changes import compare_files
+from .local_repo import is_custom_manifest
 from .models import Account, ArtifactVersion, AssertionRevision, Evidence, Receipt, ReviewContext, ReviewEvent
 from .pipeline_models import Activity, RevisionOrigin, Selection, SelectionArtifact, SelectionContext, Snapshot, RepositoryView, SelectedRecord
 from .pipeline import registered_inputs, selection_data, stable
@@ -34,7 +36,11 @@ def compare(db, actor, repository, envelope):
     if view.selection_id != after.id or view.mode != 'active':
         fail('invalid_input')
     if before.inventory_id != after.inventory_id or before.configuration_id != after.configuration_id:
-        fail('invalid_input')
+        base_inv, base_prof, _, base_cfg = registered_inputs(db, repository.id, before.inventory_id, before.configuration_id)
+        target_inv, target_prof, _, target_cfg = registered_inputs(db, repository.id, after.inventory_id, after.configuration_id)
+        both_custom = is_custom_manifest(WORKSPACE / base_inv.acceptance_path, WORKSPACE) and is_custom_manifest(WORKSPACE / target_inv.acceptance_path, WORKSPACE)
+        if not (both_custom and base_cfg.get("methodId") == target_cfg.get("methodId") == "lexical-file-v1"):
+            fail('invalid_input')
     _, _, manifest, _ = registered_inputs(db, repository.id, after.inventory_id, after.configuration_id)
     files = lambda snapshot: {a['artifactId']: a for a in snapshot.document['artifacts'] if a['identity'].get('kind') == 'file'}
     old, new = files(base), files(target)
@@ -81,7 +87,12 @@ def compare(db, actor, repository, envelope):
         cursor = scoped(db, Snapshot, parent, repository.id)
     claims = {}
     for ancestor in reversed(lineage):
-        for item in ancestor.document['assertions']:
+        # Within a single snapshot, an active/resolved successor must override its superseded predecessor regardless of UUID sort order.
+        ordered = sorted(
+            ancestor.document['assertions'],
+            key=lambda item: 1 if item['projection']['resolution'] != 'superseded' else 0,
+        )
+        for item in ordered:
             claims[item['assertion']['assertionId']] = item
     identity = stable('comparison-v1', repository.id, before.id, base.snapshot_version, after.id, target.snapshot_version)
     selected = db.get(Selection, identity)

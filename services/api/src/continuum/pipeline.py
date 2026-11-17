@@ -1,11 +1,15 @@
 import json
 import time
+from types import SimpleNamespace
 import uuid
 
-from sqlalchemy import func, select
+from sqlalchemy import event, func, select, text
 
-from .acquisition import WORKSPACE, contained, load_accepted, sha256
-from .discovery import load_profile, load_sources
+from pathlib import PurePosixPath
+import re
+from .acquisition import WORKSPACE, contained, sha256
+from .discovery import _compile_rules, _extract_tokens, extract_artifact_structure, load_profile
+from .local_repo import load_any_accepted, load_any_sources
 from .models import (Artifact, ArtifactVersion, Assertion, AssertionRevision, Evidence, FollowUp,
                      Receipt, ReviewContext, ReviewEvent, View, new_id)
 from .pipeline_models import (Activity, InputRegistration, Operation, ProfileRegistration, RepositoryView, RevisionOrigin, SelectedRecord,
@@ -23,9 +27,9 @@ def stable(*parts):
 
 def register_input(db, repository_id, manifest_path, acceptance_path):
     manifest_path, acceptance_path = contained(manifest_path, WORKSPACE), contained(acceptance_path, WORKSPACE)
-    manifest, _, manifest_digest, acceptance_digest, _ = load_accepted(manifest_path, acceptance_path, WORKSPACE)
+    manifest, _, manifest_digest, acceptance_digest, _ = load_any_accepted(manifest_path, acceptance_path, WORKSPACE)
     for label in manifest["revisions"]:
-        load_sources(manifest_path, acceptance_path, label)
+        load_any_sources(manifest_path, acceptance_path, label)
     identity = stable(repository_id, "input", manifest_digest)
     row = db.get(InputRegistration, identity)
     if row is None:
@@ -62,7 +66,7 @@ def registered_inputs(db, repository_id, inventory_id, configuration_id):
     if config.inventory_id != inventory.id:
         fail("invalid_input", details={"fields": ["configurationId"]})
     manifest_path, acceptance_path = WORKSPACE / inventory.manifest_path, WORKSPACE / inventory.acceptance_path
-    manifest, _, manifest_digest, acceptance_digest, _ = load_accepted(manifest_path, acceptance_path, WORKSPACE)
+    manifest, _, manifest_digest, acceptance_digest, _ = load_any_accepted(manifest_path, acceptance_path, WORKSPACE)
     if manifest_digest != inventory.manifest_digest or acceptance_digest != inventory.acceptance_digest:
         fail("invalid_input", details={"fields": ["inventoryId"]})
     profile, profile_digest = load_profile(WORKSPACE / config.profile_path, WORKSPACE / config.acceptance_path, manifest_digest)
@@ -103,6 +107,67 @@ def operation_data(operation, selection):
     return {"id": operation.id, "kind": operation.kind, "status": operation.status,
             "selection": selection_data(selection), "resultSnapshotId": operation.result_snapshot_id,
             "coverage": operation.coverage, "limitations": operation.limitations}
+
+
+def _attach_signal_meta(assertions, versions, artifacts_by_id, evidence_by_id, profile):
+    if not assertions:
+        return
+    rules = _compile_rules(profile)
+    lines_by_version = {v.id: v.content.splitlines() for v in versions}
+    per_item = []
+    pair_df = {}
+    for item in assertions:
+        a = item["assertion"]
+        src_art = artifacts_by_id.get(a["source"]["artifactId"])
+        tgt_art = artifacts_by_id.get(a["target"]["artifactId"])
+        src_vid = a["source"].get("versionId")
+        tgt_vid = a["target"].get("versionId")
+        src_tokens, tgt_tokens = set(), set()
+        has_explicit = False
+        tgt_path = tgt_art.path.lower() if tgt_art else ""
+        for ev_ref in item["evidence"]:
+            ev = evidence_by_id.get(ev_ref["id"])
+            if ev is None:
+                continue
+            loc = ev.locator or {}
+            if loc.get("kind") == "field":
+                has_explicit = True
+                continue
+            if loc.get("kind") != "lines":
+                continue
+            lines = lines_by_version.get(ev.artifact_version_id)
+            if not lines:
+                continue
+            start = max(1, int(loc.get("startLine", 1)))
+            end = min(len(lines), int(loc.get("endLine", start)))
+            excerpt = "\n".join(lines[start - 1:end])
+            if tgt_path and tgt_path in excerpt.lower():
+                has_explicit = True
+            toks = _extract_tokens(excerpt, rules)
+            if ev.artifact_version_id == src_vid:
+                src_tokens.update(toks)
+            elif ev.artifact_version_id == tgt_vid:
+                tgt_tokens.update(toks)
+        shared = src_tokens & tgt_tokens if (src_tokens and tgt_tokens) else (src_tokens | tgt_tokens)
+        for tok in shared:
+            pair_df[tok] = pair_df.get(tok, 0) + 1
+        stem_tokens = set()
+        for art in (src_art, tgt_art):
+            if art and art.path:
+                stem_tokens.update(re.findall(r"[a-z0-9]{4,}", PurePosixPath(art.path).stem.lower()))
+        per_item.append((item, shared, has_explicit, bool(shared & stem_tokens)))
+    total = len(assertions)
+    rare_cutoff = max(2, int(total * 0.35))
+    for item, shared, has_explicit, stem_overlap in per_item:
+        rare = sum(1 for tok in shared if pair_df.get(tok, total) <= rare_cutoff)
+        top = sorted(shared, key=lambda tok: (pair_df.get(tok, total), tok))[:5]
+        item["signalMeta"] = {
+            "uniqueTokenCount": len(shared),
+            "rareTokenCount": rare,
+            "hasExplicitPath": has_explicit,
+            "stemOverlap": stem_overlap,
+            "topTokens": top,
+        }
 
 
 def make_snapshot(db, selection):
@@ -166,11 +231,16 @@ def make_snapshot(db, selection):
             "provenance": activity.document if activity else None,
             "historySequence": max_seq_by_ctx.get(context.id) or 0,
         })
+    _attach_signal_meta(assertions, versions, artifacts_by_id, evidence_by_id, profile)
     artifacts = []
     for version in versions:
         artifact = artifacts_by_id[version.artifact_id]
+        structure = extract_artifact_structure(artifact.kind, artifact.path, version.identity, version.content)
+        symbol_count = sum(1 for item in structure["items"] if item["kind"] in {"class", "function", "method"})
+        section_count = sum(1 for item in structure["items"] if item["kind"] in {"section", "code_block"})
         artifacts.append({"artifactId": artifact.id, "kind": artifact.kind, "path": artifact.path,
-                          "versionId": version.id, "identity": version.identity, "contentDigest": version.digest})
+                          "versionId": version.id, "identity": version.identity, "contentDigest": version.digest,
+                          "structureSummary": {"engine": structure["engine"], "symbolCount": symbol_count, "sectionCount": section_count}})
     row = Snapshot(id=header["id"], repository_id=selection.repository_id, selection_id=selection.id,
                    snapshot_version=selection.snapshot_version,
                    document={"snapshot": header, "assertions": assertions, "artifacts": artifacts,
@@ -180,7 +250,52 @@ def make_snapshot(db, selection):
                              "comparison": db.get(Activity, selection.id).document if selection.base_revision else None})
     db.add(row)
     db.flush()
+    _schedule_neo4j_sync(db, row)
     return row
+
+
+def _schedule_neo4j_sync(db, snapshot_row):
+    from .graph_store import sync_snapshot_to_neo4j
+
+    pending = db.info.setdefault("_neo4j_snapshots", [])
+    pending.append(
+        SimpleNamespace(
+            id=snapshot_row.id,
+            repository_id=snapshot_row.repository_id,
+            snapshot_version=snapshot_row.snapshot_version,
+            document=snapshot_row.document,
+        )
+    )
+    if not db.info.get("_neo4j_hooked"):
+        db.info["_neo4j_hooked"] = True
+
+        @event.listens_for(db, "after_commit", once=False)
+        def _sync_committed_snapshots(session):
+            for snap in session.info.pop("_neo4j_snapshots", []):
+                sync_snapshot_to_neo4j(snap)
+
+        @event.listens_for(db, "after_rollback", once=False)
+        def _clear_rolled_back_snapshots(session):
+            session.info.pop("_neo4j_snapshots", None)
+
+
+def schedule_rq_enqueue(db, operation_id):
+    from .worker import enqueue_operation
+
+    schema = db.scalar(text("SELECT current_schema()"))
+    pending = db.info.setdefault("_rq_operations", [])
+    pending.append((operation_id, schema))
+    if not db.info.get("_rq_hooked"):
+        db.info["_rq_hooked"] = True
+
+        @event.listens_for(db, "after_commit", once=False)
+        def _enqueue_committed_operations(session):
+            for op_id, op_schema in session.info.pop("_rq_operations", []):
+                enqueue_operation(op_id, schema=op_schema)
+
+        @event.listens_for(db, "after_rollback", once=False)
+        def _clear_rolled_back_operations(session):
+            session.info.pop("_rq_operations", None)
 
 
 def admit(db, actor, repository, envelope):
@@ -208,6 +323,7 @@ def admit(db, actor, repository, envelope):
     db.add(Receipt(actor_id=actor.id, repository_id=repository.id, command=envelope.command,
                    request_id=envelope.requestId, input_digest=fingerprint, result=response))
     db.flush()
+    schedule_rq_enqueue(db, operation.id)
     return response
 
 

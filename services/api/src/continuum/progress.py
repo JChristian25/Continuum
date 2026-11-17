@@ -1,6 +1,8 @@
 """Read-only lifecycle facts; historical snapshots never inherit current processing."""
 from sqlalchemy import func, select
-from .pipeline_models import Operation, Selection, Snapshot
+from .acquisition import WORKSPACE
+from .local_repo import is_custom_manifest
+from .pipeline_models import InputRegistration, Operation, Selection, Snapshot
 from .cycle import completion
 
 
@@ -33,14 +35,18 @@ def workspace_progress(db, snapshot, selection):
     # Return exact captured choices, reading only the latest snapshot per distinct selection.
     choices = []
     if active:
+        inventory = db.get(InputRegistration, selection.inventory_id)
+        custom_repo = bool(inventory and is_custom_manifest(WORKSPACE / inventory.acceptance_path, WORKSPACE))
+        filters = [Selection.repository_id == selection.repository_id]
+        if not custom_repo:
+            filters.extend([
+                Selection.inventory_id == selection.inventory_id,
+                Selection.configuration_id == selection.configuration_id,
+            ])
         latest_versions = (
             select(Snapshot.selection_id, func.max(Snapshot.snapshot_version).label("max_version"))
             .join(Selection, Selection.id == Snapshot.selection_id)
-            .where(
-                Selection.repository_id == selection.repository_id,
-                Selection.inventory_id == selection.inventory_id,
-                Selection.configuration_id == selection.configuration_id,
-            )
+            .where(*filters)
             .group_by(Snapshot.selection_id)
             .subquery()
         )

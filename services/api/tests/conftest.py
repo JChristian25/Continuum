@@ -76,6 +76,8 @@ def setup():
     engine.dispose()
     # The only deleted namespace is the generated schema created by this fixture.
     assert schema.startswith("continuum_test_") and len(schema) == 47
+    from continuum.worker import cleanup_rq_queue
+    cleanup_rq_queue(schema)
     with root.begin() as connection:
         connection.execute(text(f'DROP SCHEMA "{schema}" CASCADE'))
     root.dispose()

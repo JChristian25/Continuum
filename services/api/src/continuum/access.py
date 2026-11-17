@@ -115,6 +115,11 @@ def graph(db, repository, data):
         artifacts = {row['artifactId']: row for row in snapshot.document['artifacts']}
         if data.rootArtifactId not in artifacts:
             fail('not_found', 404)
+        from .graph_store import query_neighborhood
+        projected = query_neighborhood(snapshot, data)
+        if projected is not None:
+            items, root_node = projected
+            return items, {'rootArtifactId': data.rootArtifactId, 'rootNode': root_node}
         items = []
         for item in sorted(snapshot.document['assertions'], key=lambda a: (a['assertion']['id'], a['projection']['contextId'])):
             a, p = item['assertion'], item['projection']

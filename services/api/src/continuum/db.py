@@ -40,3 +40,5 @@ def initialize(engine):
                 BEFORE UPDATE OR DELETE ON {table}
                 FOR EACH ROW EXECUTE FUNCTION continuum_immutable()
             """))
+    from .graph_store import ensure_neo4j_schema
+    ensure_neo4j_schema()

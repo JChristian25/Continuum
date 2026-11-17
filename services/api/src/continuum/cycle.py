@@ -65,6 +65,8 @@ def execute(db, actor, repository, envelope):
         operation = Operation(repository_id=repository.id, selection_id=selected.id, actor_id=actor.id,
             kind='export', deadline_at=int(time.time()) + 300, result_metadata={'snapshotId': snapshot.id})
         db.add(operation); db.flush()
+        from .pipeline import schedule_rq_enqueue
+        schedule_rq_enqueue(db, operation.id)
         result = {'operationId': operation.id, 'status': 'queued'}
     response = {'schemaVersion': '0.1.0', 'requestId': envelope.requestId, 'result': result}
     db.add(Receipt(actor_id=actor.id, repository_id=repository.id, command=envelope.command, request_id=envelope.requestId, input_digest=fingerprint, result=response)); db.flush()
