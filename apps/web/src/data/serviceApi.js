@@ -9,6 +9,20 @@ export class ServiceError extends Error {
   }
 }
 
+function importErrorMessage(error) {
+  const details = error?.details;
+  if (error?.code === 'limit_exceeded' && details?.limitName === 'maximumUniqueBlobBytes' && Number.isSafeInteger(details.maximum)) {
+    return `The selected file content exceeds the ${details.maximum / 1048576} MiB import limit. Select fewer commits or specific paths and try again.`;
+  }
+  if (details?.gitInventory?.capturedPaths === 0) {
+    const exclusions = details.gitInventory.excluded || [];
+    const examples = exclusions.slice(0, 3).map(({path, reason}) => `${path} (${reason})`);
+    const rest = exclusions.length - examples.length;
+    return [details.reason, examples.join(', '), rest > 0 && `and ${rest} more excluded`].filter(Boolean).join(' ');
+  }
+  return error?.message;
+}
+
 export class ContinuumApi {
   constructor(fetcher = globalThis.fetch.bind(globalThis)) {
     this.fetcher = fetcher;
@@ -30,7 +44,9 @@ export class ContinuumApi {
     }
     const data = await response.json().catch(() => null);
     if (!response.ok || data === null) {
-      throw new ServiceError(data?.error?.message || 'The service could not complete this request.', {
+      const isImport = path === '/workspaces' || path.endsWith('/revisions');
+      const message = isImport ? importErrorMessage(data?.error) : data?.error?.message;
+      throw new ServiceError(message || 'The service could not complete this request.', {
         status: response.ok ? 502 : response.status, code: data?.error?.code || 'unavailable', details: data?.error?.details,
       });
     }
@@ -69,6 +85,12 @@ export class ContinuumApi {
   addRevision(repositoryId, payload) {
     return this.request(`/repositories/${encodeURIComponent(repositoryId)}/revisions`, { body: payload });
   }
+  inspectGit(payload, signal) {
+    return this.request('/git/inspect', {
+      signal,
+      body: { schemaVersion: '0.1.0', requestId: crypto.randomUUID(), ...payload },
+    }).then(data => data.result);
+  }
   query(repositoryId, query, input, signal) {
     return this.request('/queries', { signal, body: {
       schemaVersion: '0.1.0', requestId: crypto.randomUUID(), repositoryId, query, input,
@@ -80,6 +102,17 @@ export class ContinuumApi {
   }
   version(repositoryId, versionId, signal) {
     return this.request(`/repositories/${encodeURIComponent(repositoryId)}/versions/${encodeURIComponent(versionId)}`, { signal });
+  }
+  blame(repositoryId, versionId, signal) {
+    return this.request(`/repositories/${encodeURIComponent(repositoryId)}/versions/${encodeURIComponent(versionId)}/blame`, { signal });
+  }
+  gitCommits(repositoryId, { ref = 'HEAD', limit = 40, path = null } = {}, signal) {
+    const params = new URLSearchParams({ ref, limit: String(limit), ...(path ? { path } : {}) });
+    return this.request(`/repositories/${encodeURIComponent(repositoryId)}/git/commits?${params}`, { signal });
+  }
+  gitCommitDetail(repositoryId, commitId, path = null, signal) {
+    const params = path ? `?${new URLSearchParams({ path })}` : '';
+    return this.request(`/repositories/${encodeURIComponent(repositoryId)}/git/commits/${encodeURIComponent(commitId)}${params}`, { signal });
   }
   evidence(repositoryId, evidenceId, signal) {
     return this.request(`/repositories/${encodeURIComponent(repositoryId)}/evidence/${encodeURIComponent(evidenceId)}`, { signal });

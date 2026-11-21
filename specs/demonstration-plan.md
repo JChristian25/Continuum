@@ -1,12 +1,12 @@
 # Demonstration guide specification
 
-Status: planning only. This is a guide structure for the eventual implemented build, not an executable scenario or participant administration. Source: MS-2026-11-09, §3.5 (PDF pp. 71-72) and §3.7.6 (pp. 85-86).
+Status: background specification baseline paired with executable development rehearsal and Common Demonstration Evidence in [GUIDED-TASKS.md](../services/api/GUIDED-TASKS.md). Sources: `MS-2026-11-09` and the inline 106-page manuscript PDF (§3.5, PDF pp. 71–73; §3.7.6, PDF pp. 85–86; Appendix 1, PDF p. 104).
 
 ## Required baseline record
 
-Before demonstration, record software/build version, configuration, selected repository identity and exact revisions, artifact inventory, selected language and document formats, dependencies, operating requirements, per-function support matrix and known limitations. The source requires these disclosures in §3.5 p. 71 and §3.7.6 pp. 85-86. Exact values remain unfilled until observed on an implemented release.
+Before demonstration, record software/build version, configuration, selected repository identity and exact revisions, artifact inventory, selected language and document formats, dependencies, operating requirements, per-function support matrix and known limitations. Current release and verification values are locked in [RELEASE.json](../services/api/RELEASE.json) and [verification.json](../outputs/continuity-completion/verification.json); practitioner administration and Google Forms SOP 1–3 data collection remain separate unexecuted activities.
 
-The accepted test-project identity is Healthchecks, with Python, Markdown and now plain text in the proposed core. Allowed acquisition, exact commits, eligible inventory and expected outcomes remain pending. No existing local checkout outside the prototype is authorized as an evidence source.
+The accepted test-project identity is `healthchecks/healthchecks` (bounded 4 commits, 10 paths, 18 blobs under `HC-UPSTREAM-2026-11-13-A1` and frozen profile `HC-LEXICAL-2026-11-13-P1`), with Python at file scope and Markdown/plain-text documents in the core. Opt-in bounded custom workspaces and local Git reads remain isolated from the frozen Healthchecks inputs. No existing local checkout outside the prototype is authorized as an evidence source.
 
 ## Common guided tasks
 

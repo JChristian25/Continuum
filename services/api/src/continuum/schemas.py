@@ -29,7 +29,12 @@ class Envelope(Strict):
     requestId: Id
     repositoryId: Id
     viewId: Id
-    command: Literal["compare_revisions", "record_judgment", "reverse_judgment", "correct_assertion", "open_follow_up", "resolve_follow_up", "capture_files", "discover_candidates", "capture_record", "revise_record", "capture_candidate", "complete_cycle", "export_snapshot"]
+    command: Literal[
+        "compare_revisions", "record_judgment", "triage_candidate", "reverse_judgment",
+        "correct_assertion", "open_follow_up", "resolve_follow_up", "capture_files",
+        "discover_candidates", "capture_record", "revise_record", "capture_candidate",
+        "complete_cycle", "export_snapshot"
+    ]
     input: dict
 
 
@@ -69,6 +74,18 @@ class Judgment(ContextInput):
         if len(set(self.reviewedEvidenceIds)) != len(self.reviewedEvidenceIds):
             raise ValueError("Evidence IDs must be unique")
         return self
+
+
+class TriageCandidate(ContextInput):
+    disposition: Literal["defer", "screen", "restore"]
+    note: Note | None = None
+
+    @field_validator("note", mode="before")
+    @classmethod
+    def absent_note(cls, value):
+        if isinstance(value, str) and not value.strip() and len(value) <= 8000:
+            return None
+        return value
 
 
 class Reversal(ContextInput):
@@ -112,6 +129,7 @@ class Correction(ContextInput):
 
 INPUT_TYPES = {
     "record_judgment": Judgment,
+    "triage_candidate": TriageCandidate,
     "reverse_judgment": Reversal,
     "correct_assertion": Correction,
     "open_follow_up": OpenFollowUp,

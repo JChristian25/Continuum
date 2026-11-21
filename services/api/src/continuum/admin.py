@@ -29,6 +29,7 @@ def main():
     create.add_argument("display_name")
     repository = commands.add_parser("create-repository", help="Register identity only; acquires no files")
     repository.add_argument("name")
+    commands.add_parser("list-repositories", help="List repository IDs and names for team grants")
     grant = commands.add_parser("grant")
     grant.add_argument("login")
     grant.add_argument("repository_id")
@@ -54,7 +55,10 @@ def main():
             parser.error("Passwords must match and contain 12–128 characters")
         password_hash = passwords.hash(password)
     with session_factory(engine).begin() as db:
-        if args.command == "create-account":
+        if args.command == "list-repositories":
+            for identity, name in db.execute(select(Repository.id, Repository.name).order_by(Repository.name, Repository.id)):
+                print(identity, name, sep="\t")
+        elif args.command == "create-account":
             normalized = args.login.strip().casefold()
             if not 1 <= len(normalized) <= 120 or not args.display_name.strip() or len(args.display_name) > 200:
                 parser.error("Invalid login or display name")

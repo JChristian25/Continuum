@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 REL_TYPE_MAP = {
     "documents": "DOCUMENTS",
+    "depends_on": "DEPENDS_ON",
     "implements": "IMPLEMENTS",
     "motivates": "MOTIVATES",
 }

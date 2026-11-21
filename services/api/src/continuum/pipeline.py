@@ -8,7 +8,7 @@ from sqlalchemy import event, func, select, text
 from pathlib import PurePosixPath
 import re
 from .acquisition import WORKSPACE, contained, sha256
-from .discovery import _compile_rules, _extract_tokens, extract_artifact_structure, load_profile
+from .discovery import _compile_rules, _extract_tokens, extract_artifact_structure, load_profile, summarize_artifact_structure
 from .local_repo import load_any_accepted, load_any_sources
 from .models import (Artifact, ArtifactVersion, Assertion, AssertionRevision, Evidence, FollowUp,
                      Receipt, ReviewContext, ReviewEvent, View, new_id)
@@ -175,7 +175,9 @@ def make_snapshot(db, selection):
     retained = db.scalar(select(Snapshot).where(Snapshot.selection_id == selection.id, Snapshot.snapshot_version == selection.snapshot_version).order_by(Snapshot.id))
     if retained is not None:
         return retained
-    eligible = len(manifest["entries"])
+    target_commit = selection.target_revision.get("commitId") if isinstance(selection.target_revision, dict) else None
+    rev_label = next((lbl for lbl, rev in manifest["revisions"].items() if rev.get("commitId") == target_commit), None)
+    eligible = sum(1 for e in manifest["entries"] if rev_label in e.get("revisions", {})) if rev_label else len(manifest["entries"])
     context_ids = list(db.scalars(select(SelectionContext.context_id).where(SelectionContext.selection_id == selection.id)))
     contexts = list(db.scalars(select(ReviewContext).where(ReviewContext.id.in_(context_ids)).order_by(ReviewContext.id))) if context_ids else []
     works = list(db.scalars(select(FollowUp).where(FollowUp.context_id.in_(context_ids)).order_by(FollowUp.id))) if context_ids else []
@@ -193,8 +195,15 @@ def make_snapshot(db, selection):
         coverage.append({"function": function, "status": status, "eligibleCount": None,
                          "processedCount": 0, "excludedCount": None,
                          "limitations": ["No complete processing claim for this function in this snapshot."]})
-    limitations = {"Bounded Healthchecks input; not complete project coverage.",
-                   "Search is literal within retained captured scope; graph access is typed and one-hop only."}
+    inventory = manifest["revisions"].get(rev_label, {}).get("gitInventory")
+    limitations = {"Search is literal within retained captured scope; graph access is typed and one-hop only."}
+    if inventory:
+        scope = "all tracked paths" if inventory["selectedPaths"] is None else f'{inventory["selectedPaths"]} requested paths'
+        limitations.add(f'Git inventory for {scope}: {eligible} eligible text files, {len(inventory["excluded"])} exclusions.')
+    elif manifest["repository"].get("sourceMode"):
+        limitations.add("Coverage applies to the registered workspace inventory.")
+    else:
+        limitations.add("Bounded Healthchecks input; not complete project coverage.")
     for operation in operations:
         limitations.update(operation.limitations)
         for item in operation.coverage:
@@ -204,9 +213,17 @@ def make_snapshot(db, selection):
     if selection.base_revision:
         coverage = [c for c in coverage if c['function'] != 'change_handling'] + [{'function': 'change_handling', 'status': 'partial', 'eligibleCount': len(versions), 'processedCount': len(versions), 'excludedCount': None, 'limitations': ['Native Git on retained bytes and direct typed endpoint impact; no rename inference.']}]
     limitations.update(profile["limitations"])
+    if inventory:
+        coverage = [{**item, "excludedCount": len(inventory["excluded"])} if item["function"] == "ingestion"
+                    else item for item in coverage]
     header = {"id": new_id(), "selection": selection_data(selection), "snapshotVersion": selection.snapshot_version,
         "provenance": "real", "contextVersions": [{"contextId": row.id, "projectionVersion": row.projection_version} for row in contexts],
         "coverage": coverage, "pendingReviewCount": sum(row.resolution == "open" and row.validity in {"candidate", "stale"} for row in contexts),
+        "staleReviewCount": sum(row.resolution == "open" and row.validity == "stale" for row in contexts),
+        "openCandidateCount": sum(row.resolution == "open" and row.validity == "candidate" for row in contexts),
+        "deferredCount": sum(row.resolution == "deferred" and row.validity == "candidate" for row in contexts),
+        "screenedCount": sum(row.resolution == "screened" and row.validity == "candidate" for row in contexts),
+        "unresolvedCandidateCount": sum(row.validity == "candidate" and row.resolution in {"open", "deferred", "screened"} for row in contexts),
         "openFollowUpCount": sum(row.status == "open" for row in works), "limitations": sorted(limitations)}
     revision_ids = [context.assertion_revision_id for context in contexts]
     revisions_by_id = load_scoped_map(db, AssertionRevision, revision_ids, selection.repository_id)
@@ -235,12 +252,10 @@ def make_snapshot(db, selection):
     artifacts = []
     for version in versions:
         artifact = artifacts_by_id[version.artifact_id]
-        structure = extract_artifact_structure(artifact.kind, artifact.path, version.identity, version.content)
-        symbol_count = sum(1 for item in structure["items"] if item["kind"] in {"class", "function", "method"})
-        section_count = sum(1 for item in structure["items"] if item["kind"] in {"section", "code_block"})
+        summary = summarize_artifact_structure(artifact.kind, artifact.path, version.identity, version.content, version.digest)
         artifacts.append({"artifactId": artifact.id, "kind": artifact.kind, "path": artifact.path,
                           "versionId": version.id, "identity": version.identity, "contentDigest": version.digest,
-                          "structureSummary": {"engine": structure["engine"], "symbolCount": symbol_count, "sectionCount": section_count}})
+                          "structureSummary": summary})
     row = Snapshot(id=header["id"], repository_id=selection.repository_id, selection_id=selection.id,
                    snapshot_version=selection.snapshot_version,
                    document={"snapshot": header, "assertions": assertions, "artifacts": artifacts,
@@ -345,11 +360,22 @@ def query(db, repository, envelope):
         selection = scoped(db, Selection, snapshot.selection_id, repository.id)
         from .comparison import enrich_comparison
         from .cycle import completion
+        from .git_lens import enrich_revision_entry, get_commit_metadata, resolve_repo_git_dir
         from .progress import workspace_progress
         doc = snapshot.document
         if doc.get("comparison"):
             doc = {**doc, "comparison": enrich_comparison(db, doc["comparison"])}
-        return {**doc, "progress": workspace_progress(db, snapshot, selection), "completion": completion(db, snapshot), "currentSnapshotVersion": selection.snapshot_version,
+        git_dir = resolve_repo_git_dir(db, repository.id, WORKSPACE)
+        target_cid = (selection.target_revision or {}).get("commitId", "")
+        base_cid = (selection.base_revision or {}).get("commitId", "") if selection.base_revision else ""
+        _, _, manifest, _ = registered_inputs(db, repository.id, selection.inventory_id, selection.configuration_id)
+        rev_by_cid = {rev.get("commitId"): (lbl, rev) for lbl, rev in manifest.get("revisions", {}).items()}
+        tgt_pair = rev_by_cid.get(target_cid)
+        target_meta = enrich_revision_entry(tgt_pair[0], tgt_pair[1], git_dir) if tgt_pair else get_commit_metadata(git_dir, target_cid)
+        base_pair = rev_by_cid.get(base_cid) if base_cid else None
+        base_meta = (enrich_revision_entry(base_pair[0], base_pair[1], git_dir) if base_pair else get_commit_metadata(git_dir, base_cid)) if base_cid else None
+        return {**doc, "gitInventory": tgt_pair[1].get("gitInventory") if tgt_pair else None,
+                "revisionMeta": {"target": target_meta, "base": base_meta}, "progress": workspace_progress(db, snapshot, selection), "completion": completion(db, snapshot), "currentSnapshotVersion": selection.snapshot_version,
                 "mode": "active" if selection.snapshot_version == snapshot.snapshot_version else "historical"}
     if envelope.query == "list_snapshots":
         data = SnapshotListInput.model_validate(envelope.input)

@@ -24,13 +24,24 @@ from .pipeline_models import ReviewViewBinding, Selection, Snapshot
 from .pipeline_models import Activity, EvidenceOrigin, InputRegistration, ProfileRegistration, RevisionOrigin
 from .acquisition import WORKSPACE, sha256
 from .discovery import extract_artifact_structure, load_profile
+from .git_lens import (
+    compute_file_blame,
+    enrich_revision_entry,
+    get_commit_diff,
+    list_repo_commits,
+    resolve_git_dir_from_manifest,
+    resolve_repo_git_dir,
+)
 from .local_repo import (
+    GitInspectInput,
     RevisionAddInput,
     WorkspaceCreateInput,
     add_custom_revision,
     create_custom_workspace,
+    inspect_git_repository,
     is_custom_manifest,
     load_any_accepted,
+    remote_connection,
 )
 from .capture import execute as capture_command
 from .comparison import compare, prior_decision_map
@@ -180,12 +191,15 @@ def create_app(settings=None, engine=None, *, worker_enabled=True):
                         profiles.append({"id": configured.id, "methodId": profile["methodId"],
                                          "digest": profile_digest, "limitations": profile["limitations"]})
                     is_custom = is_custom_manifest(WORKSPACE / registered.acceptance_path, WORKSPACE)
+                    git_dir = resolve_git_dir_from_manifest(manifest, WORKSPACE)
                     inputs.append((
                         (1 if is_custom else 0, str(acceptance.get("acceptedAt") or ""), registered.id),
                         {"id": registered.id, "repositoryFullName": manifest["repository"]["fullName"],
                          "manifestDigest": manifest_digest, "pathCount": len(manifest["entries"]), "language": "Python",
                          "isCustom": is_custom,
-                         "revisions": [{"label": label, "objectAlgorithm": revision["objectAlgorithm"], "commitId": revision["commitId"]}
+                         "gitRepoPath": str(git_dir) if git_dir else manifest["repository"].get("gitRepoPath"),
+                         **remote_connection(manifest["repository"], git_dir, settings),
+                         "revisions": [enrich_revision_entry(label, revision, git_dir)
                                        for label, revision in manifest["revisions"].items()], "profiles": profiles},
                     ))
                 inputs.sort(key=lambda item: item[0])
@@ -196,9 +210,18 @@ def create_app(settings=None, engine=None, *, worker_enabled=True):
                 "capabilities": {
                     "customWorkspaces": settings.allow_custom_workspaces,
                     "localGit": settings.allow_local_git,
+                    "gitClone": settings.allow_local_git,
                 },
                 "repositories": repositories,
             }
+
+    @app.post("/api/v1/git/inspect")
+    def inspect_git_route(request: Request, body: GitInspectInput):
+        request.state.request_id = body.requestId
+        with factory.begin() as db:
+            current_actor(db, request, settings, write=True)
+            result = inspect_git_repository(body, settings)
+        return {"schemaVersion": "0.1.0", "requestId": body.requestId, "result": result}
 
     @app.post("/api/v1/workspaces")
     def create_workspace_route(request: Request, body: WorkspaceCreateInput):
@@ -327,6 +350,59 @@ def create_app(settings=None, engine=None, *, worker_enabled=True):
             return {"id": version.id, "artifactId": version.artifact_id, "identity": version.identity,
                     "content": version.content, "contentDigest": {"algorithm": "sha256", "value": version.digest},
                     "structure": structure}
+
+    @app.get("/api/v1/repositories/{repository_id}/versions/{version_id}/blame")
+    def read_version_blame(repository_id: str, version_id: str, request: Request):
+        with factory.begin() as db:
+            actor, _ = current_actor(db, request, settings)
+            repository_access(db, actor, repository_id)
+            version = scoped(db, ArtifactVersion, version_id, repository_id)
+            artifact = scoped(db, Artifact, version.artifact_id, repository_id)
+            git_dir = resolve_repo_git_dir(db, repository_id, WORKSPACE)
+            commit_id = (version.identity.get("commit") or {}).get("commitId", "") if isinstance(version.identity, dict) else ""
+            return compute_file_blame(
+                git_dir,
+                commit_id,
+                artifact.path,
+                fallback_content=version.content,
+                fallback_identity=version.identity if isinstance(version.identity, dict) else {},
+            )
+
+    @app.get("/api/v1/repositories/{repository_id}/git/commits")
+    def read_git_commits(
+        repository_id: str,
+        request: Request,
+        ref: str = "HEAD",
+        limit: int = Query(default=40, ge=1, le=200),
+        path: str | None = None,
+    ):
+        with factory.begin() as db:
+            actor, _ = current_actor(db, request, settings)
+            repository_access(db, actor, repository_id)
+            git_dir = resolve_repo_git_dir(db, repository_id, WORKSPACE)
+            if git_dir is None:
+                return {"available": False, "repoPath": None, "commits": []}
+            return {
+                "available": True,
+                "repoPath": str(git_dir),
+                "commits": list_repo_commits(git_dir, ref=ref, limit=limit, path=path),
+            }
+
+    @app.get("/api/v1/repositories/{repository_id}/git/commits/{commit_id}")
+    def read_git_commit_detail(
+        repository_id: str,
+        commit_id: str,
+        request: Request,
+        path: str | None = None,
+    ):
+        with factory.begin() as db:
+            actor, _ = current_actor(db, request, settings)
+            repository_access(db, actor, repository_id)
+            git_dir = resolve_repo_git_dir(db, repository_id, WORKSPACE)
+            detail = get_commit_diff(git_dir, commit_id, file_path=path)
+            if detail is None:
+                fail("not_found", 404)
+            return detail
 
     @app.get("/api/v1/repositories/{repository_id}/evidence/{evidence_id}")
     def read_evidence(repository_id: str, evidence_id: str, request: Request):

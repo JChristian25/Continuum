@@ -70,7 +70,7 @@ try {
   await page.getByRole('option', { name: 'Low signal only', exact: true }).click();
   const lowCount = await page.locator('.service-row').count();
   if (lowCount < 1 || lowCount >= 19) throw new Error(`Expected 1..18 low-signal rows, got ${lowCount}`);
-  await expect(page.locator('.service-filter-disclosure')).toContainText('open links remain required before cycle completion');
+  await expect(page.locator('.service-filter-disclosure')).toContainText('candidates remain unresolved');
   await page.getByRole('combobox', { name: 'Filter by signal tier' }).click();
   await page.getByRole('option', { name: 'All signals', exact: true }).click();
   await expect(page.locator('.service-row')).toHaveCount(19);
@@ -150,17 +150,25 @@ try {
   await expect(page.getByLabel('Reason (optional)', { exact: true })).toHaveValue('');
   await page.getByRole('button', { name: 'Save judgment', exact: true }).click();
   await expect(page.locator('.service-row').filter({ hasText: 'rejected' })).toHaveCount(1);
-  // Check batch confirmation dialog evidence loading, then cancel without changing confirmed count.
-  const firstCandidateWrap = page.locator('.service-row-wrap').filter({ hasText: 'candidate' }).first();
-  await firstCandidateWrap.getByRole('checkbox').check();
-  await page.getByRole('button', { name: /Review & confirm \(1\)/ }).click();
-  const batchDialog = page.getByRole('dialog', { name: /Review & confirm 1 relationships/ });
-  await expect(batchDialog.locator('.service-batch-item')).toHaveCount(1);
+  // Check batch confirmation dialog per-item evidence inspection checkboxes, then cancel without confirming.
+  const candidateWraps = page.locator('.service-row-wrap').filter({ hasText: 'candidate' });
+  await candidateWraps.nth(0).getByRole('checkbox').check();
+  await candidateWraps.nth(1).getByRole('checkbox').check();
+  await page.getByRole('button', { name: /Review & confirm \(2\)/ }).click();
+  const batchDialog = page.getByRole('dialog', { name: /Review & confirm 2 relationships/ });
+  await expect(batchDialog.locator('.service-batch-item')).toHaveCount(2);
+  await expect(batchDialog.getByRole('button', { name: 'Confirm 0 relationships' })).toBeDisabled();
+  await batchDialog.locator('.service-batch-item').first().getByRole('checkbox').check();
+  await expect(batchDialog.getByRole('button', { name: 'Confirm 1 relationship' })).toBeEnabled();
+  await batchDialog.getByRole('checkbox', { name: /Mark all 2 loaded relationships inspected/ }).check();
+  await expect(batchDialog.getByRole('button', { name: 'Confirm 2 relationships' })).toBeEnabled();
   await batchDialog.getByRole('button', { name: 'Close batch review' }).click();
-  await firstCandidateWrap.getByRole('checkbox').uncheck();
+  await page.getByRole('button', { name: 'Clear', exact: true }).click();
   // Reopen the selected context after save and inspect its retained absence state.
   await page.getByRole('button', { name: 'Workspace', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Repository progress' })).toContainText('Suggested workflow');
   await expect(page.getByRole('region', { name: 'Repository progress' })).toContainText('reviewed');
+  await expect(page.locator('.service-brief-progress')).toHaveCount(0);
   await page.screenshot({ path: fileURLToPath(new URL('../../../outputs/frontend-integration/progress-desktop.png', import.meta.url)), fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: fileURLToPath(new URL('../../../outputs/frontend-integration/progress-mobile.png', import.meta.url)), fullPage: true });
@@ -195,8 +203,8 @@ try {
   await page.screenshot({ path: fileURLToPath(new URL('../../../outputs/frontend-integration/change-impact-graph.png', import.meta.url)), fullPage: true });
   await page.getByRole('button', { name: 'Close inspector' }).click();
   // Typed authored records remain explicit manual claims, and revision needs new review.
-  await page.getByRole('button', { name: 'Record intent', exact: true }).click();
-  const recordDialog = page.getByRole('dialog', { name: 'Record intent', exact: true });
+  await page.getByRole('button', { name: 'Record requirement or decision', exact: true }).click();
+  const recordDialog = page.getByRole('dialog', { name: 'Record requirement or decision', exact: true });
   await recordDialog.getByRole('combobox', { name: 'Kind' }).click();
   await page.getByRole('option', { name: 'Requirement', exact: true }).click();
   await recordDialog.getByRole('textbox', { name: 'Title', exact: true }).fill('Browser requirement');
@@ -205,6 +213,7 @@ try {
   await recordDialog.getByRole('button', { name: 'Save record', exact: true }).click();
   await expect(recordDialog).toHaveCount(0);
   await page.getByText('Add a relationship', { exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Save candidate relationship' })).toBeDisabled();
   await page.getByRole('combobox', { name: 'Relationship meaning' }).click();
   await page.getByRole('option', { name: 'Code implements requirement' }).click();
   await page.getByRole('combobox', { name: 'Evidence from' }).click();
@@ -243,23 +252,50 @@ try {
   await page.locator('.service-inspector').getByRole('button', { name: 'Read captured source' }).nth(1).click();
   await expect(page.locator('.service-inspector')).toContainText('Updated captured requirement');
   await page.getByRole('button', { name: 'Close inspector' }).click();
-  // Finish the baseline through separate exact-context UI judgments, then compare again.
+  // Exercise lightweight triage (defer, batch screen, restore) + scoped completion without falsifying rejections.
   await page.getByRole('button', { name: 'Workspace', exact: true }).click();
   await page.getByRole('combobox', { name: 'Selected revision' }).click();
   await page.getByRole('option').filter({ hasText: '0f78e11' }).click();
   await page.getByRole('button', { name: 'Review relationships', exact: true }).click();
   await expect(page.locator('.service-row')).toHaveCount(19);
-  let remaining = await page.locator('.service-row').filter({ hasText: 'candidate' }).count();
-  await page.locator('.service-row-wrap').filter({ hasText: 'candidate' }).first().getByRole('button', { name: /^Dismiss / }).click();
-  await expect(page.locator('.service-row').filter({ hasText: 'candidate' })).toHaveCount(--remaining);
-  await page.getByRole('checkbox', { name: /Select all open candidates/ }).check();
-  await page.getByRole('button', { name: new RegExp(`Reject selected \\(${remaining}\\)`) }).click();
-  await expect(page.locator('.service-row').filter({ hasText: 'rejected' })).toHaveCount(17, { timeout: 60000 });
-  await expect(page.locator('.service-row').filter({ hasText: 'candidate' })).toHaveCount(0);
+  const openCandidateRows = page.locator('.service-row-wrap').filter({ has: page.locator('.service-row-status', { hasText: 'open' }) }).filter({ hasText: 'candidate' });
+  const initialOpenCount = await openCandidateRows.count();
+  await openCandidateRows.first().getByRole('button', { name: /^Defer / }).click();
+  await expect(page.locator('.service-metric-pill').filter({ hasText: '1 deferred' })).toBeVisible();
+  await expect(openCandidateRows).toHaveCount(initialOpenCount - 1);
+  // Batch screen 2 remaining open candidates -> validity remains candidate, rejected remains 1.
+  await openCandidateRows.nth(0).getByRole('checkbox').check();
+  await openCandidateRows.nth(1).getByRole('checkbox').check();
+  await page.getByRole('button', { name: 'Screen out selected (2)' }).click();
+  await expect(page.locator('.service-metric-pill').filter({ hasText: '2 screened' })).toBeVisible();
+  await expect(page.locator('.service-row').filter({ hasText: 'rejected' })).toHaveCount(1);
+  // Exercise task tabs & low-signal toggle cleanly, then filter to deferred, restore, and re-defer.
+  await page.getByRole('tab', { name: /Deferred & screened/ }).click();
+  await expect(page.locator('.service-row')).toHaveCount(3);
+  await page.getByRole('tab', { name: /^Reviewed/ }).click();
+  await expect(page.locator('.service-row')).toHaveCount(3);
+  await page.getByRole('tab', { name: /^All/ }).click();
+  const noiseBtn = page.getByRole('button', { name: /Hide low-signal/ });
+  if (await noiseBtn.count()) {
+    await noiseBtn.click();
+    await expect(page.getByRole('button', { name: /low hidden/ })).toBeVisible();
+    await page.getByRole('button', { name: /low hidden/ }).click();
+  }
+  await page.getByRole('combobox', { name: 'Filter by review state' }).click();
+  await page.getByRole('option', { name: 'deferred', exact: true }).click();
+  await expect(page.locator('.service-row')).toHaveCount(1);
+  await page.locator('.service-row-wrap').first().getByRole('button', { name: /^Restore / }).click();
+  await expect(page.locator('.service-metric-pill').filter({ hasText: 'deferred' })).toHaveCount(0);
+  await page.getByRole('combobox', { name: 'Filter by review state' }).click();
+  await page.getByRole('option', { name: 'all', exact: true }).click();
+  await page.locator('.service-row-wrap').filter({ has: page.locator('.service-row-status', { hasText: 'open' }) }).filter({ hasText: 'candidate' }).first().getByRole('button', { name: /^Defer / }).click();
+  await expect(page.locator('.service-metric-pill').filter({ hasText: '1 deferred' })).toBeVisible();
   await page.getByRole('button', { name: 'Review summary', exact: true }).click();
   await page.getByRole('checkbox', { name: 'I acknowledge the disclosed coverage and method limitations.' }).check();
-  await page.getByRole('button', { name: 'Record review completion', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Review completion recorded', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Record scoped review', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Scoped review recorded', exact: true })).toBeVisible();
+  await expect(page.locator('.service-status-pill').filter({ hasText: 'Scoped review recorded' })).toBeVisible();
+  await expect(page.locator('.service-cycle-actions')).toContainText(/Scoped review recorded — \d+ confirmed, \d+ unconfirmed/);
   await page.getByRole('button', { name: 'Print / PDF report', exact: true }).click();
   await expect(page.locator('.service-report-table')).toBeVisible();
   await page.getByRole('button', { name: 'Close audit report', exact: true }).click();
@@ -267,6 +303,9 @@ try {
   await page.getByRole('button', { name: 'Download Markdown report', exact: true }).click();
   const mdDownload = await mdDownloadEvent;
   if (!mdDownload.suggestedFilename().endsWith('.md')) throw new Error('Expected Markdown audit report');
+  const mdPath = await mdDownload.path();
+  const mdText = mdPath ? await readFile(mdPath, 'utf8') : '';
+  if (!mdText.includes('Scoped review recorded —')) throw new Error('Expected honest scoped review status in Markdown report');
   const exportedResponse = page.waitForResponse(response => response.url().endsWith('/api/v1/commands') && response.request().postDataJSON()?.command === 'export_snapshot');
   await page.getByRole('button', { name: 'Prepare JSON export', exact: true }).click();
   const exportId = (await (await exportedResponse).json()).result.operationId;
@@ -282,6 +321,9 @@ try {
   await downloaded.saveAs(exportPath);
   const exportedJson = JSON.parse(await readFile(exportPath, 'utf8'));
   if (!exportedJson.judgments.some(j => j.effectiveEvent?.reasonStatus === 'not_provided' && j.effectiveEvent.reason === null)) throw new Error('Export lost absent rationale');
+  if (!exportedJson.judgments.some(j => j.triageStatus === 'deferred' && j.effectiveEvent === null && j.latestTriageEvent?.payload?.disposition === 'defer')) throw new Error('Export missing deferred triage disclosure');
+  if (!exportedJson.judgments.some(j => j.triageStatus === 'screened' && j.effectiveEvent === null && j.latestTriageEvent?.payload?.disposition === 'screen')) throw new Error('Export missing screened triage disclosure');
+  if (!exportedJson.limitations.some(l => l.includes('unresolved candidate'))) throw new Error('Export missing unresolved candidate limitation disclosure');
   await page.getByRole('combobox', { name: 'Selected revision' }).click();
   await page.getByRole('option').filter({ hasText: 'c62d664' }).click();
   await page.getByText('Compare revisions', { exact: true }).click();
@@ -301,15 +343,16 @@ try {
   await expect(wsDialog.locator('.service-bundle-item')).toHaveCount(2);
   await wsDialog.getByRole('button', { name: 'Create & capture workspace', exact: true }).click();
   await expect(wsDialog).toHaveCount(0, { timeout: 40000 });
-  await expect(page.locator('.service-notice-banner')).toContainText('is captured and ready.', { timeout: 40000 });
+  await expect(page.locator('.service-notice-banner')).toContainText('Workspace "acme/billing-demo" created.');
+  await expect(page.locator('.service-progress-step').filter({ hasText: 'Capture repository snapshot' })).toHaveClass(/is-state-complete/, { timeout: 40000 });
   await page.getByRole('button', { name: 'Code explorer', exact: true }).click();
   await page.locator('.service-file-row').filter({ hasText: 'billing.py' }).click();
   await expect(page.locator('.service-structure-panel')).toContainText('Python AST outline');
   await page.locator('.service-structure-chip').filter({ hasText: 'BillingService.charge_invoice' }).click();
   await expect(page.locator('.service-anchor-bar')).toContainText('Lines 2–3 selected');
   await page.screenshot({ path: fileURLToPath(new URL('../../../outputs/frontend-integration/custom-workspace-ast.png', import.meta.url)), fullPage: true });
-  await page.getByRole('button', { name: 'Record intent for lines', exact: true }).click();
-  const anchoredRecord = page.getByRole('dialog', { name: 'Record intent', exact: true });
+  await page.getByRole('button', { name: 'Record requirement or decision for lines', exact: true }).click();
+  const anchoredRecord = page.getByRole('dialog', { name: 'Record requirement or decision', exact: true });
   await expect(anchoredRecord.getByRole('combobox', { name: 'Source attachment' })).toContainText('Anchor to captured artifact');
   await anchoredRecord.getByRole('combobox', { name: 'Kind' }).click();
   await page.getByRole('option', { name: 'Requirement', exact: true }).click();
@@ -323,7 +366,10 @@ try {
   await page.locator('.service-row').filter({ hasText: 'Cents conversion rule' }).click();
   await expect(page.getByRole('heading', { name: 'Recorded evidence' })).toBeVisible();
   await expect(page.locator('.service-locator-pill').first()).toContainText('in BillingService.charge_invoice()');
+  await expect(page.locator('.service-anchor-jump').first()).toBeVisible();
   await page.screenshot({ path: fileURLToPath(new URL('../../../outputs/frontend-integration/custom-inspector-ast.png', import.meta.url)), fullPage: true });
+  await page.locator('.service-anchor-jump').first().click();
+  await expect(page.locator('.service-inspector .code-line.is-selected-line').first()).toBeVisible();
   await page.getByRole('tab', { name: 'review', exact: true }).click();
   await page.getByRole('radio', { name: 'confirm', exact: true }).click();
   await page.getByLabel(/^Reason(?: \(optional\))?$/, { exact: true }).fill('Verified AST-anchored billing rule in custom workspace.');
@@ -399,7 +445,7 @@ try {
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await page.getByRole('button', { name: 'Review relationships', exact: true }).click();
   await expect(page.locator('.service-row')).toHaveCount(19);
-  await expect(page.getByRole('button', { name: 'Record intent', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Record requirement or decision', exact: true })).toBeDisabled();
   await page.locator('.service-row').first().click();
   await expect(page.getByRole('heading', { name: 'Recorded evidence' })).toBeVisible();
   await page.getByRole('tab', { name: 'review', exact: true }).click();

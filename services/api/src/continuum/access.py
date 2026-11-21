@@ -23,7 +23,7 @@ class SearchInput(PageInput):
 
 class GraphInput(PageInput):
     rootArtifactId: Id
-    relationTypes: list[RelationType] = Field(min_length=1, max_length=3)
+    relationTypes: list[RelationType] = Field(min_length=1, max_length=4)
     direction: Literal["incoming", "outgoing", "both"]
     depth: Literal[1]
 
@@ -36,8 +36,8 @@ class AssertionInput(Strict):
 
 def bounded_snapshot(db, repository_id, snapshot_id):
     snapshot = scoped(db, Snapshot, snapshot_id, repository_id)
-    if len(snapshot.document['artifacts']) > 1000 or len(snapshot.document['assertions']) > 5000:
-        fail('limit_exceeded', 422, {'limitName': 'snapshotAccessRecords', 'maximum': 5000, 'unit': 'records'})
+    if len(snapshot.document['artifacts']) > 50000 or len(snapshot.document['assertions']) > 50000:
+        fail('limit_exceeded', 422, {'limitName': 'snapshotAccessRecords', 'maximum': 50000, 'unit': 'records'})
     return snapshot
 
 

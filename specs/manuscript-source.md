@@ -25,4 +25,18 @@ The initial check was followed by the scoped core/method/readiness reconciliatio
 
 ## Reconciliation status
 
-The active proposal, capability deltas and background metadata have a scoped reconciliation record in manuscript-reconciliation.md, with a guided-task specification in demonstration-plan.md. Plain text was explicitly approved for inclusion in the proposed core. Implementation choices, full field/schema review, expected real-project outcomes and verification remain pending. Continue specification work only until implementation is separately authorized.
+The 2026-11-09 specification baseline recorded `MS-2026-11-09` above. On 2026-11-17 (checked on 2026-11-18), the user supplied the complete **106-page** manuscript PDF directly in conversation while `C:\Users\JC Linaban\Downloads\Chapter 1 - 3_FIXED-HIGHLIGHTED.pdf` was absent from local disk (`Test-Path` false), so no local SHA-256 digest was computed for the 106-page inline document.
+
+### Inline 106-page manuscript anchors (checked 2026-11-18)
+
+Structure observed across the 106 PDF pages: front matter pp. i–x (PDF pp. 1–10), Chapters 1–3 printed pp. 1–76 (PDF pp. 11–86), References printed pp. 77–84 (PDF pp. 87–94), and Appendix 1 printed pp. 85–96 (PDF pp. 95–106).
+
+| Location (PDF / Printed) | Source content checked |
+|---|---|
+| §1.4–1.5, PDF pp. 19–23 (pp. 9–13) | Research questions, committed core vs. extensions, single selected demo language (`Python`), Markdown and plain text core document formats, non-probabilistic score boundary |
+| §1.7, PDF pp. 25–28 (pp. 15–18) | Term definitions: applicability, artifact traceability, bidirectional change impact analysis, relationship revalidation, software knowledge continuity |
+| §3.3 & §3.5, PDF pp. 67–75 (pp. 57–65) | Form A/B instruments, eligibility screening guide, SOP 1–3 procedure, Common Guided Tasks 1–4, Common Demonstration Evidence requirements for Extensibility Items 13–16 and Feasibility Item 19 |
+| §3.7.1–3.7.6, Table 4–5, Fig. 5–7, PDF pp. 76–86 (pp. 66–76) | Capabilities mapping, RAD/spec-driven development phases, Table 5 technology shortlist, container architecture, core procedures, prototype readiness checks |
+| Appendix 1, PDF pp. 95–106 (pp. 85–96) | Form A (concerns & necessity, Key Terms states `proposed/confirmed/stale/retired`), Form B (perceived adequacy 20 items across 5 dimensions), Recruitment Screening Guide, Common Demonstration Evidence, Revision Record, Parameter–Literature–Questionnaire Alignment Guide |
+
+The active reconciliation record, technology/architecture adjustments, and Appendix 1 demonstration brief are maintained in [manuscript-reconciliation.md](manuscript-reconciliation.md), [architecture-reconciliation.md](architecture-reconciliation.md), and [GUIDED-TASKS.md](../services/api/GUIDED-TASKS.md).

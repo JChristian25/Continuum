@@ -4,7 +4,7 @@ import {
   Infinity as InfinityIcon, ArrowRight, X, RefreshCw, Search, FileText, FileCode2,
   ChevronRight, ChevronDown, GitBranch, ShieldCheck, Eye, EyeOff, CheckCircle2, Copy, Check,
   GitCompare, ListChecks, LogOut, Shield, FolderGit2, Clock, Sun, Moon,
-  AlertTriangle, Network, Layers, List, Link2, Sparkles, Cpu, Keyboard, Info, Archive, GitCommit,
+  AlertTriangle, Network, Layers, List, Link2, Sparkles, Cpu, Info, Archive, GitCommit,
   Code2, Hash, FolderPlus
 } from 'lucide-react';
 import Shell from './Shell.jsx';
@@ -12,9 +12,9 @@ import Tooltip from './Tooltip.jsx';
 import SourceLinePicker from './SourceLinePicker.jsx';
 import CustomWorkspaceModal from './CustomWorkspaceModal.jsx';
 import { useContinuum } from '../context/ContinuumBase.js';
-import { allSelections, buildCompareOptions, contextEnvelope, permittedDecisions, optionalReason, reasonLabel } from '../data/serviceModel.js';
+import { allSelections, buildCompareOptions, contextEnvelope, permittedDecisions, permittedTriageDispositions, optionalReason, reasonLabel, REASON_PRESETS } from '../data/serviceModel.js';
 import { computeLineDiff } from '../data/diff.js';
-import { classifyCandidateSignal, rankEvidenceItems, resolveEvidenceEnclosingLabel } from '../data/evidenceSignal.js';
+import { analyzeRelationshipMeaning, classifyCandidateSignal, rankEvidenceItems, resolveEvidenceEnclosingLabel } from '../data/evidenceSignal.js';
 import './service.css';
 
 import { RelationshipEditor, RecordRevision, ServiceSearch, ServiceGraph, CycleActions } from './ServiceTools.jsx';
@@ -41,7 +41,7 @@ function ValidityIcon({ validity, size = 11 }) {
 function ValidityChip({ validity }) {
   return (
     <Tooltip content={VALIDITY_HINTS[validity] || `Validity: ${validity}`}>
-      <span className={`service-chip service-chip--${validity}`}>
+      <span className={`service-chip service-chip--${validity}`} data-validity={validity}>
         <ValidityIcon validity={validity} />
         {validity}
       </span>
@@ -65,6 +65,7 @@ const DECISION_HINTS = {
 
 const RELATION_HINTS = {
   documents: 'Document describes or specifies behavior in Python code',
+  depends_on: 'Declares a package, runtime, or configuration dependency required by code',
   implements: 'Python code implements a tracked requirement',
   motivates: 'Architectural decision motivates Python code',
 };
@@ -169,11 +170,141 @@ function formatLocator(locator) {
   return 'Source anchor';
 }
 
-function Source({ source, defaultOpen = true, selectedRange = null, onSelectLine = null, bodyRef = null }) {
+function CommitDiffDialog({ ctx, commitRequest, onClose }) {
+  const [detail, setDetail] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState('');
+  useEffect(() => {
+    if (!commitRequest?.commitId) return;
+    const abort = new AbortController();
+    ctx.api
+      .gitCommitDetail(ctx.selection.repositoryId, commitRequest.commitId, commitRequest.path || null, abort.signal)
+      .then(data => { if (!abort.signal.aborted) { setDetail(data); setLoading(false); } })
+      .catch(e => { if (!abort.signal.aborted && e.name !== 'AbortError') { setErr(e.message); setLoading(false); } });
+    return () => abort.abort();
+  }, [ctx.api, ctx.selection.repositoryId, commitRequest]);
+
+  if (!commitRequest) return null;
+  const commit = detail?.commit;
+  return (
+    <Dialog open onOpenChange={open => !open && onClose()}>
+      <DialogContent className="service-dialog service-commit-diff-dialog service-dialog--sticky" padded={false} showClose={false} aria-labelledby="gitlens-commit-title" aria-describedby="gitlens-commit-desc">
+        <div className="service-dialog-head">
+          <div>
+            <DialogTitle id="gitlens-commit-title">
+              GitLens Commit Inspector · <code>{commitRequest.commitId.slice(0, 7)}</code>
+            </DialogTitle>
+            <DialogDescription id="gitlens-commit-desc">
+              {commitRequest.path ? `Scoped to ${commitRequest.path}` : 'Full commit metadata and unified diff'}
+            </DialogDescription>
+          </div>
+          <Button variant="unstyled" className="btn service-dialog-close" onClick={onClose} aria-label="Close commit inspector"><X size={18} /></Button>
+        </div>
+        <div className="service-dialog-body">
+          {loading && <p className="service-method" role="status">Loading commit metadata &amp; diff from Git…</p>}
+          {err && <p className="form-error" role="alert">{err}</p>}
+          {!loading && !err && commit && (
+            <div className="service-commit-inspector">
+              <div className="service-commit-inspector__meta">
+                <h3 className="service-commit-inspector__subject">{commit.subject}</h3>
+                {commit.body && <pre className="service-commit-inspector__body">{commit.body}</pre>}
+                <div className="service-commit-inspector__facts">
+                  <span><strong>Author:</strong> {commit.authorName} {commit.authorEmail ? `<${commit.authorEmail}>` : ''}</span>
+                  <span><strong>Authored:</strong> {formatTimestamp(commit.authoredAt)}</span>
+                  <span><strong>Commit SHA:</strong> <code>{commit.commitId}</code></span>
+                  {commit.parentIds?.length > 0 && <span><strong>Parent:</strong> <code>{commit.parentIds.map(p => p.slice(0, 7)).join(', ')}</code></span>}
+                </div>
+              </div>
+              {detail.changedFiles?.length > 0 && (
+                <Disclosure trigger={`Files modified in commit (${detail.changedFiles.length})`} defaultOpen={detail.changedFiles.length <= 8} variant="subtle">
+                  <div className="service-impact-strip">
+                    {detail.changedFiles.map(f => (
+                      <span className="service-change-pill" key={f.path}>
+                        <code>{f.status}</code>
+                        <span>{f.path}</span>
+                      </span>
+                    ))}
+                  </div>
+                </Disclosure>
+              )}
+              <div className="service-commit-diff-box">
+                <div className="service-diff-head">
+                  <strong>Unified Git diff {detail.scopedPath ? `(${detail.scopedPath})` : ''}</strong>
+                  {detail.truncated && <small>Truncated at 200 KB</small>}
+                </div>
+                <pre className="service-git-unified-diff">
+                  {(detail.diff || 'No line changes for this path in this commit.').split('\n').map((dline, idx) => {
+                    const cls = dline.startsWith('+') && !dline.startsWith('+++')
+                      ? 'is-add'
+                      : dline.startsWith('-') && !dline.startsWith('---')
+                        ? 'is-del'
+                        : dline.startsWith('@@')
+                          ? 'is-hunk'
+                          : '';
+                    return <div className={`service-git-diff-line ${cls}`} key={idx}>{dline || ' '}</div>;
+                  })}
+                </pre>
+              </div>
+            </div>
+          )}
+        </div>
+        <div className="service-dialog-footer">
+          <Button type="button" variant="secondary" onClick={onClose}>Close</Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function buildLineBlameLookup(blame) {
+  if (!blame?.available || !blame?.hunks?.length || !blame?.commits) return null;
+  const byLine = new Map();
+  for (const hunk of blame.hunks) {
+    const commit = blame.commits[hunk.commitId];
+    if (!commit) continue;
+    for (let ln = hunk.startLine; ln <= hunk.endLine; ln += 1) {
+      byLine.set(ln, {
+        commit,
+        isHunkStart: ln === hunk.startLine,
+        hunkStart: hunk.startLine,
+        hunkEnd: hunk.endLine,
+      });
+    }
+  }
+  return byLine;
+}
+
+function Source({
+  source,
+  defaultOpen = true,
+  open,
+  onOpenChange,
+  selectedRange = null,
+  onSelectLine = null,
+  bodyRef = null,
+  tone = 'dark',
+  jumpLine = null,
+  blame = null,
+  defaultShowBlame = false,
+  onInspectCommit = null,
+}) {
   const [copied, setCopied] = useState(false);
+  const [showBlame, setShowBlame] = useState(defaultShowBlame);
+  const localBodyRef = useRef(null);
+  const resolvedRef = bodyRef || localBodyRef;
+  const lineBlame = useMemo(() => buildLineBlameLookup(blame), [blame]);
+  useEffect(() => {
+    if (!open || !jumpLine) return;
+    const raf = requestAnimationFrame(() => {
+      const row = resolvedRef.current?.querySelector(`[data-line="${jumpLine}"]`);
+      row?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [open, jumpLine, resolvedRef]);
   if (!source) return <p>Exact source is unavailable.</p>;
   const path = source.identity.path || source.identity.title || source.id;
   const lines = source.content.split('\n');
+  const disclosureVariant = tone === 'quiet' ? 'subtle' : 'dark';
   const copySource = async () => {
     try {
       await navigator.clipboard?.writeText(source.content);
@@ -181,20 +312,76 @@ function Source({ source, defaultOpen = true, selectedRange = null, onSelectLine
       setTimeout(() => setCopied(false), 1800);
     } catch { /* Clipboard permission optional */ }
   };
-  return <section className="code-box service-source"><div className="code-box__header"><FileCode2 size={14} /><strong title={path}>{path}</strong><span>{lines.length} lines</span><button type="button" className="service-source-copy" onClick={copySource} aria-label={`Copy ${path}`}>{copied ? <Check size={12} /> : <Copy size={12} />}<span>{copied ? 'Copied' : 'Copy'}</span></button></div>
-    <Disclosure trigger="Read captured source" defaultOpen={defaultOpen} variant="dark" className="service-source-content">
-      <div className="code-box__body" ref={bodyRef}>{lines.map((line, i) => {
+  const blameActive = Boolean(showBlame && lineBlame);
+  return <section className={`code-box service-source ${tone === 'quiet' ? 'is-quiet' : ''} ${blameActive ? 'has-gitlens-blame' : ''}`}>
+    <div className="code-box__header">
+      <FileCode2 size={14} />
+      <strong title={path}>{path}</strong>
+      <span>{lines.length} lines</span>
+      {blame?.available && (
+        <span className="service-source-gitlens-stats" title={`${blame.contributorCount} contributor(s) across ${blame.distinctCommits} commit(s)`}>
+          <GitCommit size={12} aria-hidden="true" />
+          {blame.contributorCount} {blame.contributorCount === 1 ? 'author' : 'authors'} · {blame.distinctCommits} {blame.distinctCommits === 1 ? 'commit' : 'commits'}
+        </span>
+      )}
+      {blame?.available && (
+        <button
+          type="button"
+          className={`service-source-blame-toggle ${showBlame ? 'is-active' : ''}`}
+          onClick={() => setShowBlame(v => !v)}
+          aria-pressed={showBlame}
+        >
+          <GitBranch size={12} aria-hidden="true" />
+          <span>{showBlame ? 'Hide GitLens blame' : 'GitLens blame'}</span>
+        </button>
+      )}
+      <button type="button" className="service-source-copy" onClick={copySource} aria-label={`Copy ${path}`}>{copied ? <Check size={12} /> : <Copy size={12} />}<span>{copied ? 'Copied' : 'Copy'}</span></button>
+    </div>
+    <Disclosure trigger="Read captured source" defaultOpen={defaultOpen} open={open} onOpenChange={onOpenChange} variant={disclosureVariant} className="service-source-content">
+      <div className="code-box__body" ref={resolvedRef}>{lines.map((line, i) => {
         const lineNo = i + 1;
         const inRange = selectedRange && lineNo >= selectedRange[0] && lineNo <= selectedRange[1];
+        const bInfo = blameActive ? lineBlame.get(lineNo) : null;
+        const bCommit = bInfo?.commit;
+        const showAnnotation = bCommit && (bInfo.isHunkStart || (selectedRange && lineNo === selectedRange[0]));
+        const shortDate = (bCommit?.authoredAt || '').slice(0, 10);
+        const blameTooltip = bCommit
+          ? `${bCommit.authorName}${bCommit.authorEmail ? ` <${bCommit.authorEmail}>` : ''} · ${shortDate} · ${bCommit.shortCommitId}\n"${bCommit.summary}" (Lines ${bInfo.hunkStart}–${bInfo.hunkEnd})`
+          : '';
         return <div
-          className={`code-line ${onSelectLine ? 'is-selectable' : ''} ${inRange ? 'is-selected-line' : ''}`}
+          className={`code-line ${onSelectLine ? 'is-selectable' : ''} ${inRange ? 'is-selected-line' : ''} ${bInfo?.isHunkStart ? 'is-blame-hunk-start' : ''}`}
           data-line={lineNo}
           key={i}
           onClick={onSelectLine ? e => onSelectLine(lineNo, e) : undefined}
-        ><span className="code-line__num">{lineNo}</span><span className="code-line__text">{line || ' '}</span></div>;
+        >
+          {blameActive && (
+            <button
+              type="button"
+              className={`code-line__blame ${showAnnotation ? 'has-label' : 'is-continuation'}`}
+              title={blameTooltip}
+              onClick={e => {
+                e.stopPropagation();
+                if (bCommit && onInspectCommit) onInspectCommit({ commitId: bCommit.commitId, path });
+              }}
+            >
+              {showAnnotation ? (
+                <>
+                  <span className="code-line__blame-author">{bCommit.authorName}</span>
+                  <span className="code-line__blame-date">{shortDate}</span>
+                  <code className="code-line__blame-sha">{bCommit.shortCommitId}</code>
+                  <span className="code-line__blame-msg">{bCommit.summary}</span>
+                </>
+              ) : (
+                <span className="code-line__blame-bar" aria-hidden="true">│</span>
+              )}
+            </button>
+          )}
+          <span className="code-line__num">{lineNo}</span>
+          <span className="code-line__text">{line || ' '}</span>
+        </div>;
       })}</div>
     </Disclosure>
-    <Disclosure trigger="Exact version identity" variant="dark" className="service-source-identity">
+    <Disclosure trigger="Exact version identity" variant={disclosureVariant} className="service-source-identity">
       <pre className="service-json">{JSON.stringify({ id: source.id, identity: source.identity, digest: source.contentDigest }, null, 2)}</pre>
     </Disclosure>
   </section>;
@@ -204,7 +391,7 @@ function BatchConfirmDialog({ ctx, rows, onClose, onCompleted }) {
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState([]);
   const [loadError, setLoadError] = useState('');
-  const [inspected, setInspected] = useState(false);
+  const [checkedIds, setCheckedIds] = useState(() => new Set());
   const [reason, setReason] = useState('');
 
   useEffect(() => {
@@ -215,36 +402,59 @@ function BatchConfirmDialog({ ctx, rows, onClose, onCompleted }) {
     return () => abort.abort();
   }, [ctx, rows]);
 
+  const checkedItems = items.filter(({ row }) => checkedIds.has(row.id));
+  const allInspected = items.length > 0 && checkedItems.length === items.length;
+  const toggleItemChecked = (id, checked) => setCheckedIds(prev => {
+    const next = new Set(prev);
+    if (checked) next.add(id);
+    else next.delete(id);
+    return next;
+  });
+  const toggleAllChecked = checked => {
+    setCheckedIds(checked ? new Set(items.map(({ row }) => row.id)) : new Set());
+  };
+
   return <Dialog open onOpenChange={open => !open && onClose()}>
-    <DialogContent className="service-dialog service-batch-dialog" padded={false} showClose={false} aria-labelledby="batch-confirm-title" aria-describedby="batch-confirm-desc">
-      <Button variant="unstyled" className="btn service-dialog-close" onClick={onClose} aria-label="Close batch review"><X size={18} /></Button>
-      <DialogTitle id="batch-confirm-title">Review &amp; confirm {rows.length} relationships</DialogTitle>
-      <DialogDescription id="batch-confirm-desc">Inspect the recorded evidence for each selected relationship before confirming. Each item is saved with its own accountable receipt.</DialogDescription>
-      {loading && <p className="service-method" role="status">Loading exact recorded evidence…</p>}
-      {loadError && <p className="form-error" role="alert">{loadError}</p>}
-      {!loading && !loadError && <form className="journey-form" onSubmit={async e => {
+    <DialogContent className="service-dialog service-batch-dialog service-dialog--sticky" padded={false} showClose={false} aria-labelledby="batch-confirm-title" aria-describedby="batch-confirm-desc">
+      <div className="service-dialog-head">
+        <div>
+          <DialogTitle id="batch-confirm-title">Review &amp; confirm {rows.length} relationships</DialogTitle>
+          <DialogDescription id="batch-confirm-desc">Inspect each relationship’s recorded evidence and check the ones you verified. Unchecked items remain candidates.</DialogDescription>
+        </div>
+        <Button variant="unstyled" className="btn service-dialog-close" onClick={onClose} aria-label="Close batch review"><X size={18} /></Button>
+      </div>
+      {loading && <div className="service-dialog-body"><p className="service-method" role="status">Loading exact recorded evidence…</p></div>}
+      {loadError && <div className="service-dialog-body"><p className="form-error" role="alert">{loadError}</p></div>}
+      {!loading && !loadError && <form className="service-dialog-form" onSubmit={async e => {
         e.preventDefault();
-        const res = await ctx.submitBatchJudgments(items, { decision: 'confirm', reason });
-        if (res.succeeded > 0) onCompleted();
+        if (!checkedItems.length) return;
+        const res = await ctx.submitBatchJudgments(checkedItems, { decision: 'confirm', reason });
+        if (res.succeeded > 0) onCompleted(checkedItems.map(({ row }) => row.id));
         onClose();
       }}>
-        <div className="service-batch-evidence-list">
-          {items.map(({ row, totalEvidence, evidence }) => <section className="service-batch-item" key={row.id}>
-            <div className="service-batch-item__head">
-              <strong>{row.sourceLabel || row.sourcePath}</strong>
-              <span><span className="service-rel-tag">{row.assertion.type}</span> → {row.targetLabel || row.targetPath}</span>
-              <small>{totalEvidence} anchor{totalEvidence === 1 ? '' : 's'}</small>
-            </div>
-            {evidence.map(ev => <div className="service-batch-excerpt" key={ev.id}>
-              <small>{formatLocator(ev.locator)}</small>
-              <pre className="service-excerpt">{ev.excerpt ?? ev.reason ?? 'No resolvable excerpt.'}</pre>
-            </div>)}
-          </section>)}
+        <div className="service-dialog-body journey-form">
+          <div className="service-batch-evidence-list">
+            {items.map(({ row, totalEvidence, evidence }) => <section className={`service-batch-item ${checkedIds.has(row.id) ? 'is-checked' : ''}`} key={row.id}>
+              <div className="service-batch-item__head">
+                <strong>{row.sourceLabel || row.sourcePath}</strong>
+                <span><span className="service-rel-tag">{row.assertion.type}</span> → {row.targetLabel || row.targetPath}</span>
+                <small>{totalEvidence} anchor{totalEvidence === 1 ? '' : 's'}</small>
+              </div>
+              {evidence.map(ev => <div className="service-batch-excerpt" key={ev.id}>
+                <small>{formatLocator(ev.locator)}</small>
+                <pre className="service-excerpt">{ev.excerpt ?? ev.reason ?? 'No resolvable excerpt.'}</pre>
+              </div>)}
+              <label className="service-checkbox service-batch-item__check">
+                <Checkbox checked={checkedIds.has(row.id)} onChange={e => toggleItemChecked(row.id, e.target.checked)} />
+                <span>Inspected recorded evidence for {row.sourceLabel || row.sourcePath} → {row.targetLabel || row.targetPath}</span>
+              </label>
+            </section>)}
+          </div>
+          <label className="service-checkbox"><Checkbox checked={allInspected} onChange={e => toggleAllChecked(e.target.checked)} />Mark all {items.length} loaded relationships inspected ({checkedItems.length} of {items.length} checked).</label>
+          <label>Reason (optional)<Textarea rows={2} value={reason} maxLength={4000} placeholder="Shared rationale applied only to checked confirmations (optional)…" onChange={e => setReason(e.target.value)} /></label>
         </div>
-        <label className="service-checkbox"><Checkbox checked={inspected} onChange={e => setInspected(e.target.checked)} />I inspected the recorded evidence for all {items.length} selected relationships.</label>
-        <label>Reason (optional)<Textarea value={reason} maxLength={4000} placeholder="Shared rationale applied to each selected confirmation (optional)…" onChange={e => setReason(e.target.value)} /></label>
-        <div className="service-toolbar">
-          <Button type="submit" disabled={!ctx.canWrite || ctx.busy || !inspected || !items.length}>Confirm {items.length} relationships</Button>
+        <div className="service-dialog-footer">
+          <Button type="submit" disabled={!ctx.canWrite || ctx.busy || !checkedItems.length}>Confirm {checkedItems.length} relationship{checkedItems.length === 1 ? '' : 's'}</Button>
           <Button variant="secondary" type="button" onClick={onClose}>Cancel</Button>
         </div>
       </form>}
@@ -252,15 +462,37 @@ function BatchConfirmDialog({ ctx, rows, onClose, onCompleted }) {
   </Dialog>;
 }
 
+const TRIAGE_LABELS = { defer: 'Defer', screen: 'Screen out', restore: 'Restore to open queue' };
+
+function rowPriorityRank(row, signalMap) {
+  if (row.projection.validity === 'stale' && row.projection.resolution === 'open') return 0;
+  if (row.projection.resolution === 'open') {
+    const tier = signalMap.get(row.id)?.tier || 'moderate';
+    return tier === 'high' ? 1 : tier === 'moderate' ? 2 : 3;
+  }
+  if (row.projection.resolution === 'deferred') return 4;
+  if (row.projection.resolution === 'screened') return 5;
+  return 6;
+}
+
 function Relationships({ ctx, onSelect, heading = true }) {
   const [search, setSearch] = useState('');
-  const [status, setStatus] = useState('all');
+  const [localTab, setLocalTab] = useState('all');
   const [reviewFilter, setReviewFilter] = useState('all');
   const [signalFilter, setSignalFilter] = useState('all');
+  const [hideLowSignal, setHideLowSignal] = useState(false);
   const [viewMode, setViewMode] = useState(heading ? 'grouped' : 'flat');
   const [collapsedGroups, setCollapsedGroups] = useState({});
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [batchConfirmOpen, setBatchConfirmOpen] = useState(false);
+
+  const activeTab = heading ? (ctx.state.queueTab || localTab) : 'all';
+  const selectTaskTab = nextTab => {
+    setLocalTab(nextTab);
+    if (ctx.state.queueTab) {
+      ctx.setState(s => ({ ...s, queueTab: null }));
+    }
+  };
 
   const signalMap = useMemo(() => {
     const map = new Map();
@@ -270,19 +502,27 @@ function Relationships({ ctx, onSelect, heading = true }) {
     return map;
   }, [ctx.rows]);
 
-  const rows = ctx.rows.filter(r => {
-    const matchesSearch = `${r.sourcePath} ${r.targetPath} ${r.sourceLabel || ''} ${r.targetLabel || ''} ${r.assertion.methodId} ${r.assertion.type}`.toLowerCase().includes(search.toLowerCase());
-    const matchesStatus = status === 'all' || r.projection.validity === status;
-    const matchesReview = reviewFilter === 'all' || r.projection.resolution === reviewFilter;
-    const tier = signalMap.get(r.id)?.tier || 'moderate';
-    const matchesSignal = signalFilter === 'all'
-      || (signalFilter === 'high_moderate' ? tier !== 'low' : tier === signalFilter);
-    return matchesSearch && matchesStatus && matchesReview && matchesSignal;
-  });
+  const rows = ctx.rows
+    .filter(r => {
+      const matchesSearch = `${r.sourcePath} ${r.targetPath} ${r.sourceLabel || ''} ${r.targetLabel || ''} ${r.assertion.methodId} ${r.assertion.type}`.toLowerCase().includes(search.toLowerCase());
+      const matchesTab = activeTab === 'all'
+        || (activeTab === 'attention' && r.projection.validity === 'stale')
+        || (activeTab === 'suggestions' && r.projection.validity === 'candidate' && r.projection.resolution === 'open')
+        || (activeTab === 'triaged' && ['deferred', 'screened'].includes(r.projection.resolution))
+        || (activeTab === 'reviewed' && r.projection.resolution === 'resolved');
+      const matchesReview = reviewFilter === 'all'
+        || (reviewFilter === 'triaged' ? ['deferred', 'screened'].includes(r.projection.resolution) : r.projection.resolution === reviewFilter);
+      const tier = signalMap.get(r.id)?.tier || 'moderate';
+      const matchesSignal = signalFilter === 'all'
+        || (signalFilter === 'high_moderate' ? tier !== 'low' : tier === signalFilter);
+      const matchesNoiseToggle = !hideLowSignal || signalFilter === 'low' || tier !== 'low' || r.projection.validity !== 'candidate' || r.projection.resolution !== 'open';
+      return matchesSearch && matchesTab && matchesReview && matchesSignal && matchesNoiseToggle;
+    })
+    .sort((a, b) => rowPriorityRank(a, signalMap) - rowPriorityRank(b, signalMap));
   const visibleIdsKey = rows.map(r => r.id).join(',');
   useEffect(() => {
     const ids = visibleIdsKey ? visibleIdsKey.split(',') : [];
-    if (!ids.length) return;
+    if (!ids.length || !heading) return;
     const handler = e => {
       if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
       const active = document.activeElement;
@@ -300,14 +540,25 @@ function Relationships({ ctx, onSelect, heading = true }) {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [visibleIdsKey, ctx]);
+  }, [visibleIdsKey, ctx, heading]);
 
   const totalCount = ctx.rows.length;
   const openCount = ctx.rows.filter(r => r.projection.resolution === 'open').length;
-  const resolvedCount = totalCount - openCount;
+  const staleCount = ctx.rows.filter(r => r.projection.validity === 'stale' && r.projection.resolution === 'open').length;
+  const openSuggestionCount = ctx.rows.filter(r => r.projection.validity === 'candidate' && r.projection.resolution === 'open').length;
+  const confirmedCount = ctx.rows.filter(r => r.projection.validity === 'confirmed').length;
+  const rejectedCount = ctx.rows.filter(r => r.projection.validity === 'rejected').length;
+  const retiredCount = ctx.rows.filter(r => r.projection.validity === 'retired').length;
+  const deferredCount = ctx.rows.filter(r => r.projection.resolution === 'deferred').length;
+  const screenedCount = ctx.rows.filter(r => r.projection.resolution === 'screened').length;
+  const triagedCount = deferredCount + screenedCount;
+  const resolvedCount = ctx.rows.filter(r => r.projection.resolution === 'resolved').length;
+  const lowSignalTotalCount = ctx.rows.filter(r => r.projection.validity === 'candidate' && r.projection.resolution === 'open' && signalMap.get(r.id)?.tier === 'low').length;
+  const isTriageCandidate = r => r.projection.validity === 'candidate' && ['open', 'deferred', 'screened'].includes(r.projection.resolution);
   const canBatch = heading && ctx.canWrite && ctx.workspace?.mode === 'active';
-  const eligibleCandidates = canBatch ? rows.filter(r => r.projection.validity === 'candidate' && r.projection.resolution === 'open') : [];
-  const lowSignalEligible = eligibleCandidates.filter(r => signalMap.get(r.id)?.tier === 'low');
+  const eligibleCandidates = canBatch ? rows.filter(isTriageCandidate) : [];
+  const openEligible = eligibleCandidates.filter(r => r.projection.resolution === 'open');
+  const lowSignalEligible = openEligible.filter(r => signalMap.get(r.id)?.tier === 'low');
   const hiddenByFilter = totalCount - rows.length;
   const selectedRows = eligibleCandidates.filter(r => selectedIds.has(r.id));
   const allEligibleSelected = eligibleCandidates.length > 0 && selectedRows.length === eligibleCandidates.length;
@@ -318,7 +569,7 @@ function Relationships({ ctx, onSelect, heading = true }) {
     return next;
   });
   const toggleSelectGroup = groupRows => {
-    const groupEligible = groupRows.filter(r => r.projection.validity === 'candidate' && r.projection.resolution === 'open');
+    const groupEligible = groupRows.filter(isTriageCandidate);
     if (!groupEligible.length) return;
     setSelectedIds(prev => {
       const next = new Set(prev);
@@ -333,7 +584,7 @@ function Relationships({ ctx, onSelect, heading = true }) {
     setSelectedIds(allEligibleSelected ? new Set() : new Set(eligibleCandidates.map(r => r.id)));
   };
 
-  // Group rows by source artifact label/path
+  // Group rows by source artifact label/path, ordered by highest-priority item
   const grouped = [];
   const bySource = new Map();
   for (const row of rows) {
@@ -347,49 +598,120 @@ function Relationships({ ctx, onSelect, heading = true }) {
   }
 
   const renderRow = row => {
-    const isCandidate = row.projection.validity === 'candidate' && row.projection.resolution === 'open';
-    const selectable = canBatch && isCandidate;
+    const selectable = canBatch && isTriageCandidate(row);
     const evCount = row.assertion?.evidenceIds?.length || 0;
     const isStale = row.projection.validity === 'stale';
     const sig = signalMap.get(row.id);
-    return <div className={`service-row-wrap ${ctx.state.selectedArtifactId === row.id ? 'is-selected' : ''} ${isStale ? 'is-impacted' : ''}`} key={row.id}>
-      {selectable && <div className="service-row-check"><Checkbox aria-label={`Select ${row.sourceLabel || row.sourcePath} to ${row.targetLabel || row.targetPath}`} checked={selectedIds.has(row.id)} disabled={ctx.busy} onChange={() => toggleSelect(row.id)} /></div>}
+    const isLowSignal = row.projection.validity === 'candidate' && row.projection.resolution === 'open' && sig?.tier === 'low';
+    const pairLabel = `${row.sourceLabel || row.sourcePath} to ${row.targetLabel || row.targetPath}`;
+    return <div className={`service-row-wrap ${ctx.state.selectedArtifactId === row.id ? 'is-selected' : ''} ${isStale ? 'is-impacted' : ''} ${isLowSignal ? 'is-low-signal' : ''}`} key={row.id}>
+      {selectable && <div className="service-row-check"><Checkbox aria-label={`Select ${pairLabel}`} checked={selectedIds.has(row.id)} disabled={ctx.busy} onChange={() => toggleSelect(row.id)} /></div>}
       <Button variant="unstyled" className={`service-row ${ctx.state.selectedArtifactId === row.id ? 'is-selected' : ''}`} onClick={() => { ctx.selectArtifact(row.id); onSelect?.(); }} disabled={ctx.busy}>
-        <ArtifactKindIcon kind={row.source?.kind} size={16} className="service-row-icon" />
+        <ArtifactKindIcon kind={viewMode === 'grouped' ? row.target?.kind : row.source?.kind} size={16} className="service-row-icon" />
         <span className="service-row-paths">
-          <strong title={row.sourcePath}>{row.sourceLabel || row.sourcePath}</strong>
-          <small title={row.targetPath} className="service-row-target">
-            <span className="service-rel-tag">{row.assertion.type}</span>
-            <ArrowRight size={11} aria-hidden="true" />
-            <ArtifactKindIcon kind={row.target?.kind} size={12} className="service-row-target-icon" />
-            <span>{row.targetLabel || row.targetPath}</span>
-            {evCount > 0 && <span className="service-anchor-count" title={`${evCount} evidence anchor${evCount === 1 ? '' : 's'}`}><Link2 size={10} aria-hidden="true" />{evCount}</span>}
-            {sig && <Tooltip content={sig.reason}><span className={`service-signal-badge is-${sig.tier}`}>{sig.label}</span></Tooltip>}
-          </small>
+          {viewMode === 'grouped' ? (
+            <>
+              <strong title={row.targetPath}>
+                <span className="sr-only">{row.sourceLabel || row.sourcePath} </span>
+                <span className="service-rel-tag">{row.assertion.type}</span>
+                <ArrowRight size={11} className="service-inline-arrow" aria-hidden="true" />
+                {row.targetLabel || row.targetPath}
+              </strong>
+              <small title={row.targetPath?.startsWith('authored/') ? `${row.targetLabel} (authored ${row.target?.kind || 'record'})` : row.targetPath} className="service-row-target">
+                {row.targetLabel && row.targetLabel !== row.targetPath && <span>{row.targetPath?.startsWith('authored/') ? (ARTIFACT_KIND_LABELS[row.target?.kind] || 'Authored record') : row.targetPath}</span>}
+                {evCount > 0 && <span className="service-anchor-count" title={`${evCount} evidence anchor${evCount === 1 ? '' : 's'}`}><Link2 size={10} aria-hidden="true" />{evCount}</span>}
+                {sig && <Tooltip content={sig.reason}><span className={`service-signal-badge is-${sig.tier}`}>{sig.label}</span></Tooltip>}
+                {isStale && <span className="service-stale-cue">Changed · revalidation needed</span>}
+              </small>
+            </>
+          ) : (
+            <>
+              <strong title={row.sourcePath}>{row.sourceLabel || row.sourcePath}</strong>
+              <small title={row.targetPath} className="service-row-target">
+                <span className="service-rel-tag">{row.assertion.type}</span>
+                <ArrowRight size={11} aria-hidden="true" />
+                <ArtifactKindIcon kind={row.target?.kind} size={12} className="service-row-target-icon" />
+                <span>{row.targetLabel || row.targetPath}</span>
+                {evCount > 0 && <span className="service-anchor-count" title={`${evCount} evidence anchor${evCount === 1 ? '' : 's'}`}><Link2 size={10} aria-hidden="true" />{evCount}</span>}
+                {sig && <Tooltip content={sig.reason}><span className={`service-signal-badge is-${sig.tier}`}>{sig.label}</span></Tooltip>}
+                {isStale && <span className="service-stale-cue">Changed · revalidation needed</span>}
+              </small>
+            </>
+          )}
         </span>
-        <span className="service-row-status"><ValidityChip validity={row.projection.validity} /><small>{row.projection.resolution}</small></span>
+        <span className="service-row-status"><ValidityChip validity={row.projection.validity} /><small>{row.projection.resolution === 'screened' ? 'screened out' : row.projection.resolution}</small></span>
         <ChevronRight size={15} className="service-row-arrow" />
       </Button>
-      {selectable && <Tooltip content="Dismiss candidate without confirming"><Button variant="ghost" size="xs" className="service-row-dismiss" disabled={ctx.busy} aria-label={`Dismiss ${row.sourceLabel || row.sourcePath} to ${row.targetLabel || row.targetPath}`} onClick={() => ctx.quickReject(row)}>Dismiss</Button></Tooltip>}
+      {selectable && <div className="service-row-triage-actions">
+        {row.projection.resolution !== 'deferred' && <Tooltip content="Defer suggestion to revisit later (retains candidate state)">
+          <Button variant="ghost" size="xs" className="service-row-dismiss" disabled={ctx.busy} aria-label={`Defer ${pairLabel}`} onClick={() => ctx.triageCandidate(row, 'defer')}>Defer</Button>
+        </Tooltip>}
+        {row.projection.resolution !== 'screened' && <Tooltip content="Screen out suggestion without recording a formal rejection">
+          <Button variant="ghost" size="xs" className="service-row-dismiss" disabled={ctx.busy} aria-label={`Screen out ${pairLabel}`} onClick={() => ctx.triageCandidate(row, 'screen')}>Screen out</Button>
+        </Tooltip>}
+        {row.projection.resolution !== 'open' && <Tooltip content="Restore suggestion back to the active queue">
+          <Button variant="ghost" size="xs" className="service-row-dismiss" disabled={ctx.busy} aria-label={`Restore ${pairLabel}`} onClick={() => ctx.triageCandidate(row, 'restore')}>Restore</Button>
+        </Tooltip>}
+      </div>}
     </div>;
   };
+
+  const taskTabs = [
+    { id: 'all', label: 'All', count: totalCount },
+    { id: 'attention', label: 'Needs attention', count: staleCount, warn: staleCount > 0 },
+    { id: 'suggestions', label: 'Suggestions', count: openSuggestionCount },
+    { id: 'triaged', label: 'Deferred & screened', count: triagedCount },
+    { id: 'reviewed', label: 'Reviewed', count: resolvedCount },
+  ];
+
+  const emptyMessage = activeTab === 'attention'
+    ? { title: 'No stale relationships need revalidation', body: 'Previously confirmed relationships are unaffected by revision changes in this view.' }
+    : activeTab === 'suggestions'
+      ? { title: 'No open suggestions in this filter', body: 'Switch to All or Deferred & screened to inspect previously triaged or reviewed items.' }
+      : activeTab === 'triaged'
+        ? { title: 'No deferred or screened suggestions', body: 'Defer or screen out candidates from the active list to park low-priority items without recording false rejections.' }
+        : activeTab === 'reviewed'
+          ? { title: 'No formally reviewed relationships yet', body: 'Reviewing automated suggestions is optional; inspect and confirm key links when ready.' }
+          : { title: 'No matching relationships', body: 'Try clearing search text or switching task and signal filters.' };
 
   return <section className="service-relationships">
     {heading && <div className="service-section-heading">
       <div>
-        <h2>Connected artifacts <span>{rows.length}</span></h2>
+        <h2>Relationships <span>{rows.length}</span></h2>
         <div className="service-queue-pills">
-          <Tooltip content="Relationships with a recorded human decision">
-            <span className="service-metric-pill is-accent"><CheckCircle2 size={12} aria-hidden="true" />{resolvedCount} / {totalCount} reviewed</span>
-          </Tooltip>
-          {openCount > 0 && (
-            <Tooltip content="Relationships awaiting review in this snapshot">
-              <span className="service-metric-pill"><Clock size={12} aria-hidden="true" />{openCount} open</span>
+          {staleCount > 0 && (
+            <Tooltip content="Previously confirmed relationships affected by changes; require reconfirmation or retirement">
+              <span className="service-metric-pill is-warn"><AlertTriangle size={12} aria-hidden="true" />{staleCount} stale</span>
             </Tooltip>
           )}
-          <Tooltip content="Use Up and Down arrow keys to step through relationships">
-            <span className="service-metric-pill service-kbd-pill"><Keyboard size={12} aria-hidden="true" />↑ / ↓</span>
+          <Tooltip content="Human-confirmed relationships in this snapshot">
+            <span className="service-metric-pill is-accent"><CheckCircle2 size={12} aria-hidden="true" />{confirmedCount} confirmed</span>
           </Tooltip>
+          {rejectedCount > 0 && (
+            <Tooltip content="Formally rejected suggestions">
+              <span className="service-metric-pill">{rejectedCount} rejected</span>
+            </Tooltip>
+          )}
+          {retiredCount > 0 && (
+            <Tooltip content="Retired relationships">
+              <span className="service-metric-pill">{retiredCount} retired</span>
+            </Tooltip>
+          )}
+          {openSuggestionCount > 0 && (
+            <Tooltip content="Unconfirmed candidate relationships awaiting optional inspection">
+              <span className="service-metric-pill"><Clock size={12} aria-hidden="true" />{openSuggestionCount} open suggestions</span>
+            </Tooltip>
+          )}
+          {deferredCount > 0 && (
+            <Tooltip content="Candidates deferred for later review">
+              <span className="service-metric-pill">{deferredCount} deferred</span>
+            </Tooltip>
+          )}
+          {screenedCount > 0 && (
+            <Tooltip content="Candidates screened out from active queue without formal rejection">
+              <span className="service-metric-pill">{screenedCount} screened out</span>
+            </Tooltip>
+          )}
         </div>
       </div>
       <div className="service-heading-actions">
@@ -402,20 +724,54 @@ function Relationships({ ctx, onSelect, heading = true }) {
           </Tooltip>
         </div>
         <RelationshipEditor ctx={ctx} />
-        {openCount > 0 && <Button variant="secondary" size="sm" disabled={ctx.busy} onClick={() => ctx.selectNextOpen(ctx.state.selectedArtifactId)}>Review next open ({openCount}) <ArrowRight size={14} /></Button>}
+        {openCount > 0 && <Button variant="secondary" size="sm" disabled={ctx.busy} onClick={() => ctx.selectNextOpen(ctx.state.selectedArtifactId)}>{staleCount > 0 ? `Review next stale (${staleCount})` : `Review next suggestion (${openCount})`} <ArrowRight size={14} /></Button>}
       </div>
     </div>}
-    <div className="service-filters"><label className="service-search-field">Search relationships<Input type="search" value={search} onChange={e => setSearch(e.target.value)} placeholder="Filter by path or type…" /></label><label className="service-validity-field">Validity<Select value={status} onChange={e => setStatus(e.target.value)}>{['all', 'candidate', 'confirmed', 'rejected', 'stale', 'retired'].map(s => <option key={s}>{s}</option>)}</Select></label><label className="service-validity-field">Review state<Select aria-label="Filter by review state" value={reviewFilter} onChange={e => setReviewFilter(e.target.value)}>{['all', 'open', 'resolved'].map(s => <option key={s}>{s}</option>)}</Select></label><label className="service-validity-field">Signal tier<Select aria-label="Filter by signal tier" value={signalFilter} onChange={e => setSignalFilter(e.target.value)}><option value="all">All signals</option><option value="high_moderate">High &amp; moderate</option><option value="high">High only</option><option value="low">Low signal only</option></Select></label></div>
-    {hiddenByFilter > 0 && <p className="service-method service-filter-disclosure" role="status">Showing {rows.length} of {totalCount} relationships ({hiddenByFilter} filtered; all {openCount} open links remain required before cycle completion).</p>}
+    {heading && totalCount > 0 && (
+      <div className="service-task-tabs" role="tablist" aria-label="Queue focus views">
+        {taskTabs.map(t => (
+          <button
+            key={t.id}
+            type="button"
+            role="tab"
+            aria-selected={activeTab === t.id}
+            className={`service-task-tab ${activeTab === t.id ? 'is-active' : ''} ${t.warn ? 'is-warn' : ''}`}
+            onClick={() => selectTaskTab(t.id)}
+          >
+            <span>{t.label}</span>
+            <span className="service-task-tab__count">{t.count}</span>
+          </button>
+        ))}
+      </div>
+    )}
+    <div className="service-filters">
+      <label className="service-search-field">Search relationships<Input type="search" value={search} onChange={e => setSearch(e.target.value)} placeholder="Filter by path or type…" /></label>
+      <label className="service-validity-field">Review state<Select aria-label="Filter by review state" value={reviewFilter} onChange={e => setReviewFilter(e.target.value)}><option value="all">all</option><option value="open">open</option><option value="deferred">deferred</option><option value="screened">screened</option><option value="triaged">triaged (deferred &amp; screened)</option><option value="resolved">resolved</option></Select></label>
+      <label className="service-validity-field">Signal tier<Select aria-label="Filter by signal tier" value={signalFilter} onChange={e => setSignalFilter(e.target.value)}><option value="all">All signals</option><option value="high_moderate">High &amp; moderate</option><option value="high">High only</option><option value="low">Low signal only</option></Select></label>
+      {lowSignalTotalCount > 0 && signalFilter !== 'low' && (
+        <button
+          type="button"
+          className={`service-noise-toggle ${hideLowSignal ? 'is-active' : ''}`}
+          aria-pressed={hideLowSignal}
+          onClick={() => setHideLowSignal(v => !v)}
+          title="Hide low-signal lexical overlap suggestions from the active view without altering data"
+        >
+          {hideLowSignal ? `Showing high/moderate (${lowSignalTotalCount} low hidden)` : `Hide low-signal (${lowSignalTotalCount})`}
+        </button>
+      )}
+    </div>
+    {hiddenByFilter > 0 && <p className="service-method service-filter-disclosure" role="status">Showing {rows.length} of {totalCount} relationships ({hiddenByFilter} filtered; {staleCount > 0 ? `${staleCount} stale review${staleCount === 1 ? '' : 's'} remain required; ` : ''}{openCount} open &amp; {triagedCount} triaged candidates remain unresolved).</p>}
     {canBatch && eligibleCandidates.length > 0 && <div className="service-batch-bar">
       <div className="service-batch-left">
-        <label className="service-checkbox service-batch-selectall"><Checkbox checked={allEligibleSelected} disabled={ctx.busy} onChange={toggleSelectAll} /><span>Select all open candidates ({eligibleCandidates.length})</span></label>
+        <label className="service-checkbox service-batch-selectall"><Checkbox checked={allEligibleSelected} disabled={ctx.busy} onChange={toggleSelectAll} /><span>{openEligible.length === eligibleCandidates.length ? `Select all open candidates (${eligibleCandidates.length})` : `Select all visible candidates (${eligibleCandidates.length})`}</span></label>
         {lowSignalEligible.length > 0 && <Button variant="ghost" size="xs" disabled={ctx.busy} onClick={() => setSelectedIds(new Set(lowSignalEligible.map(r => r.id)))}>Select low-signal ({lowSignalEligible.length})</Button>}
       </div>
       {selectedRows.length > 0 && <div className="service-batch-actions">
         <span className="service-batch-count">{selectedRows.length} selected</span>
         <Button variant="default" size="xs" disabled={ctx.busy} onClick={() => setBatchConfirmOpen(true)}>Review &amp; confirm ({selectedRows.length})</Button>
-        <Button variant="secondary" size="xs" disabled={ctx.busy} onClick={async () => { const res = await ctx.submitBatchJudgments(selectedRows, { decision: 'reject' }); if (res.succeeded > 0) setSelectedIds(new Set()); }}>Reject selected ({selectedRows.length})</Button>
+        {selectedRows.some(r => r.projection.resolution !== 'deferred') && <Button variant="secondary" size="xs" disabled={ctx.busy} onClick={async () => { const targets = selectedRows.filter(r => r.projection.resolution !== 'deferred'); const res = await ctx.submitBatchTriage(targets, { disposition: 'defer' }); if (res.succeeded > 0) setSelectedIds(new Set()); }}>Defer selected ({selectedRows.filter(r => r.projection.resolution !== 'deferred').length})</Button>}
+        {selectedRows.some(r => r.projection.resolution !== 'screened') && <Button variant="secondary" size="xs" disabled={ctx.busy} onClick={async () => { const targets = selectedRows.filter(r => r.projection.resolution !== 'screened'); const res = await ctx.submitBatchTriage(targets, { disposition: 'screen' }); if (res.succeeded > 0) setSelectedIds(new Set()); }}>Screen out selected ({selectedRows.filter(r => r.projection.resolution !== 'screened').length})</Button>}
+        {selectedRows.some(r => r.projection.resolution !== 'open') && <Button variant="secondary" size="xs" disabled={ctx.busy} onClick={async () => { const targets = selectedRows.filter(r => r.projection.resolution !== 'open'); const res = await ctx.submitBatchTriage(targets, { disposition: 'restore' }); if (res.succeeded > 0) setSelectedIds(new Set()); }}>Restore selected ({selectedRows.filter(r => r.projection.resolution !== 'open').length})</Button>}
         <Button variant="ghost" size="xs" disabled={ctx.busy} onClick={() => setSelectedIds(new Set())}>Clear</Button>
       </div>}
     </div>}
@@ -423,8 +779,14 @@ function Relationships({ ctx, onSelect, heading = true }) {
       {grouped.map(group => {
         const isCollapsed = !!collapsedGroups[group.key];
         const groupOpen = group.items.filter(r => r.projection.resolution === 'open').length;
-        const groupEligible = group.items.filter(r => r.projection.validity === 'candidate' && r.projection.resolution === 'open');
+        const groupTriaged = group.items.filter(r => ['deferred', 'screened'].includes(r.projection.resolution)).length;
+        const groupEligible = group.items.filter(isTriageCandidate);
         const groupAllSelected = groupEligible.length > 0 && groupEligible.every(r => selectedIds.has(r.id));
+        const groupStatusText = groupOpen > 0
+          ? `${groupOpen} open${groupTriaged > 0 ? ` · ${groupTriaged} triaged` : ''}`
+          : groupTriaged > 0
+            ? `${groupTriaged} triaged`
+            : 'all judged';
         return <div className="service-group-card" key={group.key}>
           <div className="service-group-header">
             {canBatch && groupEligible.length > 0 && <Checkbox aria-label={`Select all open in ${group.title}`} checked={groupAllSelected} disabled={ctx.busy} onChange={() => toggleSelectGroup(group.items)} />}
@@ -432,21 +794,52 @@ function Relationships({ ctx, onSelect, heading = true }) {
               <ChevronDown size={15} className={`service-group-chevron ${isCollapsed ? 'is-collapsed' : ''}`} />
               <ArtifactKindIcon kind={group.kind} size={15} />
               <strong title={group.title}>{group.title}</strong>
-              <span className="service-group-meta">{group.items.length} link{group.items.length === 1 ? '' : 's'}{groupOpen > 0 ? ` · ${groupOpen} open` : ' · all reviewed'}</span>
+              <span className="service-group-meta">{group.items.length} link{group.items.length === 1 ? '' : 's'} · {groupStatusText}</span>
             </button>
           </div>
           {!isCollapsed && <div className="service-group-rows">{group.items.map(renderRow)}</div>}
         </div>;
       })}
-    </div> : <div className="service-list service-relationship-list"><div className="service-list-heading" aria-hidden="true"><span>Connected artifacts</span><span>Validity / Review</span></div>{rows.map(renderRow)}{!rows.length && <div className="queue-empty"><Search size={24} /><strong>No matching relationships</strong><p>Try a different path, validity, or review state filter.</p></div>}</div>}
-    {viewMode === 'grouped' && !rows.length && <div className="service-list service-relationship-list"><div className="queue-empty"><Search size={24} /><strong>No matching relationships</strong><p>Try a different path, validity, or review state filter.</p></div></div>}
-    {batchConfirmOpen && selectedRows.length > 0 && <BatchConfirmDialog ctx={ctx} rows={selectedRows} onClose={() => setBatchConfirmOpen(false)} onCompleted={() => setSelectedIds(new Set())} />}
+    </div> : <div className="service-list service-relationship-list"><div className="service-list-heading" aria-hidden="true"><span>Relationship</span><span>Validity / Queue</span></div>{rows.map(renderRow)}{!rows.length && <div className="queue-empty"><Search size={24} /><strong>{emptyMessage.title}</strong><p>{emptyMessage.body}</p></div>}</div>}
+    {viewMode === 'grouped' && !rows.length && <div className="service-list service-relationship-list"><div className="queue-empty"><Search size={24} /><strong>{emptyMessage.title}</strong><p>{emptyMessage.body}</p></div></div>}
+    {batchConfirmOpen && selectedRows.length > 0 && <BatchConfirmDialog ctx={ctx} rows={selectedRows} onClose={() => setBatchConfirmOpen(false)} onCompleted={confirmedIds => setSelectedIds(prev => { const next = new Set(prev); for (const id of confirmedIds) next.delete(id); return next; })} />}
   </section>;
+}
+
+function formatTimestamp(iso) {
+  if (!iso) return '';
+  const dt = new Date(iso);
+  if (Number.isNaN(dt.getTime())) return iso;
+  return dt.toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function historyEventLabel(event) {
+  const decision = event.payload?.decision;
+  const disposition = event.payload?.disposition;
+  if (event.type === 'judgment') {
+    if (decision === 'confirm') return 'Confirmed relationship';
+    if (decision === 'reject') return 'Rejected suggestion';
+    if (decision === 'reconfirm') return 'Reconfirmed after change';
+    if (decision === 'retire') return 'Retired relationship';
+    return 'Recorded judgment';
+  }
+  if (event.type === 'triage') {
+    if (disposition === 'defer') return 'Deferred in queue';
+    if (disposition === 'screen') return 'Screened out suggestion';
+    if (disposition === 'restore') return 'Restored to suggestions';
+    return 'Queue triage';
+  }
+  if (event.type === 'reversal') return 'Reversed prior judgment';
+  if (event.type === 'follow_up_opened' || event.type === 'follow_up') return 'Opened follow-up task';
+  if (event.type === 'follow_up_resolved') return 'Resolved follow-up task';
+  return event.type.replaceAll('_', ' ');
 }
 
 function Inspector({ ctx }) {
   const [tab, setTab] = useState('review');
   const [evidenceMode, setEvidenceMode] = useState('top');
+  const [sourceOpenMap, setSourceOpenMap] = useState({});
+  const [sourceJump, setSourceJump] = useState(null);
   const d = ctx.detail;
   const draft = ctx.draft;
   const note = draft.independentNote || '';
@@ -462,7 +855,11 @@ function Inspector({ ctx }) {
   const sourceArt = d ? artifactById.get(d.assertion.source.artifactId) : null;
   const targetArt = d ? artifactById.get(d.assertion.target.artifactId) : null;
   const otherOpenCount = ctx.rows.filter(r => r.projection.resolution === 'open' && r.id !== d?.projection.contextId).length;
+  const staleOpenCount = ctx.rows.filter(r => r.projection.validity === 'stale' && r.projection.resolution === 'open' && r.id !== d?.projection.contextId).length;
   const decisions = d ? permittedDecisions(d.projection) : [];
+  const triageDispositions = d ? permittedTriageDispositions(d.projection) : [];
+  const activePresetDecision = draft.decision && REASON_PRESETS[draft.decision] ? draft.decision : decisions[0];
+  const reasonPresets = activePresetDecision ? (REASON_PRESETS[activePresetDecision] || []) : [];
 
   const currentVersionIds = useMemo(
     () => (d ? new Set([d.assertion.source.versionId, d.assertion.target.versionId].filter(Boolean)) : new Set()),
@@ -524,11 +921,103 @@ function Inspector({ ctx }) {
   const hiddenEvidenceCount = Math.max(0, ranked.items.length - visibleEvidence.length);
   const srcName = sourceArt?.identity?.title || sourceArt?.path || d?.assertion.source.artifactId;
   const tgtName = targetArt?.identity?.title || targetArt?.path || d?.assertion.target.artifactId;
-  const relationVerb = d ? ({ documents: 'document', implements: 'implement', motivates: 'motivate' }[d.assertion.type] || d.assertion.type) : '';
+  const meaning = useMemo(
+    () => (d ? analyzeRelationshipMeaning(d, sourceArt, targetArt, ranked) : null),
+    [d, sourceArt, targetArt, ranked]
+  );
 
-  return <aside className="inspector service-inspector" aria-label="Relationship inspector"><header className="inspector__header"><div><h2>Relationship context</h2><p>Evidence, judgment &amp; history</p></div><div className="service-header-actions">{otherOpenCount > 0 && <Tooltip content="Jump to next open relationship"><Button variant="ghost" size="sm" disabled={ctx.busy} onClick={() => ctx.selectNextOpen(d?.projection.contextId)}>Next open <ArrowRight size={14} /></Button></Tooltip>}<Tooltip content="Close inspector"><Button variant="unstyled" className="btn btn--ghost" aria-label="Close inspector" onClick={ctx.closeInspector}><X size={18} /></Button></Tooltip></div></header>
+  const quickCorrectMeaning = async (nextType, reasonText) => {
+    if (!d || !mutable) return;
+    await ctx.submit(
+      contextEnvelope(ctx.selection, d, 'correct_assertion', {
+        contextId: d.projection.contextId,
+        assertionRevisionId: d.assertion.id,
+        expectedProjectionVersion: d.projection.projectionVersion,
+        reason: reasonText,
+        replacement: {
+          type: nextType,
+          sourceArtifactId: d.assertion.source.artifactId,
+          sourceVersionId: d.assertion.source.versionId,
+          targetArtifactId: d.assertion.target.artifactId,
+          targetVersionId: d.assertion.target.versionId,
+          evidenceIds: d.assertion.evidenceIds,
+        },
+      })
+    );
+  };
+
+  const sourceSideIds = new Set([d?.assertion.source.versionId, d?.assertion.source.priorVersionId].filter(Boolean));
+  const targetSideIds = new Set([d?.assertion.target.versionId, d?.assertion.target.priorVersionId].filter(Boolean));
+  const sourceEvidence = visibleEvidence.filter(e => sourceSideIds.has(e.artifactVersionId));
+  const targetEvidence = visibleEvidence.filter(e => targetSideIds.has(e.artifactVersionId) && !sourceSideIds.has(e.artifactVersionId));
+  const splitSideBySide = (sourceEvidence.length > 0 && targetEvidence.length > 0) || (visibleEvidence.length > 0 && currentSources.length >= 2);
+  const sourcePreviewObj = d?.assertion.source.versionId ? sourceObjById.get(d.assertion.source.versionId) : null;
+  const targetPreviewObj = d?.assertion.target.versionId ? sourceObjById.get(d.assertion.target.versionId) : null;
+
+  const jumpToAnchor = ev => {
+    if (!ev?.artifactVersionId) return;
+    const start = ev.locator?.kind === 'lines' ? Number(ev.locator.startLine || 1) : 1;
+    const end = ev.locator?.kind === 'lines' ? Number(ev.locator.endLine || start) : start;
+    setSourceOpenMap(prev => ({ ...prev, [ev.artifactVersionId]: true }));
+    setSourceJump({ versionId: ev.artifactVersionId, startLine: start, endLine: end });
+  };
+
+  const renderEvidenceCard = e => {
+    const enclosing = resolveEvidenceEnclosingLabel(e, sourceObjById, priorVersionByCurrentId);
+    const isLineAnchor = e.locator?.kind === 'lines' && e.availability === 'available';
+    return <div className="service-evidence-item" key={e.id}>
+      <div className="service-evidence-item__head">
+        <strong>{sourceByVersion.get(e.artifactVersionId) || 'Captured source'}</strong>
+        <Tooltip content="Observed lexical or structural signal for this anchor">
+          <span className={`service-signal-pill tier-${e.signalTier}`}>{e.signalLabel}</span>
+        </Tooltip>
+      </div>
+      <div className="service-evidence-item__loc">
+        {isLineAnchor ? (
+          <button type="button" className="service-anchor-jump" onClick={() => jumpToAnchor(e)} title="Open captured source at these lines">
+            {formatLocator(e.locator)}
+          </button>
+        ) : (
+          <span>{formatLocator(e.locator)}{e.availability !== 'available' ? ` · ${e.availability}` : ''}</span>
+        )}
+        {enclosing && <span className={`service-locator-pill ${enclosing.isUnresolved ? 'is-unresolved' : ''}`}>{enclosing.label}</span>}
+      </div>
+      {e.excerpt ? <HighlightExcerpt text={e.excerpt} tokens={e.sharedTokens} /> : <pre className="service-excerpt">{e.reason ?? 'No resolvable excerpt.'}</pre>}
+    </div>;
+  };
+
+  const hasSecondaryDraft = Boolean(draft.contentConcern?.trim()) || (draft.followUpKind && draft.followUpKind !== 'none');
+  const targetMeta = ctx.workspace?.revisionMeta?.target;
+
+  return <aside className="inspector service-inspector" aria-label="Relationship inspector"><header className="inspector__header">
+    <div className="service-inspector-header-title">
+      <h2>Relationship review</h2>
+      <div className="service-inspector-rev-row">
+        <span className="service-commit-pill">{ctx.selection?.targetRevision?.commitId?.slice(0, 7)}</span>
+        <span className="service-inspector-snapshot-state">{d ? `${d.mode} snapshot` : 'Loading context'}</span>
+        {targetMeta?.subject && (
+          <details className="service-inspector-commit-details">
+            <summary className="service-inspector-commit-summary">Commit details</summary>
+            <div className="service-inspector-commit-popover">
+              <strong>{targetMeta.subject}</strong>
+              {(targetMeta.authorName || targetMeta.authoredAt) && (
+                <small>
+                  {targetMeta.authorName || ''}
+                  {targetMeta.authoredAt ? ` · ${formatTimestamp(targetMeta.authoredAt)}` : ''}
+                </small>
+              )}
+            </div>
+          </details>
+        )}
+      </div>
+    </div>
+    <div className="service-header-actions">{otherOpenCount > 0 && <Tooltip content={staleOpenCount > 0 ? 'Jump to next stale relationship' : 'Jump to next open suggestion'}><Button variant="ghost" size="sm" disabled={ctx.busy} onClick={() => ctx.selectNextOpen(d?.projection.contextId)}>{staleOpenCount > 0 ? 'Next stale' : 'Next suggestion'} <ArrowRight size={14} /></Button></Tooltip>}<Tooltip content="Close inspector"><Button variant="unstyled" className="btn btn--ghost" aria-label="Close inspector" onClick={ctx.closeInspector}><X size={18} /></Button></Tooltip></div>
+  </header>
     {!d ? <p className="service-padding" role="status">{ctx.error ? 'Context could not be loaded.' : 'Loading exact evidence…'}</p> : <div className="inspector__body">
-      <div className="service-inspector-status"><ValidityChip validity={d.projection.validity} /><span className="service-inspector-meta-pill"><Clock size={11} aria-hidden="true" />{d.projection.resolution} · {d.mode}</span></div>
+      <div className="service-inspector-status">
+        <ValidityChip validity={d.projection.validity} />
+        <span className="service-inspector-meta-pill"><Clock size={11} aria-hidden="true" />{d.projection.resolution === 'screened' ? 'screened out' : d.projection.resolution} · {d.mode}</span>
+      </div>
       <div className="service-endpoints-diagram" aria-label="Connected endpoints">
         <Tooltip content={sourceArt?.path || srcName}>
           <span className="service-endpoint-pill" title={sourceArt?.path}>
@@ -536,7 +1025,7 @@ function Inspector({ ctx }) {
             <span>{srcName}</span>
           </span>
         </Tooltip>
-        <Tooltip content={`Does ${srcName?.split('/').at(-1)} ${relationVerb} ${tgtName?.split('/').at(-1)}? — ${RELATION_HINTS[d.assertion.type] || d.assertion.type}`}>
+        <Tooltip content={RELATION_HINTS[d.assertion.type] || d.assertion.type}>
           <span className="service-relation-pill">
             <span className="service-rel-tag">{d.assertion.type}</span>
             <ArrowRight size={11} aria-hidden="true" />
@@ -549,17 +1038,132 @@ function Inspector({ ctx }) {
           </span>
         </Tooltip>
       </div>
+      {meaning && (
+        <section className="service-meaning-card" aria-label="Relationship meaning vs evidence basis">
+          <div className="service-meaning-row">
+            <span className="service-meaning-row__label">Claimed meaning</span>
+            <div className="service-meaning-row__val">
+              <strong>{meaning.spec.title}:</strong> {meaning.question}
+              <small>{meaning.spec.summary}</small>
+            </div>
+          </div>
+          <div className="service-meaning-row">
+            <span className="service-meaning-row__label">Evidence basis</span>
+            <div className="service-meaning-row__val">
+              <span className={`service-meaning-badge is-${meaning.evidenceBasis.kind}`}>{meaning.evidenceBasis.badge}</span>
+              <span>{meaning.evidenceBasis.summary}</span>
+            </div>
+          </div>
+          <div className="service-meaning-row">
+            <span className="service-meaning-row__label">Human judgment</span>
+            <div className="service-meaning-row__val">
+              <span>{meaning.judgmentStatus.summary}</span>
+            </div>
+          </div>
+        </section>
+      )}
+      {meaning?.mismatchWarning && (
+        <section className="service-meaning-warning" role="alert" aria-label="Relationship meaning mismatch">
+          <div className="service-meaning-warning__head">
+            <AlertTriangle size={15} aria-hidden="true" />
+            <strong>{meaning.mismatchWarning.headline}</strong>
+          </div>
+          <p>{meaning.mismatchWarning.explanation}</p>
+          {mutable && endpointsAvailable && (
+            <div className="service-meaning-warning__actions">
+              <Button
+                variant="default"
+                size="xs"
+                disabled={ctx.busy}
+                onClick={() => quickCorrectMeaning(meaning.mismatchWarning.suggestedType, meaning.mismatchWarning.defaultReason)}
+              >
+                Correct meaning to {meaning.mismatchWarning.suggestedType}
+              </Button>
+            </div>
+          )}
+        </section>
+      )}
       {d.returnContextId ? <Button variant="secondary" size="sm" onClick={() => ctx.selectArtifact(d.returnContextId)}>Return to incoming review</Button> : impact && <section className="card card--p-sm service-prior-card" aria-label="Retained baseline decision">
-        <div className="service-prior-card__head"><strong>Prior baseline decision</strong>{prior && <span className={`service-chip service-chip--${prior.validity}`}>{prior.decision || prior.validity}</span>}</div>
+        <div className="service-prior-card__head"><strong>Why flagged &amp; prior decision</strong>{prior && <span className={`service-chip service-chip--${prior.validity}`}>{prior.decision || prior.validity}</span>}</div>
+        <p className="service-prior-card__flag">{impact.reason || 'An endpoint changed in the target revision.'}</p>
         {prior ? <>
-          <p className="service-prior-card__meta">{prior.decision ? `${prior.actorDisplayName || prior.actorId || 'Reviewer'} · ${prior.recordedAt || ''}` : `Baseline state: ${prior.validity} (${prior.resolution})`}</p>
+          <p className="service-prior-card__meta">{prior.decision ? `${prior.actorDisplayName || prior.actorId || 'Reviewer'} · ${formatTimestamp(prior.recordedAt)}` : `Baseline state: ${prior.validity} (${prior.resolution})`}</p>
           <p className="service-prior-card__reason">{prior.decision ? reasonLabel(prior.reason) : 'No manual decision was recorded on the baseline context.'}</p>
         </> : <p className="service-prior-card__meta">Compare baseline context directly to inspect retained rationale and source anchors.</p>}
         <Button variant="secondary" size="sm" onClick={ctx.openPriorDecision}>Inspect prior decision &amp; evidence</Button>
       </section>}
       <Tabs value={tab} onValueChange={setTab} className="service-tabs"><TabsList className="service-tabs-list service-tabs-list--two" aria-label="Relationship context views">{['review', 'history'].map(t => <TabsTrigger className="service-tabs-trigger" value={t} key={t}>{t}</TabsTrigger>)}</TabsList>
       <TabsContent className="service-tab-panel" value="review">
-        {changedEndpoints.length > 0 && <Disclosure trigger="What changed since last review" badge={`${changedEndpoints.length} file${changedEndpoints.length === 1 ? '' : 's'}`} defaultOpen variant="card" className="service-diff-disclosure">
+        <form className="journey-form service-judgment-form service-judgment-form--top" onSubmit={e => { e.preventDefault(); ctx.saveJudgment(); }}>
+          {decisions.length > 0 && <div className="service-decision-field">
+            <div className="service-decision-label-row">
+              <span className="service-decision-label">Relationship judgment</span>
+              <Tooltip content={decisions.includes('reconfirm') ? 'Reconfirm = still valid after changes · Retire = no longer applies' : decisions.includes('confirm') ? 'Confirm = evidence supports claimed meaning · Reject = unrelated or wrong meaning' : 'Retire = relationship no longer applies'}>
+                <span className="service-info-dot" aria-label="Decision meanings"><Info size={13} aria-hidden="true" /></span>
+              </Tooltip>
+            </div>
+            {decisions.includes('reconfirm') && !canReconfirmDirectly && (
+              <p className="service-reconfirm-hint" role="note">
+                Direct reconfirmation requires resolvable exact-version evidence on both endpoints. Because prior line anchors are unresolved after revision changes, either <strong>Retire</strong> if obsolete or expand <strong>Correct relationship meaning or endpoints</strong> below with updated line anchors.
+              </p>
+            )}
+            <div className="service-decision-toggle" role="radiogroup" aria-label="Relationship judgment">
+              {decisions.map(v => {
+                const blockedReconfirm = v === 'reconfirm' && !canReconfirmDirectly;
+                const hint = blockedReconfirm
+                  ? 'Unavailable while exact-version evidence is unresolved; use Correct relationship meaning or endpoints below to update line anchors, or Retire.'
+                  : (DECISION_HINTS[v] || v);
+                return <Tooltip key={v} content={hint}>
+                  <button type="button" role="radio" aria-checked={draft.decision === v} disabled={!mutable || blockedReconfirm} className={`service-decision-btn ${draft.decision === v ? 'is-selected' : ''}`} onClick={() => ctx.updateDraft({ decision: v })}><DecisionIcon decision={v} />{v}</button>
+                </Tooltip>;
+              })}
+            </div>
+          </div>}
+          {(['confirm', 'reconfirm'].includes(draft.decision) || !draft.decision) && decisions.some(v => ['confirm', 'reconfirm'].includes(v)) && (
+            <label className="service-checkbox"><Checkbox checked={draft.inspected} disabled={!mutable} onChange={e => ctx.updateDraft({ inspected: e.target.checked })} />I inspected the exact sources and recorded evidence.</label>
+          )}
+          <label>{optionalReason(d, draft.decision) ? 'Reason (optional)' : 'Reason'}<Textarea rows={2} value={draft.reason} disabled={!mutable} required={!optionalReason(d, draft.decision)} maxLength={4000} placeholder={optionalReason(d, draft.decision) ? 'Optional rationale for future reviewers…' : 'Explain why this judgment applies…'} onChange={e => ctx.updateDraft({ reason: e.target.value })} /></label>
+          {decisions.length > 0 && draft.decision && reasonPresets.length > 0 && (
+            <div className="service-preset-row" aria-label="Optional rationale presets">
+              <span className="service-preset-label">Quick notes ({activePresetDecision}):</span>
+              {reasonPresets.map(preset => (
+                <button
+                  type="button"
+                  key={preset}
+                  disabled={!mutable}
+                  className={`service-preset-chip ${draft.reason === preset ? 'is-active' : ''}`}
+                  onClick={() => ctx.updateDraft({ decision: draft.decision || activePresetDecision, reason: preset })}
+                >{preset}</button>
+              ))}
+            </div>
+          )}
+          <div className="service-toolbar"><Button variant="unstyled" type="submit" className="btn btn--accent" disabled={!mutable || !decisions.length}>Save judgment</Button>{otherOpenCount > 0 && <Button variant="secondary" type="button" disabled={!mutable || !decisions.length} onClick={() => ctx.saveJudgment(true)}>Save &amp; next</Button>}</div>
+          {triageDispositions.length > 0 && (
+            <div className="service-triage-inline" aria-label="Lightweight candidate triage">
+              <span>
+                {d.projection.resolution === 'open' && 'Not ready to judge?'}
+                {d.projection.resolution === 'deferred' && 'Deferred (unconfirmed):'}
+                {d.projection.resolution === 'screened' && 'Screened out (unconfirmed):'}
+              </span>
+              <div className="service-triage-bar__actions">
+                {triageDispositions.map(disp => (
+                  <Button
+                    key={disp}
+                    type="button"
+                    variant="ghost"
+                    size="xs"
+                    disabled={!mutable}
+                    onClick={() => ctx.triageCandidate(d, disp, null, disp !== 'restore')}
+                  >{TRIAGE_LABELS[disp] || disp}</Button>
+                ))}
+              </div>
+            </div>
+          )}
+          <small className="service-draft-hint">Drafts stay in this browser under your account and exact context.</small>
+        </form>
+        {['candidate', 'stale', 'confirmed'].includes(d.projection.validity) && <RelationshipEditor ctx={ctx} correction defaultOpen={Boolean(meaning?.mismatchWarning)} />}
+        {['rejected', 'retired'].includes(d.projection.validity) && <RelationshipEditor ctx={ctx} successor />}
+        {changedEndpoints.length > 0 && <Disclosure trigger="What changed since last review" badge={`${changedEndpoints.length} changed`} defaultOpen variant="card" className="service-diff-disclosure">
           {changedEndpoints.map(ep => <EndpointDiffBox key={ep.path} {...ep} />)}
         </Disclosure>}
         <div className="service-evidence-header">
@@ -582,80 +1186,72 @@ function Inspector({ ctx }) {
             <button type="button" className={evidenceMode === 'all' ? 'is-active' : ''} onClick={() => setEvidenceMode('all')}>All ({ranked.items.length})</button>
           </Tooltip>
         </div>}
-        <div className="service-evidence-list">
-          {visibleEvidence.map(e => {
-            const enclosing = resolveEvidenceEnclosingLabel(e, sourceObjById, priorVersionByCurrentId);
-            return <div className="service-evidence-item" key={e.id}>
-              <div className="service-evidence-item__head">
-                <strong>{sourceByVersion.get(e.artifactVersionId) || 'Captured source'}</strong>
-                <Tooltip content="Evidence signal tier from retained discovery rules">
-                  <span className={`service-signal-pill tier-${e.signalTier}`}>{e.signalLabel}</span>
-                </Tooltip>
+        {splitSideBySide ? (
+          <div className="service-evidence-split">
+            <div className="service-evidence-col">
+              <div className="service-evidence-col__head"><span>Source</span><strong title={srcName}>{srcName?.split('/').at(-1)}</strong></div>
+              <div className="service-evidence-list">
+                {sourceEvidence.length > 0 ? sourceEvidence.map(renderEvidenceCard) : (
+                  <div className="service-evidence-item service-evidence-item--preview">
+                    <div className="service-evidence-item__head"><strong>{srcName}</strong><span className="service-kind-badge">{ARTIFACT_KIND_LABELS[sourceArt?.kind] || 'Source'}</span></div>
+                    <pre className="service-excerpt">{sourcePreviewObj?.content?.split('\n').slice(0, 6).join('\n') || 'Open captured source below to inspect full text.'}</pre>
+                  </div>
+                )}
               </div>
-              <div className="service-evidence-item__loc">
-                <span>{formatLocator(e.locator)}{e.availability !== 'available' ? ` · ${e.availability}` : ''}</span>
-                {enclosing && <span className={`service-locator-pill ${enclosing.isUnresolved ? 'is-unresolved' : ''}`}>{enclosing.label}</span>}
+            </div>
+            <div className="service-evidence-col">
+              <div className="service-evidence-col__head"><span>Target</span><strong title={tgtName}>{tgtName?.split('/').at(-1)}</strong></div>
+              <div className="service-evidence-list">
+                {targetEvidence.length > 0 ? targetEvidence.map(renderEvidenceCard) : (
+                  <div className="service-evidence-item service-evidence-item--preview">
+                    <div className="service-evidence-item__head"><strong>{tgtName}</strong><span className="service-kind-badge">{ARTIFACT_KIND_LABELS[targetArt?.kind] || 'Target'}</span></div>
+                    <pre className="service-excerpt">{targetPreviewObj?.content?.split('\n').slice(0, 6).join('\n') || 'Open captured source below to inspect full text.'}</pre>
+                  </div>
+                )}
               </div>
-              {e.excerpt ? <HighlightExcerpt text={e.excerpt} tokens={e.sharedTokens} /> : <pre className="service-excerpt">{e.reason ?? 'No resolvable excerpt.'}</pre>}
-            </div>;
-          })}
-          {evidenceMode === 'top' && hiddenEvidenceCount > 0 && <div className="service-evidence-more">
-            <Button variant="ghost" size="xs" onClick={() => setEvidenceMode('all')}>Show {hiddenEvidenceCount} more anchor{hiddenEvidenceCount === 1 ? '' : 's'} ({ranked.items.length} total)</Button>
-          </div>}
-          {evidenceMode !== 'top' && ranked.items.length > 4 && <div className="service-evidence-more">
-            <Button variant="ghost" size="xs" onClick={() => setEvidenceMode('top')}>Show top 4 signals</Button>
-          </div>}
-        </div>
+            </div>
+          </div>
+        ) : (
+          <div className="service-evidence-list">
+            {visibleEvidence.map(renderEvidenceCard)}
+          </div>
+        )}
+        {evidenceMode === 'top' && hiddenEvidenceCount > 0 && <div className="service-evidence-more">
+          <Button variant="ghost" size="xs" onClick={() => setEvidenceMode('all')}>Show {hiddenEvidenceCount} more anchor{hiddenEvidenceCount === 1 ? '' : 's'} ({ranked.items.length} total)</Button>
+        </div>}
+        {evidenceMode !== 'top' && ranked.items.length > 4 && <div className="service-evidence-more">
+          <Button variant="ghost" size="xs" onClick={() => setEvidenceMode('top')}>Show top 4 signals</Button>
+        </div>}
         <div className="service-sources-stack">
-          {currentSources.map(s => <Source key={s.id} source={s} defaultOpen={false} />)}
+          {currentSources.map(s => (
+            <Source
+              key={s.id}
+              source={s}
+              defaultOpen={false}
+              open={sourceOpenMap[s.id] ?? false}
+              onOpenChange={isOpen => setSourceOpenMap(prev => ({ ...prev, [s.id]: isOpen }))}
+              selectedRange={sourceJump?.versionId === s.id ? [sourceJump.startLine, sourceJump.endLine] : null}
+              jumpLine={sourceJump?.versionId === s.id ? sourceJump.startLine : null}
+              tone="quiet"
+            />
+          ))}
         </div>
-        <form className="journey-form service-judgment-form" onSubmit={e => { e.preventDefault(); ctx.saveJudgment(); }}>
-          {decisions.length > 0 && <div className="service-decision-field">
-            <div className="service-decision-label-row">
-              <span className="service-decision-label">Relationship judgment</span>
-              <Tooltip content={decisions.includes('reconfirm') ? 'Reconfirm = still valid after changes · Retire = no longer applies' : 'Confirm = evidence supports link · Reject = unrelated suggestion'}>
-                <span className="service-info-dot" aria-label="Decision meanings"><Info size={13} aria-hidden="true" /></span>
-              </Tooltip>
-            </div>
-            {decisions.includes('reconfirm') && !canReconfirmDirectly && (
-              <p className="service-reconfirm-hint" role="note">
-                Direct reconfirmation requires resolvable exact-version evidence on both endpoints. Because prior line anchors are unresolved after revision changes, either <strong>Retire</strong> if obsolete or expand <strong>Correct this relationship</strong> below with updated line anchors.
-              </p>
-            )}
-            <div className="service-decision-toggle" role="radiogroup" aria-label="Relationship judgment">
-              {decisions.map(v => {
-                const blockedReconfirm = v === 'reconfirm' && !canReconfirmDirectly;
-                const hint = blockedReconfirm
-                  ? 'Unavailable while exact-version evidence is unresolved; use Correct this relationship below to update line anchors, or Retire.'
-                  : (DECISION_HINTS[v] || v);
-                return <Tooltip key={v} content={hint}>
-                  <button type="button" role="radio" aria-checked={draft.decision === v} disabled={!mutable || blockedReconfirm} className={`service-decision-btn ${draft.decision === v ? 'is-selected' : ''}`} onClick={() => ctx.updateDraft({ decision: v })}><DecisionIcon decision={v} />{v}</button>
-                </Tooltip>;
-              })}
-            </div>
-          </div>}
-          {(['confirm', 'reconfirm'].includes(draft.decision) || !draft.decision) && decisions.some(v => ['confirm', 'reconfirm'].includes(v)) && (
-            <label className="service-checkbox"><Checkbox checked={draft.inspected} disabled={!mutable} onChange={e => ctx.updateDraft({ inspected: e.target.checked })} />I inspected the exact sources and recorded evidence.</label>
-          )}
-          <label>{optionalReason(d, draft.decision) ? 'Reason (optional)' : 'Reason'}<Textarea value={draft.reason} disabled={!mutable} required={!optionalReason(d, draft.decision)} maxLength={4000} placeholder="Explain why this relationship is confirmed or rejected…" onChange={e => ctx.updateDraft({ reason: e.target.value })} /></label>
-          <Disclosure trigger="Content concerns & follow-up" variant="card" className="service-disclosure-box">
-            <label>Content concern (independent of relationship validity)<Textarea value={draft.contentConcern} disabled={!mutable} maxLength={4000} onChange={e => ctx.updateDraft({ contentConcern: e.target.value })} /></label>
+        <div className="service-secondary-tools">
+          <span className="service-secondary-label">Secondary tools</span>
+          <Disclosure trigger="Content concerns & follow-up" badge={hasSecondaryDraft ? 'Draft' : null} defaultOpen={hasSecondaryDraft} variant="card" className="service-disclosure-box">
+            <label>Content concern (independent of relationship validity)<Textarea rows={2} value={draft.contentConcern} disabled={!mutable} maxLength={4000} onChange={e => ctx.updateDraft({ contentConcern: e.target.value })} /></label>
             <label>Follow-up work<Select value={draft.followUpKind} disabled={!mutable} onChange={e => ctx.updateDraft({ followUpKind: e.target.value })}><option value="none">None</option><option value="documentation_update">Documentation update</option><option value="code_update">Code update</option></Select></label>
-            {draft.followUpKind !== 'none' && <label>Work description<Textarea value={draft.followUpNote} disabled={!mutable} required onChange={e => ctx.updateDraft({ followUpNote: e.target.value })} /></label>}
+            {draft.followUpKind !== 'none' && <label>Work description<Textarea rows={2} value={draft.followUpNote} disabled={!mutable} required onChange={e => ctx.updateDraft({ followUpNote: e.target.value })} /></label>}
           </Disclosure>
-          <div className="service-toolbar"><Button variant="unstyled" type="submit" className="btn btn--accent" disabled={!mutable || !decisions.length}>Save judgment</Button>{otherOpenCount > 0 && <Button variant="secondary" type="button" disabled={!mutable || !decisions.length} onClick={() => ctx.saveJudgment(true)}>Save &amp; next open</Button>}</div>
-          <small className="service-draft-hint">Drafts are kept in this browser under your account and exact context.</small>
-        </form>
-        <Disclosure trigger="Follow-up & judgment actions" variant="card" className="service-disclosure-box">
+        </div>
+        <Disclosure trigger="Follow-up & judgment actions" badge={d.followUps.length > 0 ? d.followUps.length : null} defaultOpen={d.followUps.length > 0} variant="card" className="service-disclosure-box">
           <h3>Independent follow-up</h3>
-          <label className="journey-form">Verification or work note<Textarea value={note} onChange={e => setNote(e.target.value)} /></label>
+          <label className="journey-form">Verification or work note<Textarea rows={2} value={note} onChange={e => setNote(e.target.value)} /></label>
           <div className="service-toolbar"><Button variant="unstyled" className="btn btn--secondary" disabled={!mutable || !note.trim()} onClick={() => command('open_follow_up', { workKind: 'documentation_update', note, relatedJudgmentEventId: null })}>Open documentation follow-up</Button>
           {d.projection.effectiveJudgmentEventId && <Button variant="unstyled" className="btn btn--secondary" disabled={!mutable || !note.trim()} onClick={() => command('reverse_judgment', { eventId: d.projection.effectiveJudgmentEventId, reason: note })}>Append reversal of effective judgment</Button>}</div>
           {d.followUps.map(w => <div className="card card--p-sm service-followup-item" key={w.id}><div className="service-followup-item__head"><strong>{w.kind.replaceAll('_', ' ')}</strong><span className="service-breakdown-pill">{w.status}</span></div><small className="service-id">{w.id}</small>{w.status === 'open' && <Button variant="unstyled" className="btn btn--secondary" disabled={!mutable || !note.trim()} onClick={() => command('resolve_follow_up', { followUpId: w.id, verificationNote: note })}>Resolve with verification note</Button>}</div>)}
         </Disclosure>
         {!mutable && <p className="inline-notice">This view is read-only. Current reviewer access and a fresh snapshot are required to write.</p>}
-        {['candidate', 'stale'].includes(d.projection.validity) && <RelationshipEditor ctx={ctx} correction />}
-        {['rejected', 'retired'].includes(d.projection.validity) && <RelationshipEditor ctx={ctx} successor />}
         <Disclosure trigger={`Technical details & limitations (${d.assertion.limitations.length})`} variant="subtle">
           <div className="service-technical-details">
             <p className="service-id">Context {d.projection.contextId} · Revision {d.assertion.id} · Projection v{d.projection.projectionVersion}</p>
@@ -669,7 +1265,34 @@ function Inspector({ ctx }) {
           </div>
         </Disclosure>
       </TabsContent>
-      <TabsContent className="service-tab-panel" value="history"><p className="service-method">History is retained at this snapshot’s sequence boundary.</p>{d.history.items.map(e => <div className="card card--p-sm service-history-card" key={e.id}><div className="service-history-card__head"><strong>{e.type.replaceAll('_', ' ')}</strong><div className="service-history-card__badges">{e.payload?.decision && <span className="service-decision-pill">{e.payload.decision}</span>}<span className="service-seq-badge">seq {e.sequence}</span></div></div><p className="service-history-reason">{reasonLabel(e.reason)}</p><small className="service-history-meta">{e.recordedAt} · {e.actorId} · sequence {e.sequence}</small><Disclosure trigger="Event details" variant="subtle"><pre className="service-json">{JSON.stringify(e, null, 2)}</pre></Disclosure></div>)}{!d.history.items.length && <p className="service-empty-note">No review events at this snapshot.</p>}{d.history.nextCursor && <Button variant="secondary" size="sm" disabled={ctx.busy} onClick={ctx.loadMoreHistory}>Load earlier history entries</Button>}</TabsContent>
+      <TabsContent className="service-tab-panel" value="history">
+        <p className="service-method">Append-only audit trail retained up to this snapshot’s sequence boundary.</p>
+        {d.history.items.map(e => {
+          const evCount = e.payload?.reviewedEvidenceIds?.length || 0;
+          const concern = e.payload?.contentConcern;
+          const followUp = e.payload?.followUpDisposition?.kind && e.payload.followUpDisposition.kind !== 'none' ? e.payload.followUpDisposition : null;
+          return <div className="card card--p-sm service-history-card" key={e.id}>
+            <div className="service-history-card__head">
+              <strong>{historyEventLabel(e)}</strong>
+              <div className="service-history-card__badges">
+                {(e.payload?.decision || e.payload?.disposition) && <span className="service-decision-pill">{e.payload.decision || e.payload.disposition}</span>}
+                <span className="service-seq-badge">seq {e.sequence}</span>
+              </div>
+            </div>
+            <p className="service-history-reason">{e.type === 'triage' && !e.reason ? 'Queue triage disposition recorded (no note).' : reasonLabel(e.reason)}</p>
+            <div className="service-history-facts">
+              <span title={e.recordedAt}>{formatTimestamp(e.recordedAt)}</span>
+              <span>Reviewer: <strong>{e.actorId}</strong></span>
+              {evCount > 0 && <span>{evCount} evidence anchor{evCount === 1 ? '' : 's'} verified</span>}
+              {concern && <span>Content concern: {concern}</span>}
+              {followUp && <span>Follow-up: {followUp.workKind?.replaceAll('_', ' ')}</span>}
+            </div>
+            <Disclosure trigger="Raw event JSON" variant="subtle"><pre className="service-json">{JSON.stringify(e, null, 2)}</pre></Disclosure>
+          </div>;
+        })}
+        {!d.history.items.length && <p className="service-empty-note">No review events at this snapshot.</p>}
+        {d.history.nextCursor && <Button variant="secondary" size="sm" disabled={ctx.busy} onClick={ctx.loadMoreHistory}>Load earlier history entries</Button>}
+      </TabsContent>
     </Tabs></div>}
   </aside>;
 }
@@ -677,27 +1300,71 @@ function Inspector({ ctx }) {
 function Files({ ctx }) {
   const activeArtifact = ctx.workspace.artifacts.find(a => a.artifactId === ctx.state.sourceArtifactId) || ctx.workspace.artifacts[0] || null;
   const [loadedByVersion, setLoadedByVersion] = useState({});
+  const [blameByVersion, setBlameByVersion] = useState({});
+  const [commitInspect, setCommitInspect] = useState(null);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [kindFilter, setKindFilter] = useState('all');
+  const [dirFilter, setDirFilter] = useState('all');
+  const [visibleLimit, setVisibleLimit] = useState(150);
   const [rangeStart, setRangeStart] = useState(1);
   const [rangeEnd, setRangeEnd] = useState(1);
   const bodyRef = useRef(null);
   const activeVersionId = activeArtifact?.versionId || null;
   const selectedData = activeVersionId ? loadedByVersion[activeVersionId] : null;
+  const activeBlame = activeVersionId ? blameByVersion[activeVersionId] : null;
+  const lineBlameMap = useMemo(() => buildLineBlameLookup(activeBlame), [activeBlame]);
+
   useEffect(() => {
     if (!activeVersionId) return;
     const abort = new AbortController();
     ctx.api.version(ctx.selection.repositoryId, activeVersionId, abort.signal)
       .then(data => setLoadedByVersion(prev => (prev[data.id] ? prev : { ...prev, [data.id]: data })))
       .catch(e => { if (e.name !== 'AbortError') setError(e.message); });
+    ctx.api.blame(ctx.selection.repositoryId, activeVersionId, abort.signal)
+      .then(bdata => setBlameByVersion(prev => ({ ...prev, [activeVersionId]: bdata })))
+      .catch(() => { /* Blame optional */ });
     return () => abort.abort();
   }, [activeVersionId, ctx.selection.repositoryId, ctx.api]);
-  const filteredArtifacts = ctx.workspace.artifacts.filter(a => {
+
+  const topDirectories = useMemo(() => {
+    const counts = new Map();
+    for (const a of ctx.workspace.artifacts) {
+      const parts = (a.path || '').split('/');
+      const dir = parts.length > 2 ? `${parts[0]}/${parts[1]}` : (parts.length > 1 ? parts[0] : '(root)');
+      counts.set(dir, (counts.get(dir) || 0) + 1);
+    }
+    return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  }, [ctx.workspace.artifacts]);
+
+  const filteredArtifacts = useMemo(() => ctx.workspace.artifacts.filter(a => {
     const matchesSearch = `${a.path} ${a.identity?.title || ''}`.toLowerCase().includes(search.toLowerCase());
     const matchesKind = kindFilter === 'all' || a.kind === kindFilter;
-    return matchesSearch && matchesKind;
-  });
+    if (!matchesSearch || !matchesKind) return false;
+    if (dirFilter === 'all') return true;
+    if (dirFilter === '(root)') return !(a.path || '').includes('/');
+    return (a.path || '').startsWith(`${dirFilter}/`) || a.path === dirFilter;
+  }), [ctx.workspace.artifacts, search, kindFilter, dirFilter]);
+
+  const visibleArtifacts = useMemo(
+    () => filteredArtifacts.slice(0, visibleLimit),
+    [filteredArtifacts, visibleLimit]
+  );
+
+  const selectedLinesCommits = useMemo(() => {
+    if (!lineBlameMap) return [];
+    const seen = new Set();
+    const list = [];
+    for (let ln = rangeStart; ln <= rangeEnd; ln += 1) {
+      const info = lineBlameMap.get(ln);
+      if (info?.commit && !seen.has(info.commit.commitId)) {
+        seen.add(info.commit.commitId);
+        list.push(info.commit);
+      }
+    }
+    return list;
+  }, [lineBlameMap, rangeStart, rangeEnd]);
+
   const connected = activeArtifact ? ctx.rows.filter(r => r.assertion.source.artifactId === activeArtifact.artifactId || r.assertion.target.artifactId === activeArtifact.artifactId) : [];
   const structureItems = selectedData?.structure?.items || [];
   const canAnchor = ctx.canWrite && ctx.workspace.mode === 'active' && selectedData;
@@ -714,25 +1381,41 @@ function Files({ ctx }) {
       setRangeEnd(lineNo);
     }
   };
+  const lastMod = activeBlame?.lastModified;
+
   return <section className="service-files">
     <div className="service-filters">
-      <label className="service-search-field">Search captured paths<Input type="search" placeholder="Find a file or authored record in this snapshot…" value={search} onChange={e => setSearch(e.target.value)} /></label>
-      <label className="service-validity-field">Artifact kind<Select aria-label="Filter by artifact kind" value={kindFilter} onChange={e => setKindFilter(e.target.value)}>{['all', 'code', 'document', 'requirement', 'decision'].map(k => <option key={k} value={k}>{k === 'all' ? 'All kinds' : ARTIFACT_KIND_LABELS[k]}</option>)}</Select></label>
+      <label className="service-search-field">Search captured paths<Input type="search" placeholder="Find any file, module, template, or authored record in this snapshot…" value={search} onChange={e => { setSearch(e.target.value); setVisibleLimit(150); }} /></label>
+      <label className="service-validity-field">Artifact kind<Select aria-label="Filter by artifact kind" value={kindFilter} onChange={e => { setKindFilter(e.target.value); setVisibleLimit(150); }}>{['all', 'code', 'document', 'requirement', 'decision'].map(k => <option key={k} value={k}>{k === 'all' ? 'All kinds' : ARTIFACT_KIND_LABELS[k]}</option>)}</Select></label>
+      {topDirectories.length > 1 && (
+        <label className="service-validity-field">Folder / package<Select aria-label="Filter by folder" value={dirFilter} onChange={e => { setDirFilter(e.target.value); setVisibleLimit(150); }}>
+          <option value="all">All folders ({ctx.workspace.artifacts.length})</option>
+          {topDirectories.map(([dir, cnt]) => <option key={dir} value={dir}>{dir} ({cnt})</option>)}
+        </Select></label>
+      )}
       <span className="service-result-count">{filteredArtifacts.length} of {ctx.workspace.artifacts.length} artifacts</span>
     </div>
     <div className="service-file-grid">
       <div className="service-file-list">
         <div className="service-list-heading"><span>Repository files</span><span>{filteredArtifacts.length}</span></div>
-        {filteredArtifacts.map(a => {
+        {visibleArtifacts.map(a => {
           const sym = a.structureSummary?.symbolCount || 0;
           const sec = a.structureSummary?.sectionCount || 0;
           const structText = sym > 0 ? `${sym} sym` : sec > 0 ? `${sec} sec` : null;
+          const fmt = a.identity?.format;
           return <Button variant="unstyled" className={`service-row service-file-row ${activeArtifact?.versionId === a.versionId ? 'is-selected' : ''}`} key={a.versionId} onClick={() => { setError(''); setRangeStart(1); setRangeEnd(1); ctx.setState(s => ({ ...s, sourceArtifactId: a.artifactId })); }}>
             <ArtifactKindIcon kind={a.kind} size={15} />
             <span><strong>{a.identity.title || a.path.split('/').at(-1)}</strong><small title={a.path}>{a.path}{structText ? ` · ${structText}` : ''}</small></span>
-            <span className="service-kind-badge">{a.kind}</span>
+            <span className="service-kind-badge">{fmt || a.kind}</span>
           </Button>;
         })}
+        {filteredArtifacts.length > visibleLimit && (
+          <div className="service-padding">
+            <Button variant="secondary" size="sm" onClick={() => setVisibleLimit(v => v + 250)}>
+              Show more files ({filteredArtifacts.length - visibleLimit} remaining)
+            </Button>
+          </div>
+        )}
         {!filteredArtifacts.length && <p className="service-padding service-empty-note">No artifacts match this filter.</p>}
       </div>
       <div className="service-file-reader">
@@ -741,16 +1424,66 @@ function Files({ ctx }) {
           <header className="service-file-header-card">
             <div>
               <div className="service-file-header-card__title">
-                <span className="service-kind-badge">{ARTIFACT_KIND_LABELS[activeArtifact.kind] || activeArtifact.kind}</span>
+                <span className="service-kind-badge">{selectedData.identity?.format || ARTIFACT_KIND_LABELS[activeArtifact.kind] || activeArtifact.kind}</span>
                 <strong>{selectedData.identity.title || activeArtifact.path}</strong>
               </div>
-              <small className="service-id">{activeArtifact.path} · SHA-256 {selectedData.contentDigest.value.slice(0, 12)}{selectedData.structure?.engine ? ` · ${selectedData.structure.engine}` : ''}</small>
+              <small className="service-id">{activeArtifact.path} · SHA-256 {(typeof selectedData.contentDigest === 'string' ? selectedData.contentDigest : selectedData.contentDigest?.value || '').slice(0, 12)}{selectedData.structure?.engine ? ` · ${selectedData.structure.engine}` : ''}</small>
             </div>
             <div className="service-file-header-actions">
               <span className="service-breakdown-pill">{connected.length} connected {connected.length === 1 ? 'link' : 'links'}</span>
               {selectedData.identity.kind === 'record' && <RecordRevision ctx={ctx} record={selectedData} />}
             </div>
           </header>
+
+          {activeBlame?.available && lastMod && (
+            <section className="service-gitlens-panel" aria-label="GitLens authorship and blame">
+              <div className="service-gitlens-panel__latest">
+                <div className="service-gitlens-panel__latest-main">
+                  <GitCommit size={15} aria-hidden="true" />
+                  <div>
+                    <div className="service-gitlens-panel__headline">
+                      <strong>{lastMod.authorName}</strong>
+                      {lastMod.authorEmail && <small>&lt;{lastMod.authorEmail}&gt;</small>}
+                      <span>modified this file in</span>
+                      <code className="service-commit-pill">{lastMod.shortCommitId || (lastMod.commitId || '').slice(0, 7)}</code>
+                      {lastMod.authoredAt && <small>· {formatTimestamp(lastMod.authoredAt)}</small>}
+                    </div>
+                    <p className="service-gitlens-panel__commit-msg">
+                      “{lastMod.subject || lastMod.summary || lastMod.message}”
+                    </p>
+                  </div>
+                </div>
+                {lastMod.commitId && (
+                  <Button variant="secondary" size="xs" onClick={() => setCommitInspect({ commitId: lastMod.commitId, path: activeArtifact.path })}>
+                    <GitCompare size={12} /> Inspect commit diff
+                  </Button>
+                )}
+              </div>
+
+              {activeBlame.contributors?.length > 0 && (
+                <div className="service-gitlens-contributors" aria-label="File contributors">
+                  <span className="service-gitlens-contributors__label">Past modifiers ({activeBlame.contributors.length}):</span>
+                  {activeBlame.contributors.map(c => (
+                    <Tooltip
+                      key={`${c.authorName}-${c.authorEmail}`}
+                      content={`${c.authorName}${c.authorEmail ? ` <${c.authorEmail}>` : ''} · ${c.lineCount} lines (${c.percentage}%) across ${c.commitCount} commit(s) · Latest: ${c.latestShortCommitId} "${c.latestSummary}"`}
+                    >
+                      <button
+                        type="button"
+                        className="service-contributor-chip"
+                        onClick={() => c.latestCommitId && setCommitInspect({ commitId: c.latestCommitId, path: activeArtifact.path })}
+                      >
+                        <span className="service-contributor-avatar">{(c.authorName || 'U').slice(0, 2).toUpperCase()}</span>
+                        <strong>{c.authorName}</strong>
+                        <small>{c.percentage}% ({c.lineCount}L · {c.commitCount}c)</small>
+                      </button>
+                    </Tooltip>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
+
           {structureItems.length > 0 && (
             <section className="service-structure-panel" aria-label="Extracted structure outline">
               <div className="service-structure-panel__head">
@@ -778,16 +1511,65 @@ function Files({ ctx }) {
               </div>
             </section>
           )}
-          {canAnchor && (
-            <div className="service-anchor-bar">
+          <div className="service-anchor-bar">
+            <div className="service-anchor-bar__left">
               <span>{rangeStart === rangeEnd ? `Line ${rangeStart}` : `Lines ${rangeStart}–${rangeEnd}`} selected <small>(click or Shift-click lines below)</small></span>
+              {selectedLinesCommits.length > 0 && (
+                <div className="service-gitlens-line-blame" aria-label="Selected line GitLens blame">
+                  {selectedLinesCommits.slice(0, 2).map(c => (
+                    <span className="service-gitlens-line-blame__item" key={c.commitId}>
+                      <GitCommit size={12} aria-hidden="true" />
+                      <strong>{c.authorName}</strong>
+                      <code className="service-commit-pill">{c.shortCommitId}</code>
+                      <span className="service-gitlens-line-blame__summary" title={c.summary}>“{c.summary}”</span>
+                      <small>{(c.authoredAt || '').slice(0, 10)}</small>
+                      <button
+                        type="button"
+                        className="text-link service-gitlens-diff-btn"
+                        onClick={() => setCommitInspect({ commitId: c.commitId, path: activeArtifact.path })}
+                      >
+                        View diff
+                      </button>
+                    </span>
+                  ))}
+                  {selectedLinesCommits.length > 2 && <small>+{selectedLinesCommits.length - 2} more commits in range</small>}
+                </div>
+              )}
+            </div>
+            {canAnchor && (
               <div className="service-anchor-bar__actions">
-                <Button variant="secondary" size="xs" onClick={() => ctx.openRecordWithSeed({ artifact: activeArtifact, startLine: rangeStart, endLine: rangeEnd })}>Record intent for lines</Button>
+                <Button variant="secondary" size="xs" onClick={() => ctx.openRecordWithSeed({ artifact: activeArtifact, startLine: rangeStart, endLine: rangeEnd })}>Record requirement or decision for lines</Button>
                 <Button variant="secondary" size="xs" onClick={() => ctx.openNewRelationshipWithSeed({ artifact: activeArtifact, startLine: rangeStart, endLine: rangeEnd })}>Add relationship from lines</Button>
               </div>
-            </div>
+            )}
+          </div>
+          <Source
+            source={selectedData}
+            selectedRange={[rangeStart, rangeEnd]}
+            onSelectLine={handleSelectLine}
+            bodyRef={bodyRef}
+            blame={activeBlame}
+            defaultShowBlame={true}
+            onInspectCommit={req => setCommitInspect(req)}
+          />
+          {activeBlame?.fileHistory?.length > 0 && (
+            <Disclosure trigger={`GitLens File Commit History (${activeBlame.fileHistory.length} commits touching ${activeArtifact.path.split('/').at(-1)})`} defaultOpen variant="card" className="service-gitlens-history">
+              <div className="service-gitlens-history__list">
+                {activeBlame.fileHistory.map(commit => (
+                  <div className="service-gitlens-history__row" key={commit.commitId}>
+                    <code className="service-commit-pill">{commit.shortCommitId}</code>
+                    <div className="service-gitlens-history__body">
+                      <strong>{commit.subject}</strong>
+                      <small>{commit.authorName}{commit.authorEmail ? ` <${commit.authorEmail}>` : ''} · {formatTimestamp(commit.authoredAt)}</small>
+                    </div>
+                    <Button variant="secondary" size="xs" onClick={() => setCommitInspect({ commitId: commit.commitId, path: activeArtifact.path })}>
+                      <GitCompare size={12} /> Inspect diff
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </Disclosure>
           )}
-          <Source source={selectedData} selectedRange={[rangeStart, rangeEnd]} onSelectLine={handleSelectLine} bodyRef={bodyRef} />
           {connected.length > 0 && <section className="service-file-relations" aria-label="Connected relationships for this artifact">
             <h3>Connected relationships ({connected.length})</h3>
             <div className="service-file-relations__list">
@@ -801,6 +1583,7 @@ function Files({ ctx }) {
         </> : <div className="service-reader-empty"><FileCode2 size={28} /><h2>{activeArtifact ? 'Loading captured source…' : 'Read the exact source.'}</h2><p>Select a file to inspect its captured content and revision identity.</p></div>}
       </div>
     </div>
+    {commitInspect && <CommitDiffDialog key={`${commitInspect.commitId}:${commitInspect.path || ''}`} ctx={ctx} commitRequest={commitInspect} onClose={() => setCommitInspect(null)} />}
   </section>;
 }
 
@@ -820,14 +1603,14 @@ function RecordDialog({ ctx }) {
     sourceMode: 'none',
     reason: '',
     anchorArtifactId: defaultArtifact?.artifactId || '',
-    anchorStart: 1,
-    anchorEnd: 1,
+    anchorStart: '',
+    anchorEnd: '',
     externalLabel: '',
     externalUri: '',
     alsoLink: false,
     linkTargetId: defaultCode?.artifactId || '',
-    linkStart: 1,
-    linkEnd: 1,
+    linkStart: '',
+    linkEnd: '',
     linkReason: '',
   };
   const [seededOverride, setSeededOverride] = useState(() => (seed?.artifact ? {
@@ -848,21 +1631,29 @@ function RecordDialog({ ctx }) {
   const anchoredArtifact = ctx.workspace?.artifacts?.find(a => a.artifactId === form.anchorArtifactId) || defaultArtifact;
   const linkTarget = codeArtifacts.find(a => a.artifactId === form.linkTargetId) || defaultCode;
   const { title, content, kind, reason, sourceMode } = form;
+  const hasAnchorRange = sourceMode !== 'artifact' || (Number.isInteger(Number(form.anchorStart)) && Number(form.anchorStart) >= 1 && Number(form.anchorEnd) >= Number(form.anchorStart));
+  const hasLinkRange = !form.alsoLink || (Number.isInteger(Number(form.linkStart)) && Number(form.linkStart) >= 1 && Number(form.linkEnd) >= Number(form.linkStart));
+  const canSubmit = ctx.canWrite && !ctx.busy && hasAnchorRange && hasLinkRange;
 
   return <Dialog open onOpenChange={open => !open && ctx.closeModal()}>
-    <DialogContent className="service-dialog" padded={false} showClose={false} aria-labelledby="record-title">
-      <Button variant="unstyled" className="btn service-dialog-close" onClick={ctx.closeModal} aria-label="Close record form"><X size={18} /></Button>
-      <DialogTitle id="record-title">Record intent</DialogTitle>
-      <p>Save an authored record. Optional linked claims enter as unconfirmed candidates requiring separate confirmation.</p>
-      <form className="journey-form" onSubmit={async e => {
+    <DialogContent className="service-dialog service-dialog--sticky" padded={false} showClose={false} aria-labelledby="record-title" aria-describedby="record-desc">
+      <div className="service-dialog-head">
+        <div>
+          <DialogTitle id="record-title">Record requirement or decision</DialogTitle>
+          <DialogDescription id="record-desc">Capture an authored decision or requirement in this snapshot. Linked claims enter separately as unconfirmed candidates.</DialogDescription>
+        </div>
+        <Button variant="unstyled" className="btn service-dialog-close" onClick={ctx.closeModal} aria-label="Close record form"><X size={18} /></Button>
+      </div>
+      <form className="service-dialog-form" onSubmit={async e => {
         e.preventDefault();
+        if (!canSubmit) return;
         let sourceReference = null;
         let sourceAbsenceReason = null;
         if (sourceMode === 'artifact' && anchoredArtifact) {
           sourceReference = {
             kind: 'artifact',
             artifactVersionId: anchoredArtifact.versionId,
-            locator: { kind: 'lines', startLine: Number(form.anchorStart || 1), endLine: Number(form.anchorEnd || form.anchorStart || 1) },
+            locator: { kind: 'lines', startLine: Number(form.anchorStart), endLine: Number(form.anchorEnd || form.anchorStart) },
           };
         } else if (sourceMode === 'external') {
           sourceReference = {
@@ -879,8 +1670,8 @@ function RecordDialog({ ctx }) {
         const linkSpec = form.alsoLink && linkTarget
           ? {
               target: linkTarget,
-              startLine: Number(form.linkStart || 1),
-              endLine: Number(form.linkEnd || form.linkStart || 1),
+              startLine: Number(form.linkStart),
+              endLine: Number(form.linkEnd || form.linkStart),
               reason: form.linkReason.trim() || `Authored ${kind}: ${title}`,
               evidenceOn: 'target',
             }
@@ -890,98 +1681,137 @@ function RecordDialog({ ctx }) {
           setSeededOverride(null);
           ctx.saveFormDraft(key, {
             title: '', content: '', kind: 'decision', sourceMode: 'none', reason: '',
-            anchorArtifactId: defaultArtifact?.artifactId || '', anchorStart: 1, anchorEnd: 1,
+            anchorArtifactId: defaultArtifact?.artifactId || '', anchorStart: '', anchorEnd: '',
             externalLabel: '', externalUri: '', alsoLink: false, linkTargetId: defaultCode?.artifactId || '',
-            linkStart: 1, linkEnd: 1, linkReason: '',
+            linkStart: '', linkEnd: '', linkReason: '',
           });
           ctx.closeModal();
         }
       }}>
-        <label>Kind<Select value={kind} onChange={e => update({ kind: e.target.value })}><option value="decision">Decision</option><option value="requirement">Requirement</option></Select></label>
-        <label>Title<Input value={title} required maxLength={200} onChange={e => update({ title: e.target.value })} /></label>
-        <label>Content<Textarea required value={content} maxLength={65536} onChange={e => update({ content: e.target.value })} /></label>
-        <label>
-          Source attachment
-          <Select aria-label="Source attachment" value={sourceMode} onChange={e => update({ sourceMode: e.target.value })}>
-            <option value="none">No source reference (supply reason)</option>
-            <option value="artifact" disabled={!ctx.workspace?.artifacts?.length}>Anchor to captured artifact</option>
-            <option value="external">External source URI</option>
-          </Select>
-        </label>
-        {sourceMode === 'none' && (
-          <label>Why is no source reference supplied?<Textarea required value={reason} maxLength={4000} onChange={e => update({ reason: e.target.value })} /></label>
-        )}
-        {sourceMode === 'artifact' && anchoredArtifact && (
-          <div className="service-record-anchor-box">
-            <label>
-              Anchored artifact
-              <Select aria-label="Anchored artifact" value={anchoredArtifact.artifactId} onChange={e => update({ anchorArtifactId: e.target.value, anchorStart: 1, anchorEnd: 1 })}>
-                {(ctx.workspace?.artifacts || []).map(a => <option key={a.artifactId} value={a.artifactId}>{a.identity?.title || a.path}</option>)}
-              </Select>
-            </label>
-            <SourceLinePicker
-              ctx={ctx}
-              repositoryId={ctx.selection.repositoryId}
-              artifact={anchoredArtifact}
-              startLine={form.anchorStart}
-              endLine={form.anchorEnd}
-              disabled={!ctx.canWrite || ctx.busy}
-              onChangeRange={(anchorStart, anchorEnd) => update({ anchorStart, anchorEnd })}
-            />
+        <div className="service-dialog-body journey-form">
+          <div className="service-form-grid-2">
+            <label>Kind<Select value={kind} onChange={e => update({ kind: e.target.value })}><option value="decision">Decision</option><option value="requirement">Requirement</option></Select></label>
+            <label>Source attachment<Select aria-label="Source attachment" value={sourceMode} onChange={e => update({ sourceMode: e.target.value })}>
+              <option value="none">No source reference (supply reason)</option>
+              <option value="artifact" disabled={!ctx.workspace?.artifacts?.length}>Anchor to captured artifact</option>
+              <option value="external">External source URI</option>
+            </Select></label>
           </div>
-        )}
-        {sourceMode === 'external' && (
-          <>
-            <label>External label<Input required maxLength={200} value={form.externalLabel} placeholder="e.g. RFC-042 or Jira ENG-128" onChange={e => update({ externalLabel: e.target.value })} /></label>
-            <label>External URI<Input required maxLength={2048} value={form.externalUri} placeholder="https://example.org/adr/042" onChange={e => update({ externalUri: e.target.value })} /></label>
-          </>
-        )}
-        {codeArtifacts.length > 0 && (
-          <div className="service-record-link-box">
-            <label className="service-checkbox">
-              <Checkbox checked={Boolean(form.alsoLink)} onChange={e => update({ alsoLink: e.target.checked })} />
-              Also propose an unconfirmed {kind === 'decision' ? 'motivates' : 'implements'} relationship to Python code
-            </label>
-            {form.alsoLink && linkTarget && (
-              <div className="service-record-anchor-box">
-                <label>
-                  Target code artifact
-                  <Select aria-label="Target code artifact" value={linkTarget.artifactId} onChange={e => update({ linkTargetId: e.target.value, linkStart: 1, linkEnd: 1 })}>
-                    {codeArtifacts.map(a => <option key={a.artifactId} value={a.artifactId}>{a.path}</option>)}
-                  </Select>
-                </label>
-                <SourceLinePicker
-                  ctx={ctx}
-                  repositoryId={ctx.selection.repositoryId}
-                  artifact={linkTarget}
-                  startLine={form.linkStart}
-                  endLine={form.linkEnd}
-                  disabled={!ctx.canWrite || ctx.busy}
-                  defaultOpen={false}
-                  onChangeRange={(linkStart, linkEnd) => update({ linkStart, linkEnd })}
-                />
-                <label>Candidate link rationale<Textarea value={form.linkReason} maxLength={4000} placeholder={`Explain why this ${kind} relates to ${linkTarget.path}…`} onChange={e => update({ linkReason: e.target.value })} /></label>
-              </div>
-            )}
-          </div>
-        )}
-        <Button variant="unstyled" type="submit" className="btn btn--accent" disabled={!ctx.canWrite || ctx.busy}>Save record</Button>
+          <label>Title<Input value={title} required maxLength={200} placeholder="Concise summary of the requirement or decision" onChange={e => update({ title: e.target.value })} /></label>
+          <label>Content<Textarea rows={3} required value={content} maxLength={65536} placeholder="State the requirement, architectural constraint, or technical rationale…" onChange={e => update({ content: e.target.value })} /></label>
+          {sourceMode === 'none' && (
+            <label>Why is no source reference supplied?<Textarea rows={2} required value={reason} maxLength={4000} placeholder="e.g., Team architecture meeting or design decision prior to code changes" onChange={e => update({ reason: e.target.value })} /></label>
+          )}
+          {sourceMode === 'artifact' && anchoredArtifact && (
+            <div className="service-record-anchor-box">
+              {seed?.artifact?.artifactId === anchoredArtifact.artifactId && (
+                <p className="service-seed-note">Preselected from Code explorer: Lines {form.anchorStart}–{form.anchorEnd}</p>
+              )}
+              <label>
+                Anchored artifact
+                <Select aria-label="Anchored artifact" value={anchoredArtifact.artifactId} onChange={e => update({ anchorArtifactId: e.target.value, anchorStart: '', anchorEnd: '' })}>
+                  {(ctx.workspace?.artifacts || []).map(a => <option key={a.artifactId} value={a.artifactId}>{a.identity?.title || a.path}</option>)}
+                </Select>
+              </label>
+              <SourceLinePicker
+                ctx={ctx}
+                repositoryId={ctx.selection.repositoryId}
+                artifact={anchoredArtifact}
+                startLine={form.anchorStart}
+                endLine={form.anchorEnd}
+                disabled={!ctx.canWrite || ctx.busy}
+                onChangeRange={(anchorStart, anchorEnd) => update({ anchorStart, anchorEnd })}
+              />
+            </div>
+          )}
+          {sourceMode === 'external' && (
+            <div className="service-form-grid-2">
+              <label>External label<Input required maxLength={200} value={form.externalLabel} placeholder="e.g. RFC-042 or Jira ENG-128" onChange={e => update({ externalLabel: e.target.value })} /></label>
+              <label>External URI<Input required maxLength={2048} value={form.externalUri} placeholder="https://example.org/adr/042" onChange={e => update({ externalUri: e.target.value })} /></label>
+            </div>
+          )}
+          {codeArtifacts.length > 0 && (
+            <div className="service-record-link-box">
+              <label className="service-checkbox">
+                <Checkbox checked={Boolean(form.alsoLink)} onChange={e => update({ alsoLink: e.target.checked })} />
+                <span>
+                  Also propose an unconfirmed <strong>{kind === 'decision' ? 'motivates' : 'implements'}</strong> relationship to Python code
+                  <small className="service-checkbox-sub">Separate action: the proposed link enters as an unconfirmed candidate for review.</small>
+                </span>
+              </label>
+              {form.alsoLink && linkTarget && (
+                <div className="service-record-anchor-box">
+                  <label>
+                    Target code artifact
+                    <Select aria-label="Target code artifact" value={linkTarget.artifactId} onChange={e => update({ linkTargetId: e.target.value, linkStart: '', linkEnd: '' })}>
+                      {codeArtifacts.map(a => <option key={a.artifactId} value={a.artifactId}>{a.path}</option>)}
+                    </Select>
+                  </label>
+                  <SourceLinePicker
+                    ctx={ctx}
+                    repositoryId={ctx.selection.repositoryId}
+                    artifact={linkTarget}
+                    startLine={form.linkStart}
+                    endLine={form.linkEnd}
+                    disabled={!ctx.canWrite || ctx.busy}
+                    defaultOpen={!seed?.artifact}
+                    onChangeRange={(linkStart, linkEnd) => update({ linkStart, linkEnd })}
+                  />
+                  <label>Candidate link rationale<Textarea rows={2} value={form.linkReason} maxLength={4000} placeholder={`Explain why this ${kind} relates to ${linkTarget.path}…`} onChange={e => update({ linkReason: e.target.value })} /></label>
+                </div>
+              )}
+            </div>
+          )}
+          {(!hasAnchorRange || !hasLinkRange) && (
+            <p className="service-method">Select source line numbers before saving an anchored record or proposed link.</p>
+          )}
+          {ctx.error && <p className="form-error" role="alert">{ctx.error}</p>}
+          {ctx.notice && <p role="status">{ctx.notice}</p>}
+        </div>
+        <div className="service-dialog-footer">
+          <Button variant="unstyled" type="submit" className="btn btn--accent" disabled={!canSubmit}>Save record</Button>
+          <Button variant="secondary" type="button" onClick={ctx.closeModal}>Cancel</Button>
+        </div>
       </form>
-      {ctx.error && <p className="form-error" role="alert">{ctx.error}</p>}
-      {ctx.notice && <p role="status">{ctx.notice}</p>}
     </DialogContent>
   </Dialog>;
 }
 
 function SnapshotDialog({ ctx, open, onOpenChange }) {
+  const repoName = ctx.state.repositories.find(r => r.id === ctx.selection?.repositoryId)?.fullName || 'Repository';
+  const inventory = ctx.workspace?.gitInventory;
   return <Dialog open={open} onOpenChange={onOpenChange}>
-    <DialogContent className="service-dialog" padded={false} showClose={false} aria-labelledby="snapshot-details-title" aria-describedby="snapshot-details-desc">
-      <Button variant="unstyled" className="btn service-dialog-close" onClick={() => onOpenChange(false)} aria-label="Close snapshot details"><X size={18} /></Button>
-      <DialogTitle id="snapshot-details-title">Revision &amp; snapshot details</DialogTitle>
-      <DialogDescription id="snapshot-details-desc">Inspect the exact commit selection or switch to a retained historical snapshot.</DialogDescription>
-      <div className="journey-form">
-        {ctx.selection && <p className="service-id">{ctx.selection.baseRevision ? 'Revision comparison' : 'Initial review'} · {ctx.selection.targetRevision.commitId} · snapshot {ctx.workspace?.snapshot.snapshotVersion ?? 'loading'}</p>}
-        <label>Retained snapshot<Select aria-label="Retained snapshot" value={ctx.workspace.snapshot.id} disabled={ctx.busy} onChange={async e => { await ctx.openSnapshot(e.target.value); onOpenChange(false); }}>{ctx.retainedSnapshots.map(s => <option value={s.snapshotId} key={s.snapshotId}>Version {s.snapshotVersion} · {s.mode}</option>)}{!ctx.retainedSnapshots.some(s => s.snapshotId === ctx.workspace.snapshot.id) && <option value={ctx.workspace.snapshot.id}>Version {ctx.workspace.snapshot.snapshotVersion} · {ctx.workspace.mode}</option>}</Select></label>
+    <DialogContent className="service-dialog service-dialog--sticky" padded={false} showClose={false} aria-labelledby="snapshot-details-title" aria-describedby="snapshot-details-desc">
+      <div className="service-dialog-head">
+        <div>
+          <DialogTitle id="snapshot-details-title">Revision &amp; snapshot details</DialogTitle>
+          <DialogDescription id="snapshot-details-desc">Inspect the exact commit selection or switch to a retained historical snapshot.</DialogDescription>
+        </div>
+        <Button variant="unstyled" className="btn service-dialog-close" onClick={() => onOpenChange(false)} aria-label="Close snapshot details"><X size={18} /></Button>
+      </div>
+      <div className="service-dialog-body journey-form">
+        {ctx.selection && (
+          <div className="service-snapshot-meta-card">
+            <div><span>Repository</span><strong>{repoName}</strong></div>
+            <div><span>Context kind</span><strong>{ctx.selection.baseRevision ? 'Revision comparison' : 'Initial snapshot'}</strong></div>
+            <div><span>Commit</span><code className="service-id">{ctx.selection.targetRevision.commitId}</code></div>
+            <div><span>Snapshot</span><strong>Version {ctx.workspace?.snapshot.snapshotVersion ?? 'loading'} ({ctx.workspace?.mode})</strong></div>
+          </div>
+        )}
+          {inventory && <section aria-label="Git file inventory">
+            <strong>{inventory.capturedPaths} captured files</strong>
+            <p>{inventory.treeEntries} entries in the Git tree · {inventory.selectedPaths == null ? 'Whole tree selected' : `${inventory.selectedPaths} paths requested`}</p>
+            {inventory.excluded.length > 0 && <details><summary>{inventory.excluded.length} excluded paths</summary>
+              <ul>{inventory.excluded.map(({ path, reason }) => <li key={path}><code>{path}</code> · {reason}</li>)}</ul>
+            </details>}
+          </section>}
+          <label>Retained snapshot<Select aria-label="Retained snapshot" value={ctx.workspace.snapshot.id} disabled={ctx.busy} onChange={async e => { await ctx.openSnapshot(e.target.value); onOpenChange(false); }}>{ctx.retainedSnapshots.map(s => <option value={s.snapshotId} key={s.snapshotId}>Version {s.snapshotVersion} · {s.mode}</option>)}{!ctx.retainedSnapshots.some(s => s.snapshotId === ctx.workspace.snapshot.id) && <option value={ctx.workspace.snapshot.id}>Version {ctx.workspace.snapshot.snapshotVersion} · {ctx.workspace.mode}</option>}</Select></label>
+        {ctx.workspace.mode === 'historical' && (
+          <p className="service-scoped-note">Historical snapshots are read-only. Use Refresh or select the active version to record new judgments.</p>
+        )}
+      </div>
+      <div className="service-dialog-footer">
+        <Button variant="secondary" type="button" onClick={() => onOpenChange(false)}>Close</Button>
       </div>
     </DialogContent>
   </Dialog>;
@@ -1006,13 +1836,18 @@ function CompareDialog({ ctx, open, onOpenChange }) {
   const baseCaptured = base === 'current'
     ? ctx.workspace.snapshot.coverage.some(c => c.function === 'ingestion' && c.status === 'complete')
     : Boolean(selectedBaseOpt?.captured);
-  const comparisonReady = baseCaptured && Boolean(selectedTargetOpt?.captured);
+  const targetCaptured = Boolean(selectedTargetOpt?.captured);
+  const comparisonReady = baseCaptured && targetCaptured;
   return <Dialog open={open} onOpenChange={onOpenChange}>
-    <DialogContent className="service-dialog" padded={false} showClose={false} aria-labelledby="compare-revisions-title" aria-describedby="compare-revisions-desc">
-      <Button variant="unstyled" className="btn service-dialog-close" onClick={() => onOpenChange(false)} aria-label="Close comparison dialog"><X size={18} /></Button>
-      <DialogTitle id="compare-revisions-title">Compare revisions</DialogTitle>
-      <DialogDescription id="compare-revisions-desc">Native Git compares captured file bytes. Revalidated comparison baselines carry forward confirmed and retired decisions into chained revisions.</DialogDescription>
-      <form className="journey-form" onSubmit={async e => {
+    <DialogContent className="service-dialog service-dialog--sticky" padded={false} showClose={false} aria-labelledby="compare-revisions-title" aria-describedby="compare-revisions-desc">
+      <div className="service-dialog-head">
+        <div>
+          <DialogTitle id="compare-revisions-title">Compare revisions</DialogTitle>
+          <DialogDescription id="compare-revisions-desc">Compare captured file bytes between revisions. Previously confirmed relationships on changed files become stale for revalidation; unconfirmed candidates remain unconfirmed.</DialogDescription>
+        </div>
+        <Button variant="unstyled" className="btn service-dialog-close" onClick={() => onOpenChange(false)} aria-label="Close comparison dialog"><X size={18} /></Button>
+      </div>
+      <form className="service-dialog-form" onSubmit={async e => {
         e.preventDefault();
         try {
           const targetSelection = selectedTargetOpt?.selection || { ...ctx.selection, comparisonId: undefined, baseRevision: null, targetRevision: { objectAlgorithm: 'sha1', commitId: target } };
@@ -1028,12 +1863,25 @@ function CompareDialog({ ctx, open, onOpenChange }) {
           }
           const after = await ctx.api.query(ctx.selection.repositoryId, 'select_context', targetSelection);
           const res = await ctx.submit(contextEnvelope(targetSelection, { viewId: after.repositoryViewId }, 'compare_revisions', { baseSnapshotId, targetSnapshotId: after.snapshot.id }));
-          if (res) onOpenChange(false);
+          if (res) { ctx.switchModule('changes'); onOpenChange(false); }
         } catch (error) { ctx.report(error); }
       }}>
-        <label>Baseline<Select value={base === 'current' ? 'current' : (selectedBaseOpt?.key || '')} onChange={e => setBase(e.target.value)}><option value="current">Current snapshot · {ctx.selection.targetRevision.commitId.slice(0, 7)}</option>{baselineOptions.map(opt => <option key={opt.key} value={opt.key}>{opt.label}</option>)}</Select></label>
-        <label>Target revision<Select value={target} onChange={e => setTarget(e.target.value)}>{revisionChoices.map(r => <option key={`${r.selection.inventoryId}-${r.selection.targetRevision.commitId}`} value={r.selection.targetRevision.commitId}>{r.label} · {r.selection.targetRevision.commitId.slice(0, 7)}</option>)}</Select></label>
-        <Button type="submit" disabled={!ctx.canWrite || ctx.busy || !comparisonReady}>Compare and review impact</Button>
+        <div className="service-dialog-body journey-form">
+          <label>Baseline<Select value={base === 'current' ? 'current' : (selectedBaseOpt?.key || '')} onChange={e => setBase(e.target.value)}><option value="current">Current snapshot · {ctx.selection.targetRevision.commitId.slice(0, 7)}{ctx.workspace?.revisionMeta?.target?.subject ? ` — ${ctx.workspace.revisionMeta.target.subject}` : ''}</option>{baselineOptions.map(opt => <option key={opt.key} value={opt.key}>{opt.label}{opt.captured ? '' : ' (not yet captured)'}</option>)}</Select></label>
+          <label>Target revision<Select value={target} onChange={e => setTarget(e.target.value)}>{revisionChoices.map(r => {
+            const opt = initialOptions.find(o => o.commitId === r.selection.targetRevision.commitId);
+            return <option key={`${r.selection.inventoryId}-${r.selection.targetRevision.commitId}`} value={r.selection.targetRevision.commitId}>{r.label} · {r.selection.targetRevision.commitId.slice(0, 7)}{r.subject ? ` — ${r.subject}` : ''}{opt?.captured ? '' : ' (not yet captured)'}</option>;
+          })}</Select></label>
+          {!comparisonReady && (
+            <p className="service-reconfirm-hint" role="note">
+              Both baseline and target revisions must be captured first. Select an uncaptured revision in the sidebar and run <strong>Capture accepted files</strong> under Team &amp; governance.
+            </p>
+          )}
+        </div>
+        <div className="service-dialog-footer">
+          <Button type="submit" disabled={!ctx.canWrite || ctx.busy || !comparisonReady}>Compare and review impact</Button>
+          <Button variant="secondary" type="button" onClick={() => onOpenChange(false)}>Cancel</Button>
+        </div>
       </form>
     </DialogContent>
   </Dialog>;
@@ -1078,26 +1926,32 @@ function ArchitecturePipelineStrip() {
 function WorkspaceProgress({ ctx, onOpenCompare }) {
   const progress = ctx.workspace.progress;
   if (!progress) return <section className="card card--p-sm" role="status">Progress is unavailable. Refresh to read service state.</section>;
-  const labels = { sources: 'Capture or inspect sources', discovery: 'Run discovery or inspect results', review: 'Continue review', compare: 'Compare revisions', incoming: 'Review affected relationships' };
+  const labels = { sources: 'Capture or inspect sources', discovery: 'Run discovery or inspect results', review: 'Inspect suggestions', compare: 'Compare revisions', incoming: 'Revalidate affected links' };
   const modules = { sources: progress.steps[0].state === 'complete' ? 'files' : 'governance', discovery: 'governance', review: 'changes', incoming: 'changes' };
-  const activeAlerts = progress.operations.filter(o => !['complete', 'partial'].includes(o.status));
+  const activeAlerts = progress.operations.filter(o => o.status !== 'complete');
+  const captureReady = progress.steps[0]?.state === 'complete';
+  const compareChoicesCount = progress.capturedChoices?.length || 0;
   return <section className="card card--p-sm service-progress" aria-label="Repository progress">
     <div className="service-progress__header">
       <div className="service-progress__title-row">
-        <h2>Workflow order</h2>
-        <Tooltip content="Follow steps 1–5: capture exact files, discover candidate links, review baseline, compare revisions with Git, and revalidate affected links.">
+        <h2>Suggested workflow</h2>
+        <Tooltip content="Optional progression: capture files, inspect discovered suggestions or explore code anytime, compare revisions with Git, and revalidate stale links.">
           <span className="service-info-dot" aria-label="Workflow guide"><Info size={14} aria-hidden="true" /></span>
         </Tooltip>
       </div>
-      <Tooltip content="Compare two captured revisions with native Git to identify affected relationships">
-        <Button variant="secondary" size="sm" onClick={onOpenCompare}><GitCompare size={14} />Compare revisions</Button>
-      </Tooltip>
+      <div className="service-progress__meta-actions">
+        <Tooltip content="You can explore captured sources or compare revisions anytime without confirming every candidate.">
+          <span className="service-metric-pill"><Info size={12} aria-hidden="true" />Optional candidate review</span>
+        </Tooltip>
+        {ctx.workspace.mode === 'historical' && <span className="service-breakdown-pill">Retained snapshot: inspection only</span>}
+      </div>
     </div>
     <ol className="service-progress-steps">{progress.steps.map((step, index) => {
       const meta = STEP_META[step.id] || { icon: GitCommit, hint: step.label };
       const StepIcon = meta.icon;
       const isCurrent = progress.currentStep === step.id;
       const showBlocker = (step.id === 'review' && progress.baseline.pending > 0 ? [] : step.blockers).filter(() => isCurrent || ['blocked', 'partial', 'unknown'].includes(step.state));
+      const canCompareAction = step.action === 'compare' && captureReady && compareChoicesCount > 0 && onOpenCompare;
       return <li key={step.id} className={`service-progress-step ${isCurrent ? 'is-current' : ''} is-state-${step.state}`} aria-current={isCurrent ? 'step' : undefined}>
         <div className="service-progress-step__top">
           <Tooltip content={meta.hint}>
@@ -1106,7 +1960,7 @@ function WorkspaceProgress({ ctx, onOpenCompare }) {
               <StepIcon size={12} aria-hidden="true" />
             </span>
           </Tooltip>
-          <span className={`service-chip service-chip--step-${step.state}`}>{step.state.replaceAll('_', ' ')}{isCurrent ? ' · current' : ''}</span>
+          <span className={`service-chip service-chip--step-${step.state}`}>{step.state.replaceAll('_', ' ')}{isCurrent && step.id !== 'review' ? ' · current' : ''}</span>
         </div>
         <strong>{step.label}</strong>
         <div className="service-progress-step__body">
@@ -1117,37 +1971,44 @@ function WorkspaceProgress({ ctx, onOpenCompare }) {
           ))}
           {step.id === 'review' && (
             <div className="service-step-metrics">
-              <Tooltip content="Reviewed relationships"><span className="service-step-pill"><CheckCircle2 size={11} aria-hidden="true" />{progress.counts.reviewed} reviewed</span></Tooltip>
-              <Tooltip content="Pending candidate reviews"><span className="service-step-pill"><Clock size={11} aria-hidden="true" />{progress.counts.pending}</span></Tooltip>
+              <Tooltip content="Formally confirmed or rejected relationships"><span className="service-step-pill"><CheckCircle2 size={11} aria-hidden="true" />{progress.counts.reviewed} formally reviewed</span></Tooltip>
+              <Tooltip content="Optional unconfirmed suggestions"><span className="service-step-pill"><Clock size={11} aria-hidden="true" />{progress.counts.pending} suggestions</span></Tooltip>
+              {(progress.counts.triaged || 0) > 0 && <Tooltip content="Deferred or screened suggestions retained in snapshot"><span className="service-step-pill">{progress.counts.triaged} triaged</span></Tooltip>}
               {progress.baseline.rejected > 0 && <Tooltip content="Rejected"><span className="service-step-pill"><X size={11} aria-hidden="true" />{progress.baseline.rejected}</span></Tooltip>}
             </div>
           )}
           {step.id === 'revalidate' && progress.comparisonPublished && (
             <div className="service-step-metrics">
               <Tooltip content="Stale links needing reconfirmation or retirement"><span className="service-step-pill is-warn"><AlertTriangle size={11} aria-hidden="true" />{progress.counts.stale} stale</span></Tooltip>
-              <Tooltip content="Open candidates"><span className="service-step-pill"><Clock size={11} aria-hidden="true" />{progress.counts.candidate}</span></Tooltip>
+              <Tooltip content="Unresolved candidates"><span className="service-step-pill"><Clock size={11} aria-hidden="true" />{progress.counts.unresolvedCandidate ?? progress.counts.candidate}</span></Tooltip>
             </div>
           )}
         </div>
-        {step.action !== 'compare' && <Button variant={isCurrent ? 'secondary' : 'ghost'} size="sm" disabled={step.id === 'revalidate' && !progress.comparisonPublished} onClick={() => { if (step.action === 'review' && progress.comparisonPublished) ctx.changeSelection(progress.baseline.selection); ctx.switchModule(modules[step.action]); }}>{step.action === 'review' && progress.comparisonPublished ? 'Open baseline review' : labels[step.action]}</Button>}
+        {canCompareAction && (
+          <Button variant="ghost" size="sm" onClick={onOpenCompare}>{labels.compare}</Button>
+        )}
+        {step.action !== 'compare' && (isCurrent || ['failed', 'blocked', 'partial', 'not_started'].includes(step.state) || step.id === 'discovery' || step.id === 'sources') && <Button variant={isCurrent && step.id !== 'review' ? 'secondary' : 'ghost'} size="sm" disabled={step.id === 'revalidate' && !progress.comparisonPublished} onClick={() => { if (step.action === 'review' && progress.comparisonPublished) ctx.changeSelection(progress.baseline.selection); ctx.switchModule(modules[step.action], step.id === 'revalidate' ? { queueTab: 'attention' } : null); }}>{step.action === 'review' && progress.comparisonPublished ? 'Open baseline review' : labels[step.action]}</Button>}
       </li>;
     })}</ol>
     {activeAlerts.length > 0 && <div className="service-progress-alerts">{activeAlerts.map(o => <p className="inline-notice" role="status" key={o.id}>{o.kind}: {o.status}{o.limitations.length ? ` · ${o.limitations.join(' ')}` : ''}</p>)}</div>}
-    <div className="service-progress-footer">
-      <ArchitecturePipelineStrip />
-      <div className="service-progress-footer__right">
-        <Tooltip content="You can compare revisions anytime without reviewing every baseline candidate. Rejecting a candidate dismisses it without confirming support.">
-          <span className="service-metric-pill"><Info size={12} aria-hidden="true" />Review policy</span>
-        </Tooltip>
-        {ctx.workspace.mode === 'historical' && <span className="service-breakdown-pill">Retained snapshot: inspection only</span>}
-      </div>
-    </div>
   </section>;
 }
 
 function Content({ ctx, onOpenCompare }) {
   const module = ctx.state.activeModule;
-  const pendingRows = ctx.rows.filter(row => row.projection.resolution === 'open');
+  const homeSignalMap = useMemo(() => {
+    const map = new Map();
+    for (const row of ctx.rows) {
+      map.set(row.id, classifyCandidateSignal(row, ctx.rows));
+    }
+    return map;
+  }, [ctx.rows]);
+  const pendingRows = useMemo(
+    () => ctx.rows
+      .filter(row => row.projection.resolution === 'open')
+      .sort((a, b) => rowPriorityRank(a, homeSignalMap) - rowPriorityRank(b, homeSignalMap)),
+    [ctx.rows, homeSignalMap]
+  );
   if (module === 'account') {
     const repos = ctx.descriptor?.repositories || [];
     const initials = (ctx.session.displayName || ctx.session.actorId || 'U').slice(0, 2).toUpperCase();
@@ -1195,8 +2056,8 @@ function Content({ ctx, onOpenCompare }) {
     </div>;
   }
   if (!ctx.workspace) return <section className="card card--p-sm">
-    <h2>{ctx.busy ? 'Loading your workspace…' : 'No registered input available'}</h2>
-    <p>{ctx.busy ? 'Reading the selected repository snapshot.' : 'The local operator must register an accepted inventory and discovery profile for a repository granted to your account.'}</p>
+    <h2>{ctx.busy ? 'Loading your workspace…' : ctx.descriptor?.capabilities?.customWorkspaces ? 'Connect your repository' : 'No workspace available'}</h2>
+    <p>{ctx.busy ? 'Reading the selected repository snapshot.' : ctx.descriptor?.capabilities?.customWorkspaces ? 'Choose a source and revision to start reviewing changes with your team.' : 'Ask your Continuum operator for access to a repository with a registered input.'}</p>
     {!ctx.busy && ctx.descriptor?.capabilities?.customWorkspaces && (
       <div className="service-toolbar">
         <Button variant="primary" size="sm" onClick={() => ctx.openWorkspaceModal('create')}>
@@ -1215,6 +2076,10 @@ function Content({ ctx, onOpenCompare }) {
       <div className="card card--p-sm"><strong>{ctx.workspace.snapshot.limitations.length}</strong><span>Disclosed limits</span></div>
       <div className="card card--p-sm"><strong className="service-cap">{ctx.workspace.mode}</strong><span>Snapshot mode</span></div>
     </div>
+    <section className="card card--p-sm service-pipeline-card">
+      <div className="service-section-heading"><h2>Active pipeline</h2><p>Services verified in this build</p></div>
+      <ArchitecturePipelineStrip />
+    </section>
     <div className="service-section-heading"><h2>Processing coverage</h2><p>Completion applies to the accepted inventory for each function. Unsupported functions remain explicit.</p></div>
     <div className="service-coverage-table"><div className="service-coverage-heading" aria-hidden="true"><span>Function</span><span>Status</span><span>Processed / Eligible</span></div>{ctx.workspace.snapshot.coverage.map(c => <section className="service-coverage-row" key={c.function}><div><h3>{c.function.replaceAll('_', ' ')}</h3><small>{c.excludedCount ?? 'Unknown'} excluded</small></div><span className={`service-chip service-chip--${c.status}`}>{c.status}</span><span className="service-coverage-count">{c.processedCount} / {c.eligibleCount ?? 'unknown'}</span>{!!c.limitations.length && <div className="service-coverage-disclosure"><Disclosure trigger="Scope & limitations" variant="subtle"><ul>{c.limitations.map((l, i) => <li key={i}>{l}</li>)}</ul></Disclosure></div>}</section>)}</div>
     <Limitations ctx={ctx} />
@@ -1260,54 +2125,136 @@ function Content({ ctx, onOpenCompare }) {
   }
   if (module === 'summary') {
     const confirmedCount = ctx.rows.filter(r => r.projection.validity === 'confirmed').length;
-    const reviewedCount = ctx.rows.filter(r => r.projection.resolution === 'resolved').length;
+    const rejectedCount = ctx.rows.filter(r => r.projection.validity === 'rejected').length;
+    const retiredCount = ctx.rows.filter(r => r.projection.validity === 'retired').length;
+    const staleCount = ctx.workspace.snapshot.staleReviewCount ?? ctx.rows.filter(r => r.projection.validity === 'stale' && r.projection.resolution === 'open').length;
+    const openCand = ctx.workspace.snapshot.openCandidateCount ?? ctx.rows.filter(r => r.projection.validity === 'candidate' && r.projection.resolution === 'open').length;
+    const deferredCand = ctx.workspace.snapshot.deferredCount ?? ctx.rows.filter(r => r.projection.validity === 'candidate' && r.projection.resolution === 'deferred').length;
+    const screenedCand = ctx.workspace.snapshot.screenedCount ?? ctx.rows.filter(r => r.projection.validity === 'candidate' && r.projection.resolution === 'screened').length;
+    const unresolvedCand = ctx.workspace.snapshot.unresolvedCandidateCount ?? (openCand + deferredCand + screenedCand);
     const followUps = ctx.workspace.followUps || [];
+    const contextById = new Map(ctx.rows.map(r => [r.id, r]));
     return <>
       <div className="service-stats service-stats--four">
-        <section className="card card--p-sm"><h2>{ctx.workspace.snapshot.pendingReviewCount}</h2><p>Pending relationship reviews</p></section>
-        <section className="card card--p-sm"><h2>{confirmedCount}</h2><p>Confirmed relationships</p></section>
-        <section className="card card--p-sm"><h2>{reviewedCount}</h2><p>Reviewed of {ctx.rows.length} total</p></section>
-        <section className="card card--p-sm"><h2>{ctx.workspace.snapshot.openFollowUpCount}</h2><p>Open follow-ups</p></section>
+        <section className={`card card--p-sm ${staleCount > 0 ? 'service-stat-warn' : ''}`}><h2>{staleCount}</h2><p>Stale (needs revalidation)</p><small>{staleCount > 0 ? 'Requires reconfirmation or retirement' : 'No pending revalidations'}</small></section>
+        <section className="card card--p-sm"><h2>{confirmedCount}</h2><p>Confirmed relationships</p><small>{rejectedCount} rejected · {retiredCount} retired</small></section>
+        <section className="card card--p-sm"><h2>{unresolvedCand}</h2><p>Unconfirmed suggestions</p><small>{openCand} open · {deferredCand} deferred · {screenedCand} screened out</small></section>
+        <section className="card card--p-sm"><h2>{ctx.workspace.snapshot.openFollowUpCount}</h2><p>Open follow-ups</p><small>Independent corrective tasks</small></section>
       </div>
       <CycleActions key={ctx.workspace.snapshot.id} ctx={ctx} />
       <section className="card card--p-sm service-followups-panel">
         <div className="service-section-heading"><h2>Follow-up work <span>{followUps.length}</span></h2><p>Corrective work remains separate from relationship validity.</p></div>
-        {followUps.length > 0 ? <div className="service-followup-list">{followUps.map(w => <div className="service-followup-item" key={w.id}><div className="service-followup-item__head"><strong>{w.kind.replaceAll('_', ' ')}</strong><span className="service-breakdown-pill">{w.status}</span></div><small className="service-id">Context {w.contextId}</small><Button variant="ghost" size="sm" onClick={() => { ctx.switchModule('changes'); ctx.selectArtifact(w.contextId); }}>Inspect context <ArrowRight size={13} /></Button></div>)}</div> : <p className="service-empty-note">No follow-up tasks recorded in this snapshot.</p>}
+        {followUps.length > 0 ? <div className="service-followup-list">{followUps.map(w => {
+          const row = contextById.get(w.contextId);
+          return <div className="service-followup-item" key={w.id}><div className="service-followup-item__head"><strong>{w.kind.replaceAll('_', ' ')}</strong><span className="service-breakdown-pill">{w.status}</span></div><small className="service-id">{row ? `${row.sourceLabel || row.sourcePath} → ${row.targetLabel || row.targetPath}` : `Context ${w.contextId}`}</small><Button variant="ghost" size="sm" onClick={() => { ctx.switchModule('changes'); ctx.selectArtifact(w.contextId); }}>Inspect context <ArrowRight size={13} /></Button></div>;
+        })}</div> : <p className="service-empty-note">No follow-up tasks recorded in this snapshot.</p>}
       </section>
-      <Relationships ctx={ctx} />
+      <Disclosure trigger={`All snapshot relationships (${ctx.rows.length})`} variant="card" className="service-limitations">
+        <Relationships ctx={ctx} heading={false} />
+      </Disclosure>
     </>;
   }
-  const resolvedCount = ctx.rows.length - pendingRows.length;
-  const pct = ctx.rows.length ? Math.round((resolvedCount / ctx.rows.length) * 100) : 0;
+  const confirmedCount = ctx.rows.filter(r => r.projection.validity === 'confirmed').length;
+  const triagedCount = ctx.rows.filter(r => ['deferred', 'screened'].includes(r.projection.resolution)).length;
+  const staleCount = ctx.rows.filter(r => r.projection.validity === 'stale' && r.projection.resolution === 'open').length;
+  const openCandidateCount = ctx.rows.filter(r => r.projection.validity === 'candidate' && r.projection.resolution === 'open').length;
   const docCount = (ctx.workspace.artifacts || []).filter(a => a.kind === 'document').length;
   const codeCount = (ctx.workspace.artifacts || []).filter(a => a.kind === 'code').length;
+  const recordCount = (ctx.workspace.artifacts || []).filter(a => ['requirement', 'decision'].includes(a.kind)).length;
+  const ingestionReady = ctx.workspace.snapshot.coverage?.some(c => c.function === 'ingestion' && c.status === 'complete');
+  const compareReady = (ctx.workspace.progress?.capturedChoices?.length || 0) > 1;
+  const stalePreviewRows = pendingRows.filter(r => r.projection.validity === 'stale');
+  const highModPreviewRows = pendingRows.filter(r => r.projection.validity !== 'stale' && homeSignalMap.get(r.id)?.tier !== 'low');
+  const previewRows = staleCount > 0
+    ? stalePreviewRows.slice(0, 4)
+    : (highModPreviewRows.length > 0 ? highModPreviewRows : pendingRows).slice(0, 4);
+  const activeRepoName = ctx.state.repositories.find(r => r.id === ctx.selection.repositoryId)?.fullName || 'Repository workspace';
+  const targetCommitMeta = ctx.workspace?.revisionMeta?.target;
+
   return <div className="service-home">
-    <WorkspaceProgress ctx={ctx} onOpenCompare={onOpenCompare} />
     <section className="focus-brief service-home-brief">
-      <div className="focus-brief__context"><GitBranch size={14} /><span>{ctx.state.repositories.find(r => r.id === ctx.selection.repositoryId)?.fullName || 'Repository workspace'}</span><span className="cycle-label">{ctx.workspace.mode} snapshot</span></div>
-      <h2>Pick up the thread.</h2>
-      <p>Inspect exact evidence anchors, verify change impacts across Neo4j neighborhoods, and sign off with accountable rationale.</p>
-      {ctx.rows.length > 0 && <div className="service-brief-progress"><div className="service-progress-track" aria-hidden="true"><div className="service-progress-fill" style={{ width: `${pct}%` }} /></div><span>{resolvedCount} of {ctx.rows.length} relationships resolved ({pct}%)</span></div>}
+      <div className="focus-brief__context">
+        <GitBranch size={14} aria-hidden="true" />
+        <span>{activeRepoName}</span>
+        <span className="service-commit-pill">{ctx.selection?.targetRevision?.commitId?.slice(0, 7)}</span>
+        <span className="cycle-label">{ingestionReady ? `${ctx.workspace.mode} snapshot · sources captured` : `${ctx.workspace.mode} snapshot · capture needed`}</span>
+      </div>
+      {targetCommitMeta?.subject && (
+        <div className="service-home-commit" aria-label="Active revision commit message">
+          <GitCommit size={15} aria-hidden="true" />
+          <div className="service-home-commit__body">
+            <strong>{targetCommitMeta.subject}</strong>
+            <small>
+              {targetCommitMeta.authorName && <span>{targetCommitMeta.authorName}{targetCommitMeta.authorEmail ? ` <${targetCommitMeta.authorEmail}>` : ''}</span>}
+              {targetCommitMeta.authoredAt && <span> · {formatTimestamp(targetCommitMeta.authoredAt)}</span>}
+              <span> · Commit <code>{targetCommitMeta.commitId?.slice(0, 10) || ctx.selection?.targetRevision?.commitId?.slice(0, 10)}</code></span>
+            </small>
+          </div>
+        </div>
+      )}
+      <h2>
+        {!ingestionReady
+          ? 'Sources ready to capture.'
+          : staleCount > 0
+            ? 'Changes affect confirmed knowledge.'
+            : 'Repository ready to explore.'}
+      </h2>
+      <p>
+        {!ingestionReady
+          ? 'Capture the accepted repository files before exploring captured source versions or discovering relationship candidates.'
+          : staleCount > 0
+            ? `${staleCount} previously confirmed relationship${staleCount === 1 ? '' : 's'} touched changed artifacts and require revalidation against the new revision.`
+            : 'Explore captured code, documents, and authored records. Open a suggested relationship to inspect its evidence.'}
+      </p>
       <div className="focus-brief__actions">
-        <Button onClick={() => ctx.switchModule('changes')}>Continue review <ArrowRight size={15} /></Button>
-        <Button variant="secondary" onClick={() => ctx.switchModule('files')}><FileCode2 size={15} />Read sources</Button>
-        <Tooltip content="View full Neo4j snapshot graph and affected nodes">
-          <Button variant="ghost" onClick={() => ctx.switchModule('explore')}><Network size={15} />Explore graph</Button>
-        </Tooltip>
+        {!ingestionReady ? (
+          <Button onClick={() => ctx.switchModule('governance')}>Capture accepted files <ArrowRight size={15} /></Button>
+        ) : staleCount > 0 ? (
+          <>
+            <Button onClick={() => ctx.switchModule('changes', { queueTab: 'attention' })}>Revalidate stale links ({staleCount}) <ArrowRight size={15} /></Button>
+            <Button variant="secondary" onClick={() => ctx.switchModule('files')}><FileCode2 size={15} />Explore sources</Button>
+          </>
+        ) : (
+          <>
+            <Button onClick={() => ctx.switchModule('files')}><FileCode2 size={15} />Explore sources</Button>
+            <Button variant="secondary" onClick={() => ctx.switchModule('changes')}>Review suggestions {openCandidateCount > 0 ? `(${openCandidateCount})` : ''} <ArrowRight size={15} /></Button>
+            <Button variant="ghost" onClick={() => ctx.switchModule('explore')}><Network size={15} />Explore graph</Button>
+            {compareReady && onOpenCompare && <Button variant="ghost" onClick={onOpenCompare}><GitCompare size={15} />Compare revisions</Button>}
+          </>
+        )}
       </div>
       <div className="focus-brief__summary">
-        <Tooltip content="Captured Markdown and plain-text docs"><span className="service-brief-stat"><FileText size={13} aria-hidden="true" />{docCount} docs</span></Tooltip>
-        <Tooltip content="Captured Python modules parsed via Tree-sitter"><span className="service-brief-stat"><FileCode2 size={13} aria-hidden="true" />{codeCount} Python</span></Tooltip>
-        <Tooltip content="Total tracked assertions in this snapshot"><span className="service-brief-stat"><Network size={13} aria-hidden="true" />{ctx.rows.length} links</span></Tooltip>
-        <Tooltip content="Relationships pending human judgment"><span className="service-brief-stat"><Clock size={13} aria-hidden="true" />{ctx.workspace.snapshot.pendingReviewCount} pending</span></Tooltip>
-        <Tooltip content="Independent corrective follow-ups"><span className="service-brief-stat"><AlertTriangle size={13} aria-hidden="true" />{ctx.workspace.snapshot.openFollowUpCount} follow-ups</span></Tooltip>
+        <Tooltip content="Captured files classified as code"><span className="service-brief-stat"><FileCode2 size={13} aria-hidden="true" />{codeCount} code files</span></Tooltip>
+        <Tooltip content="Captured files classified as documents"><span className="service-brief-stat"><FileText size={13} aria-hidden="true" />{docCount} docs</span></Tooltip>
+        {recordCount > 0 && <Tooltip content="Authored requirements and decisions"><span className="service-brief-stat"><ListChecks size={13} aria-hidden="true" />{recordCount} authored records</span></Tooltip>}
+        {confirmedCount > 0 && <Tooltip content="Human-confirmed relationships"><span className="service-brief-stat"><CheckCircle2 size={13} aria-hidden="true" />{confirmedCount} confirmed</span></Tooltip>}
+        {staleCount > 0 && <Tooltip content="Change-triggered stale links requiring revalidation"><span className="service-brief-stat is-warn"><AlertTriangle size={13} aria-hidden="true" />{staleCount} stale requiring revalidation</span></Tooltip>}
+        {openCandidateCount > 0 && <Tooltip content="Optional automated or manual suggestions available for inspection"><span className="service-brief-stat"><Clock size={13} aria-hidden="true" />{openCandidateCount} suggestions available</span></Tooltip>}
+        {triagedCount > 0 && <Tooltip content="Suggestions deferred or screened out"><span className="service-brief-stat"><Layers size={13} aria-hidden="true" />{triagedCount} triaged</span></Tooltip>}
+        {ctx.workspace.snapshot.openFollowUpCount > 0 && <Tooltip content="Independent corrective follow-ups"><span className="service-brief-stat"><AlertTriangle size={13} aria-hidden="true" />{ctx.workspace.snapshot.openFollowUpCount} follow-up{ctx.workspace.snapshot.openFollowUpCount === 1 ? '' : 's'}</span></Tooltip>}
       </div>
     </section>
+
     <div className="service-home-next">
-      <div className="service-section-heading"><h2>Ready for review</h2><Button variant="ghost" size="sm" onClick={() => ctx.switchModule('changes')}>View all <ArrowRight size={14} /></Button></div>
-      {pendingRows.slice(0, 4).map(row => <Button variant="unstyled" className="service-home-record" key={row.id} onClick={() => { ctx.switchModule('changes'); ctx.selectArtifact(row.id); }}><ArtifactKindIcon kind={row.source?.kind} size={17} /><span><strong>{row.sourceLabel || row.sourcePath}</strong><small className="service-row-target"><span className="service-rel-tag">{row.assertion.type}</span><ArrowRight size={11} aria-hidden="true" />{row.targetLabel || row.targetPath}</small></span><ValidityChip validity={row.projection.validity} /><ChevronRight size={14} /></Button>)}
-      {!pendingRows.length && <p className="service-empty-note">No pending relationship reviews in this snapshot.</p>}
+      <div className="service-section-heading">
+        <div>
+          <h2>{staleCount > 0 ? 'Needs revalidation' : 'Notable connections to explore'}</h2>
+          <p>{staleCount > 0
+            ? 'Previously confirmed links affected by revision changes.'
+            : (previewRows.length > 0
+              ? 'Highest-signal connections appear first. You do not need to review every suggestion before exploring or comparing revisions.'
+              : 'Explore captured files or record requirements and decisions anytime.')}</p>
+        </div>
+        <Button variant="ghost" size="sm" onClick={() => ctx.switchModule('changes', staleCount > 0 ? { queueTab: 'attention' } : null)}>View all relationships <ArrowRight size={14} /></Button>
+      </div>
+      {previewRows.map(row => {
+        const sig = homeSignalMap.get(row.id);
+        return <Button variant="unstyled" className="service-home-record" key={row.id} onClick={() => { ctx.switchModule('changes'); ctx.selectArtifact(row.id); }}><ArtifactKindIcon kind={row.source?.kind} size={17} /><span><strong>{row.sourceLabel || row.sourcePath}</strong><small className="service-row-target"><span className="service-rel-tag">{row.assertion.type}</span><ArrowRight size={11} aria-hidden="true" />{row.targetLabel || row.targetPath}{sig && <span className={`service-signal-badge is-${sig.tier}`}>{sig.label}</span>}</small></span><ValidityChip validity={row.projection.validity} /><ChevronRight size={14} /></Button>;
+      })}
+      {!previewRows.length && <p className="service-empty-note">{ingestionReady ? 'No open suggestions or stale links in this snapshot.' : 'Capture accepted files to populate captured artifacts and candidate links.'}</p>}
     </div>
+
+    <WorkspaceProgress ctx={ctx} onOpenCompare={onOpenCompare} />
     <Limitations ctx={ctx} />
   </div>;
 }
@@ -1325,12 +2272,13 @@ function Limitations({ ctx }) {
 
 function ComparisonImpactCard({ ctx }) {
   const comparison = ctx.workspace?.comparison;
-  const [graphOpen, setGraphOpen] = useState(true);
+  const [graphOpen, setGraphOpen] = useState(false);
+  const [graphFullScope, setGraphFullScope] = useState(false);
   const impact = useMemo(
     () => buildImpactGraphData(ctx.workspace, ctx.rows),
     [ctx.workspace, ctx.rows]
   );
-  if (!comparison) return null;
+  if (!comparison || !['dashboard', 'changes'].includes(ctx.state.activeModule)) return null;
   const rowsByContext = new Map(ctx.rows.map(r => [r.id, r]));
   const artifacts = ctx.workspace.artifacts || [];
   const unresolvedRows = ctx.rows.filter(r => [r.assertion.source, r.assertion.target].some(e => e.availability !== 'available'));
@@ -1344,23 +2292,57 @@ function ComparisonImpactCard({ ctx }) {
       kind: r.projection.validity,
       impacted: impact.impactedContextIds.has(r.id) || r.projection.validity === 'stale',
     }));
+  const showImpactSubset = !graphFullScope && impact.hasImpact;
+  const connectedIds = new Set(graphEdges.flatMap(e => [e.from, e.to]));
+  const connectedArtifacts = artifacts.length > 25
+    ? artifacts.filter(a => connectedIds.has(a.artifactId) || impact.affectedIds.has(a.artifactId))
+    : artifacts;
+  const inlineNodes = showImpactSubset ? artifacts.filter(a => impact.affectedIds.has(a.artifactId)) : connectedArtifacts;
+  const inlineEdges = showImpactSubset ? graphEdges.filter(e => impact.affectedIds.has(e.from) && impact.affectedIds.has(e.to)) : graphEdges;
   const shortEndpoint = (label, path) => (label && label !== path ? label : (path || '').split('/').at(-1));
   const canRenderInlineGraph = ctx.state.activeModule !== 'explore' && artifacts.length > 0;
+  const prioritizedImpacts = [...comparison.impacts].sort((a, b) => {
+    const ra = rowsByContext.get(a.contextId);
+    const rb = rowsByContext.get(b.contextId);
+    const sa = ra?.projection?.validity === 'stale' ? 0 : 1;
+    const sb = rb?.projection?.validity === 'stale' ? 0 : 1;
+    return sa - sb;
+  });
+  const staleImpacts = prioritizedImpacts.filter(imp => rowsByContext.get(imp.contextId)?.projection?.validity === 'stale');
+  const candidateImpacts = prioritizedImpacts.filter(imp => rowsByContext.get(imp.contextId)?.projection?.validity !== 'stale');
+  const quickImpacts = (staleImpacts.length > 0 ? [...staleImpacts, ...candidateImpacts] : prioritizedImpacts).slice(0, 3);
 
   return (
     <section className="inline-notice service-comparison-banner" aria-label="Change impact overview">
       <div className="service-impact-head">
         <div className="service-impact-head__left">
-          <GitCompare size={16} aria-hidden="true" />
+          <GitCompare size={15} aria-hidden="true" />
           <strong>{comparison.changes.length} changed paths · {comparison.impacts.length} affected relationships</strong>
-          <span className="service-commit-pill">{comparison.baseRevision?.commitId?.slice(0, 7)} → {comparison.targetRevision?.commitId?.slice(0, 7)}</span>
+          <span className="service-commit-pill">
+            {comparison.baseRevision?.commitId?.slice(0, 7)}
+            {ctx.workspace?.revisionMeta?.base?.subject ? ` (${ctx.workspace.revisionMeta.base.subject})` : ''}
+            {' → '}
+            {comparison.targetRevision?.commitId?.slice(0, 7)}
+            {ctx.workspace?.revisionMeta?.target?.subject ? ` (${ctx.workspace.revisionMeta.target.subject})` : ''}
+          </span>
+          {staleImpacts.length > 0 && (
+            <span className="service-metric-pill is-warn"><AlertTriangle size={11} aria-hidden="true" />{staleImpacts.length} stale requiring revalidation</span>
+          )}
+          {candidateImpacts.length > 0 && (
+            <span className="service-metric-pill">{candidateImpacts.length} unconfirmed candidate{candidateImpacts.length === 1 ? '' : 's'} touched</span>
+          )}
         </div>
         <div className="service-impact-head__actions">
+          {staleImpacts.length > 0 && ctx.state.activeModule === 'dashboard' && (
+            <Button variant="secondary" size="xs" onClick={() => ctx.switchModule('changes', { queueTab: 'attention' })}>
+              Review stale <ArrowRight size={12} aria-hidden="true" />
+            </Button>
+          )}
           {canRenderInlineGraph && (
-            <Tooltip content={graphOpen ? 'Hide inline impact graph' : 'Show overall graph with changed and affected nodes'}>
+            <Tooltip content={graphOpen ? 'Hide inline impact graph' : 'Show affected artifact graph'}>
               <Button variant="secondary" size="xs" onClick={() => setGraphOpen(v => !v)}>
                 <Network size={13} aria-hidden="true" />
-                {graphOpen ? 'Hide graph' : 'Overall graph'}
+                {graphOpen ? 'Hide graph' : 'Impact graph'}
               </Button>
             </Tooltip>
           )}
@@ -1372,24 +2354,15 @@ function ComparisonImpactCard({ ctx }) {
         </div>
       </div>
 
-      {comparison.changes.length > 0 && (
-        <div className="service-impact-strip" aria-label="Changed files">
-          {comparison.changes.map(c => (
-            <Tooltip key={c.path} content={`${c.path} (${c.kind})`}>
-              <span className={`service-change-pill is-${c.kind}`}>
-                <AlertTriangle size={11} aria-hidden="true" />
-                <span>{c.path.split('/').at(-1)}</span>
-                <small>{c.kind.replaceAll('_', ' ')}</small>
-              </span>
-            </Tooltip>
-          ))}
-          {comparison.impacts.length > 0 && <ArrowRight size={13} className="service-impact-flow-arrow" aria-hidden="true" />}
-          {comparison.impacts.slice(0, 6).map(imp => {
+      {quickImpacts.length > 0 && (
+        <div className="service-impact-strip is-compact" aria-label="Priority affected links">
+          <span className="service-impact-strip__label">{staleImpacts.length > 0 ? 'Revalidate first:' : 'Affected links:'}</span>
+          {quickImpacts.map(imp => {
             const row = rowsByContext.get(imp.contextId);
             if (!row) return null;
             return (
               <Tooltip key={imp.contextId} content={`Inspect impacted ${row.assertion.type} link: ${shortEndpoint(row.sourceLabel, row.sourcePath)} → ${shortEndpoint(row.targetLabel, row.targetPath)}`}>
-                <button type="button" className="service-impact-link-pill" onClick={() => ctx.selectArtifact(row.id)}>
+                <button type="button" className={`service-impact-link-pill ${row.projection.validity === 'stale' ? 'is-stale' : ''}`} onClick={() => ctx.selectArtifact(row.id)}>
                   <ValidityIcon validity={row.projection.validity} size={11} />
                   <span>{shortEndpoint(row.sourceLabel, row.sourcePath)}</span>
                   <ArrowRight size={10} aria-hidden="true" />
@@ -1398,18 +2371,27 @@ function ComparisonImpactCard({ ctx }) {
               </Tooltip>
             );
           })}
+          {prioritizedImpacts.length > quickImpacts.length && <span className="service-impact-more">+{prioritizedImpacts.length - quickImpacts.length} more</span>}
         </div>
       )}
 
       {graphOpen && canRenderInlineGraph && (
         <div className="service-impact-graph-wrap">
+          {impact.hasImpact && (
+            <div className="service-impact-graph-toolbar">
+              <span>{showImpactSubset ? `Showing ${inlineNodes.length} changed & affected artifacts` : `Showing all ${artifacts.length} snapshot artifacts`}</span>
+              <button type="button" className="text-link" onClick={() => setGraphFullScope(v => !v)}>
+                {showImpactSubset ? 'Show full snapshot graph' : 'Show affected only'}
+              </button>
+            </div>
+          )}
           <Suspense fallback={<div className="service-graph-loading" role="status">Loading impact graph…</div>}>
             <TraceabilityFlow
               compact
               height={320}
               showMiniMap={false}
-              rawNodes={artifacts.map(impact.enrichNode)}
-              rawEdges={graphEdges}
+              rawNodes={inlineNodes.map(impact.enrichNode)}
+              rawEdges={inlineEdges}
               selectedArtifactId={null}
               onSelectEdge={id => ctx.selectArtifact(id)}
               onSelectNode={id => {
@@ -1424,8 +2406,16 @@ function ComparisonImpactCard({ ctx }) {
         </div>
       )}
 
-      <Disclosure trigger="Inspect source changes" variant="subtle">
-        {comparison.changes.map(c => <p key={c.path}>{c.kind} · <code>{c.path}</code></p>)}
+      <Disclosure trigger={`Changed files (${comparison.changes.length}) & comparison notes`} variant="subtle">
+        <div className="service-impact-strip">
+          {comparison.changes.map(c => (
+            <span key={c.path} className={`service-change-pill is-${c.kind}`}>
+              <AlertTriangle size={11} aria-hidden="true" />
+              <span>{c.path}</span>
+              <small>{c.kind.replaceAll('_', ' ')}</small>
+            </span>
+          ))}
+        </div>
         {comparison.limitations.map(l => <p key={l}>{l}</p>)}
       </Disclosure>
     </section>
@@ -1463,8 +2453,9 @@ export default function ServiceApp() {
     <ComparisonImpactCard ctx={ctx} />
 
     {ctx.error && <p className="inline-notice form-error" role="alert">{ctx.error}</p>}
-    {ctx.notice && <p className="inline-notice service-notice-banner" role="status"><CheckCircle2 size={15} /><span>{ctx.notice}</span></p>}
+    {ctx.notice && <div className="inline-notice service-notice-banner" role="status"><CheckCircle2 size={15} /><span>{ctx.notice}</span><button type="button" className="service-notice-dismiss" onClick={ctx.dismissNotice} aria-label="Dismiss notification"><X size={13} /></button></div>}
     {ctx.pending && !ctx.busy && <section className="inline-notice"><p>A request is retained for account {ctx.session.displayName}. Its result has not been reconciled. Retry sends the same request ID and input.</p><Button variant="unstyled" className="btn btn--secondary" disabled={ctx.busy} onClick={ctx.retryPending}>Retry retained request</Button></section>}
+    {ctx.recoverableImport && !ctx.busy && <section className="inline-notice"><p>Your last repository import was interrupted. Resume to retrieve its workspace using the original request.</p><Button variant="unstyled" className="btn btn--secondary" onClick={ctx.resumeImport}>Resume import</Button></section>}
     {ctx.busy && <p className="service-busy-banner" role="status">Updating workspace…</p>}
     <Content ctx={ctx} onOpenCompare={() => setCompareOpen(true)} />
   </main>{ctx.state.inspectorOpen && <Inspector key={ctx.state.selectedArtifactId} ctx={ctx} />}</div></div>

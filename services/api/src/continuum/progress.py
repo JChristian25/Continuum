@@ -22,6 +22,11 @@ def workspace_progress(db, snapshot, selection):
     pending = header['pendingReviewCount']
     counts = {state: sum(a['projection']['validity'] == state for a in document['assertions'])
               for state in ['candidate', 'stale', 'confirmed', 'rejected', 'retired']}
+    deferred = sum(a['projection']['resolution'] == 'deferred' for a in document['assertions'])
+    screened = sum(a['projection']['resolution'] == 'screened' for a in document['assertions'])
+    triaged = deferred + screened
+    open_candidates = sum(a['projection']['validity'] == 'candidate' and a['projection']['resolution'] == 'open' for a in document['assertions'])
+    unresolved_candidates = sum(a['projection']['validity'] == 'candidate' and a['projection']['resolution'] in {'open', 'deferred', 'screened'} for a in document['assertions'])
     reviewed = sum(bool(a['projection']['effectiveJudgmentEventId']) for a in document['assertions'])
     completed = completion(db, snapshot)
     comparison = document.get('comparison')
@@ -29,6 +34,9 @@ def workspace_progress(db, snapshot, selection):
     baseline_header = baseline.document['snapshot']
     baseline_pending = baseline_header['pendingReviewCount']
     baseline_reviewed = sum(bool(a['projection']['effectiveJudgmentEventId']) for a in baseline.document['assertions'])
+    baseline_deferred = sum(a['projection']['resolution'] == 'deferred' for a in baseline.document['assertions'])
+    baseline_screened = sum(a['projection']['resolution'] == 'screened' for a in baseline.document['assertions'])
+    baseline_unresolved = sum(a['projection']['validity'] == 'candidate' and a['projection']['resolution'] in {'open', 'deferred', 'screened'} for a in baseline.document['assertions'])
     baseline_completed = completion(db, baseline)
     discovery_operations = baseline.document.get('processing', []) if comparison else operations
     discovered = any(o['kind'] == 'discovery' and o['status'] in {'complete', 'partial'} for o in discovery_operations)
@@ -85,9 +93,13 @@ def workspace_progress(db, snapshot, selection):
     ]
     current = next((s['id'] for s in steps if s['state'] != 'complete' and not (s['id'] == 'discovery' and discovered)), None)
     return {'snapshotId': snapshot.id, 'snapshotVersion': snapshot.snapshot_version, 'historical': not active,
-            'steps': steps, 'currentStep': current, 'counts': {**counts, 'reviewed': reviewed, 'pending': pending},
+            'steps': steps, 'currentStep': current,
+            'counts': {**counts, 'reviewed': reviewed, 'pending': pending, 'deferred': deferred, 'screened': screened,
+                       'triaged': triaged, 'openCandidate': open_candidates, 'unresolvedCandidate': unresolved_candidates},
             'operations': operations, 'capturedChoices': choices, 'coverage': header['coverage'],
             'baseline': {'snapshotId': baseline.id, 'selection': baseline_header['selection'], 'reviewed': baseline_reviewed,
                          'pending': baseline_pending, 'completion': baseline_completed,
+                         'deferred': baseline_deferred, 'screened': baseline_screened,
+                         'triaged': baseline_deferred + baseline_screened, 'unresolvedCandidate': baseline_unresolved,
                          'rejected': sum(a['projection']['validity'] == 'rejected' for a in baseline.document['assertions'])},
             'completion': completed, 'comparisonPublished': bool(comparison)}

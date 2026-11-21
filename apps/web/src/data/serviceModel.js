@@ -15,6 +15,13 @@ export function allSelections(repository) {
     for (const revision of input.revisions || []) {
       items.push({
         label: revision.label,
+        subject: revision.subject || '',
+        message: revision.message || revision.subject || '',
+        authorName: revision.authorName || '',
+        authorEmail: revision.authorEmail || '',
+        authoredAt: revision.authoredAt || '',
+        committedAt: revision.committedAt || '',
+        shortCommitId: revision.shortCommitId || (revision.commitId || '').slice(0, 7),
         isCustom: Boolean(input.isCustom),
         selection: {
           repositoryId: repository.id,
@@ -36,6 +43,7 @@ export function allSelections(repository) {
  */
 export function buildCompareOptions({ revisionChoices = [], capturedChoices = [], currentSelection = null, targetCommit = '' }) {
   const labelByCommit = new Map(revisionChoices.map(r => [r.selection.targetRevision.commitId, r.label]));
+  const subjectByCommit = new Map(revisionChoices.map(r => [r.selection.targetRevision.commitId, r.subject || '']));
   const isInitCaptured = commitId =>
     capturedChoices.some(choice => !choice.selection?.baseRevision && choice.selection?.targetRevision?.commitId === commitId)
     || capturedChoices.some(choice => choice.selection?.targetRevision?.commitId === commitId);
@@ -47,7 +55,10 @@ export function buildCompareOptions({ revisionChoices = [], capturedChoices = []
       kind: 'initial',
       commitId,
       selection: r.selection,
-      label: `${r.label} · ${commitId.slice(0, 7)}`,
+      label: `${r.label} · ${commitId.slice(0, 7)}${r.subject ? ` — ${r.subject}` : ''}`,
+      subject: r.subject || '',
+      authorName: r.authorName || '',
+      authoredAt: r.authoredAt || '',
       captured: isInitCaptured(commitId),
     };
   });
@@ -68,6 +79,7 @@ export function buildCompareOptions({ revisionChoices = [], capturedChoices = []
       commitId: sel.targetRevision.commitId,
       selection: sel,
       label: `Revalidated ${baseLbl} → ${tgtLbl} · ${sel.targetRevision.commitId.slice(0, 7)}`,
+      subject: subjectByCommit.get(sel.targetRevision.commitId) || '',
       captured: true,
     });
   }
@@ -92,12 +104,31 @@ export function buildCompareOptions({ revisionChoices = [], capturedChoices = []
 }
 
 export function chooseSelection(repository, preferred) {
-  const input = repository?.inputs.find(item => item.id === preferred?.inventoryId && item.profiles.length) || repository?.inputs.find(item => item.profiles.length);
+  const inputs = repository?.inputs.filter(item => item.profiles.length && item.revisions.length) || [];
+  const input = inputs.find(item => item.id === preferred?.inventoryId) || inputs[0];
   if (!input) return null;
   const profile = input.profiles.find(item => item.id === preferred?.configurationId) || input.profiles[0];
   const revision = input.revisions.find(item => item.commitId === preferred?.targetRevision?.commitId) || input.revisions[0];
   return { repositoryId: repository.id, targetRevision: { objectAlgorithm: revision.objectAlgorithm, commitId: revision.commitId },
     baseRevision: null, inventoryId: input.id, configurationId: profile.id };
+}
+
+export function returningSelection(repositories, saved) {
+  const previous = repositories.find(repo => repo.id === saved?.repositoryId);
+  const chosen = chooseSelection(previous, saved);
+  if (!chosen) {
+    for (const repository of repositories) {
+      const first = chooseSelection(repository);
+      if (first) return first;
+    }
+    return null;
+  }
+  if (saved.comparisonId && saved.baseRevision?.commitId &&
+      chosen.inventoryId === saved.inventoryId && chosen.configurationId === saved.configurationId &&
+      chosen.targetRevision.commitId === saved.targetRevision?.commitId) {
+    return { ...chosen, comparisonId: saved.comparisonId, baseRevision: saved.baseRevision };
+  }
+  return chosen;
 }
 
 export function reviewRows(workspace) {
@@ -111,10 +142,20 @@ export function reviewRows(workspace) {
   }));
 }
 
+const TRIAGE_RESOLUTIONS = new Set(['open', 'deferred', 'screened']);
+
 export function permittedDecisions(projection) {
-  if (projection?.resolution === 'open' && projection.validity === 'candidate') return ['confirm', 'reject'];
+  if (projection?.validity === 'candidate' && TRIAGE_RESOLUTIONS.has(projection?.resolution)) return ['confirm', 'reject'];
   if (projection?.resolution === 'open' && projection.validity === 'stale') return ['reconfirm', 'retire'];
   if (projection?.resolution === 'resolved' && projection.validity === 'confirmed') return ['retire'];
+  return [];
+}
+
+export function permittedTriageDispositions(projection) {
+  if (projection?.validity !== 'candidate') return [];
+  if (projection.resolution === 'open') return ['defer', 'screen'];
+  if (projection.resolution === 'deferred') return ['screen', 'restore'];
+  if (projection.resolution === 'screened') return ['defer', 'restore'];
   return [];
 }
 
@@ -126,8 +167,29 @@ export const emptyDraft = () => ({ decision: '', reason: '', contentConcern: '',
 
 export const optionalReason = (detail, decision) => detail?.projection.kind === 'initial'
   && !detail.projection.comparisonId && detail.projection.validity === 'candidate'
-  && detail.projection.resolution === 'open' && ['confirm', 'reject'].includes(decision);
+  && TRIAGE_RESOLUTIONS.has(detail.projection.resolution) && ['confirm', 'reject'].includes(decision);
 export const reasonLabel = reason => typeof reason === 'string' && reason.trim() ? reason : 'No reason provided';
+
+export const REASON_PRESETS = {
+  confirm: [
+    'Code structure matches documented behavior in inspected anchor.',
+    'Symbol reference and target file role align cleanly.',
+    'Direct test or CLI entry point exercises this link.',
+  ],
+  reject: [
+    'Coincidental name overlap; target is unrelated.',
+    'Generated, vendor, or fixture match outside semantic scope.',
+    'Superseded reference does not reflect active relationship.',
+  ],
+  reconfirm: [
+    'Inspected incoming diff confirms relationship remains accurate.',
+    'Implementation adjusted while preserving documented link.',
+  ],
+  retire: [
+    'Change removed or decoupled the documented connection.',
+    'Relationship no longer applies in the updated revision.',
+  ],
+};
 
 export function judgmentInput(detail, draft) {
   const projection = detail.projection;

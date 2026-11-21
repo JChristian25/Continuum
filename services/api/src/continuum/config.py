@@ -63,7 +63,8 @@ class Settings:
         local_http = os.getenv("CONTINUUM_LOCAL_HTTP") == "1"
         raw_custom = env_value("CONTINUUM_ALLOW_CUSTOM_WORKSPACES")
         allow_custom = (raw_custom == "1") if raw_custom is not None else local_http
-        allow_git = env_value("CONTINUUM_ALLOW_LOCAL_GIT", "0") == "1"
+        raw_git = env_value("CONTINUUM_ALLOW_LOCAL_GIT")
+        allow_git = (raw_git == "1") if raw_git is not None else local_http
         raw_roots = env_value("CONTINUUM_LOCAL_GIT_ROOTS", "") or ""
         git_roots = tuple(part.strip() for part in raw_roots.split(os.pathsep) if part.strip())
         return cls(

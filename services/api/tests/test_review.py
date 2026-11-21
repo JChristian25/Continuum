@@ -425,3 +425,26 @@ def test_insecure_profile_requires_explicit_loopback_configuration():
         Settings(url, "http://elsewhere.invalid", True)
     settings = Settings(url, "http://127.0.0.1:8000", True)
     assert settings.session_cookie == "continuum_dev_session"
+
+
+def test_confirmed_relationship_meaning_can_be_corrected_to_depends_on(setup):
+    headers = sign_in(setup)
+    confirmed = post(setup, headers, envelope())
+    assert confirmed.status_code == 200
+    assert confirmed.json()["result"]["projection"]["validity"] == "confirmed"
+
+    body = envelope("correct_assertion", version=1)
+    body["input"]["reason"] = "requirements.txt declares a package dependency, not prose documentation."
+    body["input"]["replacement"]["type"] = "depends_on"
+    corrected = post(setup, headers, body)
+    assert corrected.status_code == 200, corrected.text
+    result = corrected.json()["result"]
+    assert result["projection"]["resolution"] == "superseded"
+    assert result["successorProjection"]["validity"] == "candidate"
+    with setup["db"]() as db:
+        revision_id = result["successorProjection"]["assertionRevisionId"]
+        revision = db.get(AssertionRevision, revision_id)
+        assertion = db.get(Assertion, revision.assertion_id)
+        assert assertion.type == "depends_on"
+        assert assertion.predecessor_id == "assertion1"
+

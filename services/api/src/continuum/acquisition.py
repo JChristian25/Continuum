@@ -5,12 +5,14 @@ import base64
 import binascii
 import hashlib
 import json
+import os
 from pathlib import Path, PurePosixPath
 import re
 import time
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
+from uuid import uuid4
 
 WORKSPACE = Path(__file__).resolve().parents[4]
 REPOSITORY = "healthchecks/healthchecks"
@@ -105,11 +107,25 @@ def load_accepted(manifest_path, acceptance_path, root):
 
 
 def write_retained(path, data):
-    if path.exists():
-        require(path.read_bytes() == data, "Retained acquisition artifact differs; refusing overwrite")
-    else:
-        with path.open("xb") as stream:
-            stream.write(data)
+    if not path.exists():
+        staging = path.with_name(f".retained-{uuid4().hex}.tmp")
+        stream = staging.open("xb")
+        try:
+            with stream:
+                stream.write(data)
+                stream.flush()
+                os.fsync(stream.fileno())
+            # Both operations publish a complete file and refuse to replace an existing name.
+            # POSIX rename can overwrite a winner; Windows rename fails when the target exists.
+            publish = os.rename if os.name == "nt" else os.link
+            try:
+                publish(staging, path)
+                return
+            except FileExistsError:
+                pass  # Verify the winner's bytes below.
+        finally:
+            staging.unlink(missing_ok=True)
+    require(path.read_bytes() == data, "Retained acquisition artifact differs; refusing overwrite")
 
 
 def acquire(manifest_path, acceptance_path, *, root=WORKSPACE, fetch=fetch_github):

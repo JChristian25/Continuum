@@ -1,9 +1,9 @@
 {
-  "id": "continuity-core-26456e13763cbbebb70b9111",
+  "id": "continuity-core-2cce9afbbf53f9beb41811ca",
   "softwareVersion": "0.1.0",
-  "buildId": "26456e13763cbbebb70b9111a582b24705efd008cf3b5beef1bc4f3c4d8fe4de",
-  "baseCommit": "a9958a2f8463767d89e70d0cb5b7cdcab583e0a5",
-  "recordedAt": "2026-11-17T13:51:49.031375Z",
+  "buildId": "2cce9afbbf53f9beb41811ca6022f09f427b3db2a4caa249b3990d21e2ff27fb",
+  "baseCommit": "6c3885096088fe3d4193c9e2dab312812dc9bdee",
+  "recordedAt": "2026-11-17T20:14:11.949108Z",
   "configurationId": "HC-LEXICAL-2026-11-13-P1",
   "language": "Python",
   "documentFormats": [
@@ -34,9 +34,9 @@
     "apps/web/src/components/Inspector.jsx": "19d39eb3d6735497586f2a399bba7bce43144179b03a7c9a5a5543b4134b6735",
     "apps/web/src/components/RecordIntentModal.jsx": "6b5d72eadb9b333d36770082ecd925f371446fd18b94ea7728c37be5362e3e4e",
     "apps/web/src/components/ReviewSummary.jsx": "c5f8ebb4af0d0d6875a74b7fdcb65ffc9f6005c56139132cd96b854b34b36497",
-    "apps/web/src/components/service.css": "4701483a841e0c95d523aa31f2ef90e2f201a22bbf73fa61f15b84548d0cde13",
-    "apps/web/src/components/ServiceApp.jsx": "cf77163554744be178035200c90aae43b04a501e5107c550de5bc1319a89da55",
-    "apps/web/src/components/ServiceTools.jsx": "f7acfcfdca13b11771a338d16bcae546492333db44ab38310b3b04d42cafadf3",
+    "apps/web/src/components/service.css": "620d1a083f69d637c8e1dcff63f9bdf12398e18f10e19515dce6c5a63e5815ac",
+    "apps/web/src/components/ServiceApp.jsx": "235136663f652ebe3385453001b76e2ea0e16abb436f9dbb2674e0b2fe0ec5bd",
+    "apps/web/src/components/ServiceTools.jsx": "df352179909b841ec424f8868162b04392fe9706138c9269f1f7092f19ee294a",
     "apps/web/src/components/Shell.jsx": "d879ae2a41042e2d868cc3222a188949f1a2c425c044147029bff72a33621e11",
     "apps/web/src/components/SourceLinePicker.jsx": "6f72caee285c03da7d18b424373e2d14b857e84ba0d113385e222f073e404b45",
     "apps/web/src/components/Toast.jsx": "4f4b6f475d25412e302af43781269ab8e54ba26bb5ee42c20f5ce0cf9a82954f",
@@ -59,16 +59,16 @@
     "apps/web/src/context/ContinuumBase.js": "5d96ba7e81a35311d91929c089710166dbfb8e1e76c017464d81be62d9bf5a04",
     "apps/web/src/context/ContinuumContext.jsx": "1f66564eb38ec374548953aad97a257542420a197221817df5ae9449e2faff41",
     "apps/web/src/context/DemoContinuumProvider.jsx": "600981d073416adcc0ae4891f0880bec4189bdec87b00f6df65b8ae89f8544aa",
-    "apps/web/src/context/ServiceContinuumProvider.jsx": "c52826306ba7723c429413944e40df8ff9944aaa80d73181b2ee7cc739c46553",
-    "apps/web/src/data/auditReport.js": "e375f3c214baa6850a2ddc963e87f90378a78e04b8377e697d88091777b4165e",
+    "apps/web/src/context/ServiceContinuumProvider.jsx": "8cfae0ca45ff33323e60433d89e7547d3eea4b0f9f8f2060421aac2fb6ae30c7",
+    "apps/web/src/data/auditReport.js": "f1d4139b06b67b7efd4387648ad673488ce23c0a566de589b3ac8a9a14885779",
     "apps/web/src/data/diff.js": "dfd6550edf672b4d78282a7beb1ebafa9d9d5e0a1ea878aef461d4c99d1e48de",
     "apps/web/src/data/evidenceSignal.js": "121a5f7291c90acba6d8c19f370cb97e29e3d18b7488143076091905cf5f9247",
     "apps/web/src/data/helpers.js": "2546af85cf4438bf27a05a3169dc4d356d0749731dd66803b5034f63e6e45339",
     "apps/web/src/data/impactGraph.js": "c3ba53f24ea5a2a683ceb89bfb321a038db0edaff28deae66def02688986e831",
     "apps/web/src/data/repoFiles.js": "0289e807313287fa10cc72dfd30459093f8f9462a39fa43d777142d9a58951c2",
-    "apps/web/src/data/service.test.js": "a8858d9f11a3fe834ad0fe07f59df6c1a8ffb44985df875638b542f928cba4ff",
+    "apps/web/src/data/service.test.js": "cbafd06a2d90b9e8bdb886c8826dec5c8b96bdc346593d66d013949045fcf734",
     "apps/web/src/data/serviceApi.js": "7a3a8698c489a95506c14709ba013bf5da420546350f1e86ddcf1d2cdc7a9875",
-    "apps/web/src/data/serviceModel.js": "d742f90f0c1bb39ef5d852bb5bdf63a32413ea61fd212a9acad94582ea9feb63",
+    "apps/web/src/data/serviceModel.js": "2f1a88579b535ebb14295d65e45ec723a7ccabb0a7efc48b5d5d876f32c91314",
     "apps/web/src/data/state.js": "4dfa506ac58b46ef2a886cdce86df7387ab70915cfbcf22110256f7e756720a8",
     "apps/web/src/data/workflow.js": "a579ec50ff0c57cc77a23a3945d1c0d997ad8333e001664580c953e07c7cf661",
     "apps/web/src/data/workflow.test.js": "e472e9a6474636b236bea575ee798fad3aaf20707699dba08999984885eef721",
@@ -77,7 +77,7 @@
     "apps/web/src/lib/utils.js": "5c3b48f48299afa215a3748779d7c19e9db1b3e3687dcd656cc72cc135d2aba7",
     "apps/web/src/main.jsx": "fbaa1e2672c348eed0f0844b36ff0b86dc583b3aebbeffb42a79db6ed33121bc",
     "apps/web/src/redesign.css": "2bbd8d1efb1e2555123becbfe7129c9fff241bc3996857af85d5dd703b409a5d",
-    "apps/web/tests/service-browser.mjs": "8c62781a7c2f6c12a46bb685f54eeb971c6f796f181fbee94993b92eb0093eda",
+    "apps/web/tests/service-browser.mjs": "f38843edb98553f1bd125be02b13bf69a4066b4a5c0164a46a458cc0b35def31",
     "apps/web/tests/service-layout-browser.mjs": "b96ac11863cc33fa55a394c648a19b46f524e170017ecbc24071e49b8764a6de",
     "apps/web/tests/service-layout.fixture.jsx": "398f55eab5cffd6e6acfd224a829fb34611e5ce3e59c34483045a9a325abf5a7",
     "apps/web/tests/service-layout.html": "90bf830f98d523c0151d5f45e4ba150a2dfe4b5f2ca5170b4e2094706de6763e",
@@ -90,9 +90,9 @@
     "services/api/src/continuum/acquisition.py": "937d0a973e17ead109869c395d74c6f59964602cd98ca6bb1eb1bc5aea651c69",
     "services/api/src/continuum/admin.py": "52e7f421b1a8b1b9d6c60a49078a8ca2f1ce5d9f7ab7997162ea8a71185865da",
     "services/api/src/continuum/capture.py": "1cecc0eb06f1d06462a8d9f8d6fc4af16814c032f64b831bb648df5e16e17fa0",
-    "services/api/src/continuum/comparison.py": "35b1f70db2fa4c8b26b36b56b50927e1fa5a8fcdc885629623dc933220c646c5",
+    "services/api/src/continuum/comparison.py": "df181bd0dd522637d96ce0fa3295db32ab8f8a83127311a6ee9d1eb6f5d8aeb5",
     "services/api/src/continuum/config.py": "10a2571a4d6e02f28b4b39a6299bc357b17e43739060dbc87adf86c071cecf03",
-    "services/api/src/continuum/cycle.py": "e74c0d9d849063164801f7a4283bad1f36f9cfce601b6cc01ed496b8abc000f3",
+    "services/api/src/continuum/cycle.py": "893a0dd292c0e6532893bf2141f40024dec93b561b2ae1135532480dc8b30511",
     "services/api/src/continuum/db.py": "536c955119147b17a28c1ae3b6844352fcb4d56f423969bc09e787eb6d613915",
     "services/api/src/continuum/discovery.py": "ca60ecd64b6aaebf720d6c508c8f3484d04aa76ea0acb2e2dfa6e84b15ca5302",
     "services/api/src/continuum/git_changes.py": "742e32ae34d03ebfe846118fd949c02714bfcfe2a63ef3a8c4697c18f5f98896",
@@ -101,14 +101,14 @@
     "services/api/src/continuum/local_setup.py": "4f5b0dccaf98596bbe4de70843375b1e4b95266b33e868fba8e940a1b498f0cc",
     "services/api/src/continuum/main.py": "58dbed9e9b9a562c1148f83c926e3b6f77f9d550960439a36e919b73eda1baeb",
     "services/api/src/continuum/models.py": "3451feaab4225de06c04e738e801563200abdeb1106301b45ef11d3beea3b89b",
-    "services/api/src/continuum/pipeline.py": "cd2e241ff7ff0a5c5661314723178d6cb3937dc2214dd0cd97107d26e38bba18",
+    "services/api/src/continuum/pipeline.py": "ab27b14e5804dcad41a091ff525711b2e5935f526962eeefe9bc44d479d0fa2c",
     "services/api/src/continuum/pipeline_models.py": "81844718a918759d8cac1d017458e4c7d20f1089d317e0b713c629d240b84d09",
     "services/api/src/continuum/pipeline_schemas.py": "518db35c494b836a7727e88791e2f6427a3e0bae7feb5051814b91ae3f6e18e0",
-    "services/api/src/continuum/progress.py": "c80b9c6ea726b089a38d524081b1ed3714cc33bf087f96ad03b7e20306fe173f",
+    "services/api/src/continuum/progress.py": "e883b82e5ff2715001c21b8b1ebd7f31a055025c821ae58c73bd6791f93684ba",
     "services/api/src/continuum/relations.py": "bb210d98fd38377c144fdd088d06301351eeb97d1e52c93de1f5e5e40707acf5",
-    "services/api/src/continuum/release.py": "13cec479e382efa6b9044613574bf84633d340e64522697492cd33f58d0878c0",
-    "services/api/src/continuum/review.py": "71e2ec34bc4f003005c5940fd82c440f063ed3435264814364449b2a55307b92",
-    "services/api/src/continuum/schemas.py": "7f1ce2bfca7ff2c77242a503836f74a776289f996eeaeb7ba0f2aa11bfa94efb",
+    "services/api/src/continuum/release.py": "cb31019130950e3d59c6e22d7cf811ccbb005514c6c9378bb2214bc5fdcb4f73",
+    "services/api/src/continuum/review.py": "46fdef15e98cd950defa49237717704250bec3fef346121288ab2d767fd79dc7",
+    "services/api/src/continuum/schemas.py": "5bbfe2becdbfb985f3b15db81e40a893722cea1278f8b2fd76a9cae117244ad7",
     "services/api/src/continuum/security.py": "9c8ed1a0c9ad9c45bf924054091edac04f07d50f0975f4e8fccc8c015f8cec0c",
     "services/api/src/continuum/worker.py": "87c7c1287a70cf3d12bc01be103738539193a33070817449c7f795f01a5fb7b5",
     "services/api/tests/conftest.py": "61f2852f5d732657c1e0772196e63c39565250458eb6f1bb15aa1d59e88f2c0b",
@@ -119,8 +119,8 @@
     "services/api/tests/test_continuity.py": "b51e3f0f500d186f2ede93995fd1ecd75489ab7dd356620fcf4b0b2f1f0ff68b",
     "services/api/tests/test_custom_workspace.py": "b5154f75facacaf60044aee2a2f86af575f90e679238aa6a60685adeac5a4d75",
     "services/api/tests/test_discovery.py": "dd2932ad7c86b8216d20eeafadccf51a2465e8730b6488b85f42313bfc61d030",
-    "services/api/tests/test_first_load.py": "19a77032796f92224f265cd194bad32a6e31e5966209b54559190faae2095d66",
-    "services/api/tests/test_frontend_browser.py": "dffebcefe6c504d3eb5b3d751c5e0bae5bdd184ecf3c634010a79795b50b85d1",
+    "services/api/tests/test_first_load.py": "32e9208eca1d84199e68a53065b5a604d089856857a8527ae0b1bdcc7f3b7530",
+    "services/api/tests/test_frontend_browser.py": "5bc7a7290ce4b8af4e9c34367993661b1a57473cd3679486d28e0f4a891514f2",
     "services/api/tests/test_pipeline.py": "6b7be1b2b139697aa1492d054b8de38eb64894a7518f2195238204a2a8e9b718",
     "services/api/tests/test_process.py": "86ac10d9cd226c9c37fe1724d0045aaf75efbbc35ca0a3bf6d849e3f89d46462",
     "services/api/tests/test_review.py": "8e72942828c98fb9cdd723979031dbc6fba233ca397294d607de2fdf5f270337",
@@ -475,7 +475,7 @@
       "function": "human_review",
       "status": "implemented",
       "limitations": [
-        "Exact-context authorization and evidence acknowledgment; initial candidate rationale optional; batch initial confirmation preserves individual requests; exceptional-action reasons required.",
+        "Exact-context authorization, evidence acknowledgment, and per-item batch inspection checks; initial candidate triage (defer/screen/restore) separated from formal judgments via immutable triage events; initial candidate rationale optional with selectable presets while revalidation/correction/retirement/reversal retain mandatory rationale.",
         "Existing databases require separately authorized nullable-reason migration before reason-free writes."
       ]
     },
@@ -497,7 +497,7 @@
       "function": "completion",
       "status": "implemented",
       "limitations": [
-        "Current settled snapshot and explicit limitations acknowledgment."
+        "Full validation on zero pending items or scoped completion when staleReviewCount is 0, with explicit limitations and unresolved-candidate disclosures."
       ]
     },
     {
@@ -519,30 +519,30 @@
     "outputs/continuity-completion/verification.json"
   ],
   "verification": {
-    "observedAt": "2026-11-17T13:51:29Z",
+    "observedAt": "2026-11-17T20:13:14Z",
     "backendPostgreSQL": {
-      "passed": 159,
+      "passed": 160,
       "failed": 0,
-      "durationSeconds": 295.68,
-      "command": "services/api/.venv/Scripts/python.exe -m pytest services/api/tests -q",
-      "scope": "Generated isolated PostgreSQL schemas, live Redis 7/RQ queue, Neo4j 5 Community graph store, Tree-sitter Python AST symbols/identifiers, Docling Markdown sections/blocks, accepted Healthchecks retained source plus bounded custom workspace bundles, chained comparison lineage (R0->R1->R2) and local Git root tests, synthetic named accounts; includes test_stack_technologies, test_custom_workspace, test_first_load, test_frontend_browser, test_continuity, and test_release_lookup_rejects_path_input_and_reports_source_drift.",
+      "durationSeconds": 403.78,
+      "command": "services/api/.venv/Scripts/python.exe -m pytest services/api/tests -q --tb=short",
+      "scope": "Generated isolated PostgreSQL schemas, live Redis 7/RQ queue, Neo4j 5 Community graph store, Tree-sitter Python AST symbols/identifiers, Docling Markdown sections/blocks, accepted Healthchecks retained source plus bounded custom workspace bundles, lightweight candidate triage (triage_candidate defer/screen/restore with ReviewEvent(type='triage')), direct promotion to formal judgments, per-item batch confirmation evidence checks, selectable rationale presets, scoped cycle completion (scoped_review), chained comparison lineage (R0->R1->R2) and local Git root tests, synthetic named accounts; includes test_stack_technologies, test_custom_workspace, test_first_load, test_frontend_browser, test_continuity, and test_release_lookup_rejects_path_input_and_reports_source_drift.",
       "warnings": [
         "Starlette HTTPX TestClient deprecation notice."
       ]
     },
     "frontendUnit": {
-      "passed": 20,
+      "passed": 21,
       "failed": 0,
-      "command": "node --test apps/web/src/data/service.test.js apps/web/src/data/workflow.test.js"
+      "command": "node apps/web/src/data/service.test.js; node apps/web/src/data/workflow.test.js"
     },
     "authenticatedBrowser": {
       "passed": true,
-      "scope": "Executed inside pytest services/api/tests -q (test_frontend_browser.py); loopback API/Vite, isolated PostgreSQL schema, synthetic named accounts, signal triage, AST/Markdown outline, SourceLinePicker, anchored RecordDialog, unresolved Reconfirm guard, prior-version AST attribution, and custom workspace chained R0-to-R1-to-R2 comparisons."
+      "scope": "Executed inside pytest services/api/tests -q (test_frontend_browser.py + apps/web/tests/service-browser.mjs); loopback API/Vite, isolated PostgreSQL schema, synthetic named accounts, decluttered Workspace/Review/Inspector layout, signal triage, per-item BatchConfirmDialog evidence inspection checkboxes, row Defer, batch Screen selected, Restore filter workflow, Record scoped completion (scoped_review), JSON export triage/limitation verification, PostgreSQL ReviewEvent type separation (judgment == 3, triage >= 4 on baseline repo), AST/Markdown outline, SourceLinePicker, anchored RecordDialog, unresolved Reconfirm guard, prior-version AST attribution, and custom workspace chained R0-to-R1-to-R2 comparisons."
     },
     "build": {
       "passed": true,
       "command": "npm --prefix apps/web run build",
-      "durationSeconds": 4.54,
+      "durationSeconds": 3.51,
       "warning": "Existing large optional graph/language chunks."
     },
     "lint": {

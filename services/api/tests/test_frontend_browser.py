@@ -75,7 +75,8 @@ def test_real_frontend_session_snapshot_and_review(pipeline):
             (output / 'browser-result.json').write_text(json.dumps(evidence, indent=2))
             with captured['db']() as db:
                 repo_id = captured['selection']['repositoryId']
-                assert db.scalar(select(func.count()).select_from(ReviewEvent).where(ReviewEvent.type == 'judgment', ReviewEvent.repository_id == repo_id)) == 19
+                assert db.scalar(select(func.count()).select_from(ReviewEvent).where(ReviewEvent.type == 'judgment', ReviewEvent.repository_id == repo_id)) == 3
+                assert db.scalar(select(func.count()).select_from(ReviewEvent).where(ReviewEvent.type == 'triage', ReviewEvent.repository_id == repo_id)) >= 4
                 assert db.scalar(select(func.count()).select_from(ReviewEvent).where(ReviewEvent.type == 'judgment', ReviewEvent.repository_id != repo_id)) >= 1
         finally:
             shutil.rmtree(custom_dir, ignore_errors=True)

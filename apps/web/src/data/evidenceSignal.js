@@ -255,3 +255,179 @@ export function classifyCandidateSignal(row, allRows = []) {
   }
   return { tier: 'low', label: 'Low signal', reason: `Weak lexical overlap (${evCount} anchors)`, topTokens };
 }
+
+const DEPENDENCY_MANIFEST_NAMES = new Set([
+  'requirements.txt',
+  'requirements-dev.txt',
+  'requirements-test.txt',
+  'requirements-prod.txt',
+  'constraints.txt',
+  'pipfile',
+  'pipfile.lock',
+  'pyproject.toml',
+  'poetry.lock',
+  'setup.cfg',
+  'setup.py',
+  'package.json',
+  'package-lock.json',
+  'dockerfile',
+  'docker-compose.yml',
+  'docker-compose.yaml',
+]);
+
+export function isDependencyManifestPath(path) {
+  if (typeof path !== 'string' || !path) return false;
+  const base = path.split('/').pop()?.toLowerCase() || '';
+  if (DEPENDENCY_MANIFEST_NAMES.has(base)) return true;
+  if (base.startsWith('requirements') && (base.endsWith('.txt') || base.endsWith('.in'))) return true;
+  if (base.startsWith('constraints') && base.endsWith('.txt')) return true;
+  return false;
+}
+
+const MEANING_SPECS = {
+  documents: {
+    label: 'documents',
+    title: 'Prose documentation (documents)',
+    verb: 'document',
+    summary: 'Source prose explains, specifies, or illustrates behavior implemented in target code.',
+  },
+  depends_on: {
+    label: 'depends_on',
+    title: 'Package or configuration dependency (depends_on)',
+    verb: 'declare a dependency used by',
+    summary: 'Source manifest or module declares a package, runtime, or configuration dependency required by target code.',
+  },
+  implements: {
+    label: 'implements',
+    title: 'Requirement implementation (implements)',
+    verb: 'implement',
+    summary: 'Source code realizes the behavior specified in the target requirement record.',
+  },
+  motivates: {
+    label: 'motivates',
+    title: 'Architectural motivation (motivates)',
+    verb: 'motivate',
+    summary: 'Source architectural decision justifies the design or implementation in target code.',
+  },
+};
+
+/**
+ * Separates (1) observed lexical/anchor evidence from (2) the semantic meaning
+ * claimed by the relationship type and (3) the human review judgment, and detects
+ * semantic mismatches (such as a dependency manifest labeled `documents`).
+ */
+export function analyzeRelationshipMeaning(detail, sourceArt, targetArt, ranked) {
+  if (!detail?.assertion) return null;
+  const type = detail.assertion.type || 'documents';
+  const methodId = detail.assertion.methodId || 'lexical-file-v1';
+  const validity = detail.projection?.validity || 'candidate';
+  const spec = MEANING_SPECS[type] || {
+    label: type,
+    title: type,
+    verb: type,
+    summary: `Typed ${type} relationship between source and target artifacts.`,
+  };
+
+  const srcPath = sourceArt?.path || sourceArt?.identity?.title || detail.assertion.source?.artifactId || 'source';
+  const tgtPath = targetArt?.path || targetArt?.identity?.title || detail.assertion.target?.artifactId || 'target';
+  const srcShort = srcPath.split('/').pop() || srcPath;
+  const tgtShort = tgtPath.split('/').pop() || tgtPath;
+  const topTokens = (ranked?.tokenHistogram || []).slice(0, 4).map(t => t.token);
+
+  const evidenceItems = Array.isArray(detail.evidence) ? detail.evidence : [];
+  const hasPackagePinExcerpt = evidenceItems.some(e =>
+    typeof e.excerpt === 'string' && /^[A-Za-z0-9_.-]+\s*(?:==|>=|<=|~=|!=|>|<)\s*[0-9A-Za-z_.*+-]+/m.test(e.excerpt.trim())
+  );
+  const hasImportExcerpt = evidenceItems.some(e =>
+    typeof e.excerpt === 'string' && /^\s*(?:from\s+[A-Za-z0-9_.]+\s+import\s+|import\s+[A-Za-z0-9_.]+)/m.test(e.excerpt)
+  );
+  const manifestSource = isDependencyManifestPath(srcPath);
+
+  let evidenceBasis;
+  if (methodId === 'lexical-file-v1') {
+    const tokenList = topTokens.length ? topTokens.join(', ') : 'shared identifiers';
+    evidenceBasis = {
+      kind: 'lexical',
+      badge: 'Automated lexical evidence',
+      summary: hasPackagePinExcerpt && hasImportExcerpt
+        ? `Lexical match on "${tokenList}": ${srcShort} declares a package pin while ${tgtShort} imports that package. Lexical co-occurrence does not by itself verify a "${type}" meaning.`
+        : `Automated token overlap (${tokenList}). Proves identifier co-occurrence across files only — human judgment is required to establish semantic meaning.`,
+    };
+  } else if (methodId === 'direct-path-comparison-v1') {
+    evidenceBasis = {
+      kind: 'comparison',
+      badge: 'Revision comparison carry-over',
+      summary: 'Carried forward from baseline snapshot; endpoint bytes changed in the target commit.',
+    };
+  } else {
+    evidenceBasis = {
+      kind: 'manual',
+      badge: 'Reviewer-authored anchor',
+      summary: `Explicitly anchored to selected lines by a reviewer (${methodId}).`,
+    };
+  }
+
+  const effectiveEvent = (detail.history?.items || []).find(
+    e => e.id === detail.projection?.effectiveJudgmentEventId
+  ) || (detail.history?.items || []).find(e => e.type === 'judgment' && !e.reversedByEventId);
+  const recordedReason = (effectiveEvent?.reason || detail.priorDecision?.reason || '').trim();
+  const recordedActor = effectiveEvent?.actorId || detail.priorDecision?.actorDisplayName || detail.priorDecision?.actorId || 'reviewer';
+
+  let judgmentStatus;
+  if (validity === 'confirmed') {
+    judgmentStatus = {
+      hasRationale: Boolean(recordedReason),
+      actor: recordedActor,
+      reason: recordedReason,
+      summary: recordedReason
+        ? `Confirmed by ${recordedActor}: "${recordedReason}"`
+        : `Marked confirmed by ${recordedActor} without a recorded written rationale.`,
+    };
+  } else if (validity === 'stale') {
+    judgmentStatus = {
+      hasRationale: Boolean(recordedReason),
+      actor: recordedActor,
+      reason: recordedReason,
+      summary: 'Previously confirmed link flagged stale by an endpoint change; requires human revalidation.',
+    };
+  } else if (validity === 'candidate') {
+    judgmentStatus = {
+      hasRationale: false,
+      actor: null,
+      reason: '',
+      summary: 'Unconfirmed candidate — awaiting human verification of both evidence and relationship meaning.',
+    };
+  } else {
+    judgmentStatus = {
+      hasRationale: Boolean(recordedReason),
+      actor: recordedActor,
+      reason: recordedReason,
+      summary: `Marked ${validity}${recordedReason ? `: "${recordedReason}"` : '.'}`,
+    };
+  }
+
+  let mismatchWarning = null;
+  if (type === 'documents' && (manifestSource || (hasPackagePinExcerpt && hasImportExcerpt))) {
+    const primaryTok = topTokens[0] || 'package';
+    mismatchWarning = {
+      suggestedType: 'depends_on',
+      headline: validity === 'confirmed'
+        ? 'Semantic meaning warning: confirmed as "documents", but evidence shows a package dependency'
+        : 'Semantic meaning warning: proposed as "documents", but evidence shows a package dependency',
+      explanation: `${srcShort} declares the "${primaryTok}" package dependency while ${tgtShort} imports it. That lexical match establishes a dependency relationship (depends_on), not prose documentation (documents).`,
+      defaultReason: `${srcShort} declares package dependency (${primaryTok}) imported by ${tgtShort}; correcting relationship meaning from documents to depends_on.`,
+    };
+  }
+
+  return {
+    type,
+    spec,
+    srcShort,
+    tgtShort,
+    question: `Does ${srcShort} ${spec.verb} ${tgtShort}?`,
+    evidenceBasis,
+    judgmentStatus,
+    mismatchWarning,
+  };
+}
+

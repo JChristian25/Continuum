@@ -12,16 +12,23 @@ import { Menu } from '@base-ui/react/menu';
 import { motion } from 'motion/react';
 
 const modules = [
-  { id: 'dashboard', label: 'Workspace', helper: 'Overview & your next steps', icon: LayoutDashboard },
-  { id: 'changes', label: 'Review changes', helper: 'Assess incoming contract impact & review queue', icon: GitCompare, review: true },
-  { id: 'summary', label: 'Review summary', helper: 'Judgments, follow-up work, and review history', icon: ClipboardCheck },
-  { id: 'files', label: 'Code explorer', helper: 'Browse repository tree, source code & AST symbols', icon: FileCode2 },
-  { id: 'explore', label: 'Explore context', helper: 'Trace relationships & graph dependencies', icon: Network },
-  { id: 'coverage', label: 'Coverage', helper: 'Find documentation & spec gaps', icon: ShieldCheck },
-  { id: 'chat', label: 'Ask Continuum', helper: 'Graph RAG AI query assistant', icon: Bot },
-  { id: 'architecture', label: 'System map', helper: 'View C4 system topology', icon: Server },
-  { id: 'account', label: 'Account & demo settings', helper: 'Session, access, and sign out', icon: Settings },
-  { id: 'governance', label: 'Team & governance', helper: 'Reviewer roles and continuity policies', icon: Users }
+  { id: 'dashboard', label: 'Workspace', helper: 'Overview & your next steps', icon: LayoutDashboard, group: 'overview' },
+  { id: 'changes', label: 'Review changes', helper: 'Assess incoming contract impact & review queue', icon: GitCompare, review: true, group: 'review' },
+  { id: 'summary', label: 'Review summary', helper: 'Judgments, follow-up work, and review history', icon: ClipboardCheck, group: 'review' },
+  { id: 'files', label: 'Code explorer', helper: 'Browse repository tree, source code & AST symbols', icon: FileCode2, group: 'explore' },
+  { id: 'explore', label: 'Explore context', helper: 'Trace relationships & graph dependencies', icon: Network, group: 'explore' },
+  { id: 'coverage', label: 'Coverage', helper: 'Find documentation & spec gaps', icon: ShieldCheck, group: 'system' },
+  { id: 'chat', label: 'Ask Continuum', helper: 'Graph RAG AI query assistant', icon: Bot, group: 'explore' },
+  { id: 'architecture', label: 'System map', helper: 'View C4 system topology', icon: Server, group: 'system' },
+  { id: 'account', label: 'Account & demo settings', helper: 'Session, access, and sign out', icon: Settings, group: 'system' },
+  { id: 'governance', label: 'Team & governance', helper: 'Reviewer roles and continuity policies', icon: Users, group: 'system' }
+];
+
+const SERVICE_NAV_GROUPS = [
+  { key: 'overview', label: null, ids: ['dashboard'] },
+  { key: 'explore', label: 'Explore knowledge', ids: ['files', 'explore'] },
+  { key: 'review', label: 'Changes & review', ids: ['changes', 'summary'] },
+  { key: 'system', label: 'System & access', ids: ['coverage', 'governance', 'account'] },
 ];
 
 export default function Shell({
@@ -114,6 +121,10 @@ export default function Shell({
         {serviceMode && ctx.selection && (() => {
           const repoDesc = ctx.descriptor?.repositories.find(r => r.id === state.activeRepoId);
           const choices = allSelections(repoDesc);
+          const activeChoice = choices.find(c => c.selection.targetRevision.commitId === ctx.selection.targetRevision.commitId);
+          const commitSubject = activeChoice?.subject || ctx.workspace?.revisionMeta?.target?.subject || '';
+          const commitAuthor = activeChoice?.authorName || ctx.workspace?.revisionMeta?.target?.authorName || '';
+          const commitDate = (activeChoice?.authoredAt || ctx.workspace?.revisionMeta?.target?.authoredAt || '').slice(0, 10);
           return (
             <label className="revision-switch">
               <span className="revision-switch__text">
@@ -129,10 +140,16 @@ export default function Shell({
                 >
                   {choices.map(c => (
                     <option key={`${c.selection.inventoryId}-${c.selection.targetRevision.commitId}`} value={c.selection.targetRevision.commitId}>
-                      {c.label} · {c.selection.targetRevision.commitId.slice(0, 7)}
+                      {c.label} · {c.selection.targetRevision.commitId.slice(0, 7)}{c.subject ? ` — ${c.subject}` : ''}
                     </option>
                   ))}
                 </Select>
+                {commitSubject && (
+                  <span className="revision-switch__commit-msg" title={`${commitSubject}${commitAuthor ? ` (${commitAuthor}${commitDate ? ` · ${commitDate}` : ''})` : ''}`}>
+                    <strong className="revision-switch__subject">{commitSubject}</strong>
+                    {commitAuthor && <small className="revision-switch__author">{commitAuthor}{commitDate ? ` · ${commitDate}` : ''}</small>}
+                  </span>
+                )}
               </span>
             </label>
           );
@@ -227,11 +244,11 @@ export default function Shell({
 
       {/* 3. PRIMARY ACTION & SEARCH GROUP */}
       <div className="app-rail__quick-actions">
-        {/* Prominent "+ Record Intent" Button */}
-        <Tooltip title="Record Design Intent" content="Capture an architectural decision and link it to code or docs" side="right">
+        {/* Prominent Primary Record Action */}
+        <Tooltip title={serviceMode ? 'Record requirement or decision' : 'Record Design Intent'} content="Capture an architectural decision or requirement and optionally anchor it to code or docs" side="right">
           <Button variant="unstyled" className="rail-primary-action" type="button" disabled={serviceMode && (!ctx.canWrite || ctx.busy)} onClick={openModal}>
-            <Plus size={15} strokeWidth={2.5} />
-            <span>Record intent</span>
+            <Plus size={15} strokeWidth={2.5} aria-hidden="true" />
+            <span>{serviceMode ? 'Record requirement or decision' : 'Record intent'}</span>
           </Button>
         </Tooltip>
 
@@ -253,29 +270,72 @@ export default function Shell({
 
       {/* 4. NAVIGATION LINKS */}
       <nav className="app-rail__nav" aria-label="Continuum navigation">
-        <span className="app-rail__label">Navigate</span>
-        {modules.filter(module => !serviceMode || !['chat', 'architecture'].includes(module.id)).map((original) => {
- const module = serviceMode ? { ...original, label: ({ changes: 'Review relationships', account: 'Account' })[original.id] || original.label, helper: ({ changes: 'Review selected-revision relationships', files: 'Read captured files and authored records', explore: 'Inspect saved relationships' })[original.id] || original.helper } : original;
-          const Icon = module.icon;
-          const active = state.activeModule === module.id || (module.id === 'dashboard' && state.activeModule === 'overview');
-          const showBadge = module.review && pendingCount > 0;
-          return (
-            <Tooltip key={module.id} content={module.helper} side="right">
-              <Button variant="unstyled"
-                type="button"
-                className={`rail-nav-item ${active ? 'is-active' : ''}`}
-                onClick={() => switchModule(module.id)}
-                aria-current={active ? 'page' : undefined}
-                aria-label={module.label}
-              >
-                {active && <motion.span className="nav-active-surface" layoutId="active-navigation" transition={{ type: 'spring', stiffness: 420, damping: 38 }} />}
-                <Icon size={16} />
-                <span className="rail-nav-item__label">{module.label}</span>
-                {showBadge && <Badge variant="accent" size="xs" className="ml-auto font-mono text-[10px] px-1.5 py-0 h-4 min-w-4 flex items-center justify-center">{pendingCount}</Badge>}
-              </Button>
-            </Tooltip>
-          );
-        })}
+        {serviceMode ? SERVICE_NAV_GROUPS.map(group => (
+          <div className="app-rail__nav-group" key={group.key}>
+            {group.label && <span className="app-rail__label app-rail__group-label">{group.label}</span>}
+            {group.ids.map(id => {
+              const original = modules.find(m => m.id === id);
+              if (!original) return null;
+              const module = {
+                ...original,
+                label: ({ changes: 'Review relationships', account: 'Account' })[original.id] || original.label,
+                helper: ({
+                  dashboard: 'Repository status, available knowledge & next steps',
+                  changes: 'Inspect suggestions, stale links & revision changes',
+                  summary: 'Completion sign-off, follow-ups & audit reports',
+                  files: 'Read captured files, AST symbols, docs & authored records',
+                  explore: 'Explore relationship graph & 1-hop neighborhood',
+                  coverage: 'Processing coverage & method limitations',
+                  governance: 'Repository grants, capture & custom workspaces',
+                  account: 'Session, granted repositories & appearance',
+                })[original.id] || original.helper,
+              };
+              const Icon = module.icon;
+              const active = state.activeModule === module.id || (module.id === 'dashboard' && state.activeModule === 'overview');
+              const staleCount = ctx.staleCount || 0;
+              const showStaleBadge = module.review && staleCount > 0;
+              return (
+                <Tooltip key={module.id} content={showStaleBadge ? `${staleCount} stale relationship${staleCount === 1 ? '' : 's'} needing revalidation` : module.helper} side="right">
+                  <Button variant="unstyled"
+                    type="button"
+                    className={`rail-nav-item ${active ? 'is-active' : ''}`}
+                    onClick={() => switchModule(module.id)}
+                    aria-current={active ? 'page' : undefined}
+                    aria-label={module.label}
+                  >
+                    {active && <motion.span className="nav-active-surface" layoutId="active-navigation" transition={{ type: 'spring', stiffness: 420, damping: 38 }} />}
+                    <Icon size={16} />
+                    <span className="rail-nav-item__label">{module.label}</span>
+                    {showStaleBadge && <Badge variant="warning" size="xs" className="ml-auto font-mono text-[10px] px-1.5 py-0 h-4 min-w-4 flex items-center justify-center">{staleCount}</Badge>}
+                  </Button>
+                </Tooltip>
+              );
+            })}
+          </div>
+        )) : <>
+          <span className="app-rail__label">Navigate</span>
+          {modules.map((module) => {
+            const Icon = module.icon;
+            const active = state.activeModule === module.id || (module.id === 'dashboard' && state.activeModule === 'overview');
+            const showBadge = module.review && pendingCount > 0;
+            return (
+              <Tooltip key={module.id} content={module.helper} side="right">
+                <Button variant="unstyled"
+                  type="button"
+                  className={`rail-nav-item ${active ? 'is-active' : ''}`}
+                  onClick={() => switchModule(module.id)}
+                  aria-current={active ? 'page' : undefined}
+                  aria-label={module.label}
+                >
+                  {active && <motion.span className="nav-active-surface" layoutId="active-navigation" transition={{ type: 'spring', stiffness: 420, damping: 38 }} />}
+                  <Icon size={16} />
+                  <span className="rail-nav-item__label">{module.label}</span>
+                  {showBadge && <Badge variant="accent" size="xs" className="ml-auto font-mono text-[10px] px-1.5 py-0 h-4 min-w-4 flex items-center justify-center">{pendingCount}</Badge>}
+                </Button>
+              </Tooltip>
+            );
+          })}
+        </>}
       </nav>
 
       {/* 5. FOOTER: USER PERSONA SWITCHER */}

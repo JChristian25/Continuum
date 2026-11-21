@@ -17,16 +17,17 @@ try {
  expect((await page.locator('.service-row').first().boundingBox()).height).toBeLessThan(90);
  await snap('relationships-desktop');
  await page.locator('.service-row').first().click();
+ await page.locator('.service-inspector').getByRole('button', { name: 'Read captured source' }).first().click();
  await expect(page.locator('.service-inspector .code-line__text').first()).toBeVisible();
  await expect(page.getByRole('heading',{name:'Recorded evidence'})).toBeVisible();
- expect(await page.locator('.service-inspector .service-disclosure').getAttribute('open')).toBeNull();
+ await expect(page.locator('.service-inspector .service-source-identity > button').first()).toHaveAttribute('aria-expanded', 'false');
  const colors=await page.locator('.code-line__text').first().evaluate(el=>({text:getComputedStyle(el).color,bg:getComputedStyle(el.closest('.code-box__body')).backgroundColor}));
  const luminance=c=>{const rgb=c.match(/[\d.]+/g).slice(0,3).map(v=>{const n=Number(v)/255;return n<=.04045?n/12.92:((n+.055)/1.055)**2.4});return rgb[0]*.2126+rgb[1]*.7152+rgb[2]*.0722};
  const a=luminance(colors.text),b=luminance(colors.bg);expect((Math.max(a,b)+.05)/(Math.min(a,b)+.05)).toBeGreaterThan(4.5);
  await snap('inspector-desktop');
- await page.getByRole('tab',{name:'review',exact:true}).click();await page.getByRole('combobox',{name:'Relationship judgment'}).click();await page.getByRole('option',{name:'confirm',exact:true}).click();
- await page.getByRole('textbox',{name:'Reason',exact:true}).fill('Synthetic layout fixture draft.');
- await page.getByRole('checkbox').check();await expect(page.getByRole('checkbox')).toBeChecked();
+ await page.getByRole('tab',{name:'review',exact:true}).click();await page.getByRole('radio',{name:'confirm',exact:true}).click();
+ await page.getByRole('textbox',{name:/^Reason/,exact:true}).fill('Synthetic layout fixture draft.');
+ await page.locator('.service-inspector').getByRole('checkbox').check();await expect(page.locator('.service-inspector').getByRole('checkbox')).toBeChecked();
  await page.getByRole('button',{name:'Close inspector',exact:true}).click();
  await page.locator('.service-canvas').evaluate(el=>{el.scrollTop=el.scrollHeight});
  await page.keyboard.press('Control+k');
@@ -39,10 +40,10 @@ try {
  await nav('Code explorer');await page.locator('.service-file-row').first().click();await expect(page.locator('.service-file-reader .code-line__text').first()).toBeVisible();await snap('files-desktop');
  await expect(page.locator('.service-source-identity')).not.toHaveAttribute('open');
  await nav('Coverage');await expect(page.locator('.service-coverage-row')).toHaveCount(6);await snap('coverage-desktop');
- await nav('Explore context');await expect(page.locator('.react-flow__node')).toHaveCount(10,{timeout:15000});await snap('graph-desktop');
+ await nav('Explore context');await expect(page.locator('.react-flow__node')).toHaveCount(10,{timeout:15000});await expect(page.locator('.tf-node__title').first()).toBeVisible();await page.waitForTimeout(300);await snap('graph-desktop');
  await nav('Review summary');await snap('summary-desktop');
- await page.getByRole('button',{name:'Record intent',exact:true}).click();
- const record=page.getByRole('dialog',{name:'Record intent'});await expect(record).toBeVisible();expect(await record.evaluate(el=>getComputedStyle(el).position)).toBe('fixed');await expect(record.getByRole('alert')).toHaveCount(0);await snap('record-desktop');await page.getByRole('button',{name:'Close record form'}).click();
+ await page.getByRole('button',{name:'Record requirement or decision',exact:true}).click();
+ const record=page.getByRole('dialog',{name:'Record requirement or decision'});await expect(record).toBeVisible();expect(await record.evaluate(el=>getComputedStyle(el).position)).toBe('fixed');await expect(record.getByRole('alert')).toHaveCount(0);await snap('record-desktop');await page.getByRole('button',{name:'Close record form'}).click();
  await page.setViewportSize({width:1280,height:720});await page.keyboard.press('Control+k');await expect(dialog).toBeVisible();box=await dialog.boundingBox();expect(box.y).toBeGreaterThanOrEqual(20);expect(box.y+box.height).toBeLessThanOrEqual(700);await page.keyboard.press('Escape');
  await page.setViewportSize({width:390,height:844});
  for(const [label,name] of [['Workspace','workspace'],['Review relationships','relationships'],['Code explorer','files'],['Coverage','coverage'],['Explore context','graph']]) {

@@ -19,11 +19,20 @@ export function buildAuditReportMarkdown(ctx) {
     confirmed: rows.filter(r => r.projection.validity === 'confirmed').length,
     rejected: rows.filter(r => r.projection.validity === 'rejected').length,
     stale: rows.filter(r => r.projection.validity === 'stale').length,
-    candidate: rows.filter(r => r.projection.validity === 'candidate').length,
+    openCandidate: snap.openCandidateCount ?? rows.filter(r => r.projection.validity === 'candidate' && r.projection.resolution === 'open').length,
+    deferred: snap.deferredCount ?? rows.filter(r => r.projection.validity === 'candidate' && r.projection.resolution === 'deferred').length,
+    screened: snap.screenedCount ?? rows.filter(r => r.projection.validity === 'candidate' && r.projection.resolution === 'screened').length,
     retired: rows.filter(r => r.projection.validity === 'retired').length,
     pending: snap.pendingReviewCount ?? rows.filter(r => r.projection.resolution === 'open').length,
     followUps: (ws.followUps || []).length,
   };
+  const unresolvedCandidates = snap.unresolvedCandidateCount ?? (counts.openCandidate + counts.deferred + counts.screened);
+
+  const completionLabel = ws.completion
+    ? (ws.completion.completionScope === 'scoped_review'
+      ? `Scoped review recorded — ${counts.confirmed} confirmed, ${unresolvedCandidates} unconfirmed (${ws.completion.recordedAt} by ${ws.completion.actorId})`
+      : `Full validation recorded — ${counts.confirmed} confirmed, 0 unconfirmed (${ws.completion.recordedAt} by ${ws.completion.actorId})`)
+    : 'In progress (no completion sign-off recorded)';
 
   const lines = [
     `# Software Knowledge Continuity Audit Report`,
@@ -31,7 +40,7 @@ export function buildAuditReportMarkdown(ctx) {
     `- **Repository:** ${repoName}`,
     `- **Selected Revision:** \`${commit}\`${baseCommit ? ` (compared against baseline \`${baseCommit}\`)` : ''}`,
     `- **Snapshot ID:** \`${snap.id}\` (version ${snap.snapshotVersion}, mode: ${ws.mode})`,
-    `- **Completion Status:** ${ws.completion ? `Completed at ${ws.completion.recordedAt} by ${ws.completion.actorId}` : 'In progress (not yet marked complete)'}`,
+    `- **Completion Status:** ${completionLabel}`,
     ``,
     `## Executive Summary`,
     ``,
@@ -42,10 +51,15 @@ export function buildAuditReportMarkdown(ctx) {
     `| Confirmed relationships | ${counts.confirmed} |`,
     `| Rejected relationships | ${counts.rejected} |`,
     `| Stale (needs revalidation) | ${counts.stale} |`,
-    `| Open candidates remaining | ${counts.candidate} |`,
+    `| Open candidates | ${counts.openCandidate} |`,
+    `| Deferred candidates (triaged) | ${counts.deferred} |`,
+    `| Screened-out candidates (triaged) | ${counts.screened} |`,
     `| Retired relationships | ${counts.retired} |`,
     `| Open follow-up work items | ${snap.openFollowUpCount ?? 0} |`,
     ``,
+    ...(unresolvedCandidates > 0
+      ? [`> **Scope Disclosure:** ${unresolvedCandidates} automated candidate(s) (${counts.openCandidate} open, ${counts.deferred} deferred, ${counts.screened} screened) remain unconfirmed and are preserved explicitly without falsified human rejection.`, ``]
+      : []),
   ];
 
   if (ws.comparison) {

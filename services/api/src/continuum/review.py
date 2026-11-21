@@ -218,11 +218,13 @@ def command(db, actor, repository, envelope):
 
     if envelope.command == "record_judgment":
         optional_reason = (context.kind == 'initial' and context.comparison_id is None
-                           and context.validity == 'candidate' and context.resolution == 'open'
+                           and context.validity == 'candidate' and context.resolution in {'open', 'deferred', 'screened'}
                            and data.decision in {'confirm', 'reject'})
         if not optional_reason and data.reason is None:
             fail('invalid_input', details={'fields': ['reason']})
         allowed = {("candidate", "open"): {"confirm", "reject"},
+                   ("candidate", "deferred"): {"confirm", "reject"},
+                   ("candidate", "screened"): {"confirm", "reject"},
                    ("stale", "open"): {"reconfirm", "retire"},
                    ("confirmed", "resolved"): {"retire"}}
         if data.decision not in allowed.get((context.validity, context.resolution), set()):
@@ -243,6 +245,20 @@ def command(db, actor, repository, envelope):
             work_event = open_work(db, context, actor, data.followUpDisposition.workKind,
                                    data.followUpDisposition.note, event.id)
             events.append(work_event.id)
+
+    elif envelope.command == "triage_candidate":
+        if context.validity != "candidate" or context.resolution not in {"open", "deferred", "screened"}:
+            fail("invalid_transition", details={"validity": context.validity, "resolution": context.resolution})
+        target_resolution = {"defer": "deferred", "screen": "screened", "restore": "open"}[data.disposition]
+        if context.resolution == target_resolution:
+            fail("invalid_transition", details={"validity": context.validity, "resolution": context.resolution})
+        event = append_event(db, context, actor, "triage", data.note, {
+            "disposition": data.disposition,
+            "triageState": target_resolution,
+            "previousResolution": context.resolution,
+        })
+        events.append(event.id)
+        context.resolution = target_resolution
 
     elif envelope.command == "reverse_judgment":
         target = scoped(db, ReviewEvent, data.eventId, repository.id)
@@ -274,7 +290,11 @@ def command(db, actor, repository, envelope):
         work.status, work.resolution_event_id = "resolved", event.id
 
     elif envelope.command == "correct_assertion":
-        if context.resolution != "open" or context.validity not in {"candidate", "stale"}:
+        if not (
+            (context.validity == "candidate" and context.resolution in {"open", "deferred", "screened"})
+            or (context.validity == "stale" and context.resolution == "open")
+            or (context.validity == "confirmed" and context.resolution == "resolved")
+        ):
             fail("invalid_transition", details={"validity": context.validity, "resolution": context.resolution})
         replacement = data.replacement
         source = scoped(db, ArtifactVersion, replacement.sourceVersionId, repository.id)

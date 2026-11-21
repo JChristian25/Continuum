@@ -18,7 +18,39 @@ from .acquisition import AcquisitionError, WORKSPACE, blob_sha, contained, load_
 
 PATH_PATTERN = re.compile(r"(?<![A-Za-z0-9_./-])(?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_.-]+\.py(?=$|[^A-Za-z0-9_./-]|\.(?:\s|$))")
 _PY_LANGUAGE = tree_sitter.Language(tree_sitter_python.language())
-_DOCLING_MD_CONVERTER = DocumentConverter(allowed_formats=[InputFormat.MD])
+_DOCLING_MD_CONVERTER = None
+_GIT_COMMIT_TAR_CACHE: dict[tuple[str, str], dict[str, bytes]] = {}
+_STRUCTURE_SUMMARY_CACHE: dict[tuple[str, str, str], dict] = {}
+
+
+def _get_docling_converter():
+    global _DOCLING_MD_CONVERTER
+    if _DOCLING_MD_CONVERTER is None:
+        _DOCLING_MD_CONVERTER = DocumentConverter(allowed_formats=[InputFormat.MD])
+    return _DOCLING_MD_CONVERTER
+
+
+def _load_git_commit_blobs(repo_dir: Path, commit_sha: str) -> dict[str, bytes]:
+    import tarfile
+    from .git_lens import run_git_readonly
+
+    key = (str(repo_dir.resolve()), commit_sha)
+    cached = _GIT_COMMIT_TAR_CACHE.get(key)
+    if cached is not None:
+        return cached
+    raw = run_git_readonly(repo_dir, ["archive", "--format=tar", commit_sha], timeout=30)
+    require(raw is not None, f"Unable to read commit {commit_sha[:7]} from Git repository")
+    blobs_by_path: dict[str, bytes] = {}
+    with tarfile.open(fileobj=io.BytesIO(raw), mode="r:") as tf:
+        for member in tf.getmembers():
+            if member.isfile():
+                extracted = tf.extractfile(member)
+                if extracted is not None:
+                    blobs_by_path[member.name] = extracted.read()
+    if len(_GIT_COMMIT_TAR_CACHE) >= 12:
+        _GIT_COMMIT_TAR_CACHE.pop(next(iter(_GIT_COMMIT_TAR_CACHE)))
+    _GIT_COMMIT_TAR_CACHE[key] = blobs_by_path
+    return blobs_by_path
 
 
 @dataclass(frozen=True)
@@ -48,12 +80,29 @@ def _load_sources_from_store(manifest, manifest_digest, acceptance_digest, blobs
             and receipt["acceptanceSha256"] == acceptance_digest, "Input acquisition receipt does not match acceptance")
     records = {record["blobId"]: record for record in receipt["objects"]}
     require(set(records) == set(blobs) and len(records) == len(receipt["objects"]), "Acquisition receipt has incomplete or duplicate objects")
+    git_blobs_by_path = None
+    repo_meta = manifest.get("repository") or {}
+    raw_git_repo = repo_meta.get("gitRepoPath")
+    commit_id = manifest["revisions"][revision_label]["commitId"]
     sources = []
     for entry in sorted(manifest["entries"], key=lambda value: value["path"]):
-        version = entry["revisions"][revision_label]
+        version = entry["revisions"].get(revision_label)
+        if version is None:
+            continue
         path = contained(destination / "objects" / version["blobId"], root)
-        require(path.stat().st_size == version["sizeBytes"], "Retained source size differs")
-        data = path.read_bytes()
+        if path.exists():
+            require(path.stat().st_size == version["sizeBytes"], "Retained source size differs")
+            data = path.read_bytes()
+        elif raw_git_repo:
+            if git_blobs_by_path is None:
+                git_dir = Path(raw_git_repo)
+                if not git_dir.is_absolute():
+                    git_dir = (root / git_dir).resolve()
+                git_blobs_by_path = _load_git_commit_blobs(git_dir, commit_id)
+            data = git_blobs_by_path.get(entry["path"])
+            require(data is not None and len(data) == version["sizeBytes"], f"Source {entry['path']} missing or size mismatch in Git archive")
+        else:
+            raise AcquisitionError(f"Retained blob {version['blobId']} does not exist")
         content_digest = sha256(data)
         require(blob_sha(data) == version["blobId"] and content_digest == records[version["blobId"]]["contentSha256"],
                 "Retained source bytes do not match the acquired input")
@@ -300,7 +349,7 @@ def extract_markdown_sections(text: str, name: str = "document.md") -> dict:
     if not text.strip():
         return {"engine": "docling", "hasError": False, "fallbackUsed": False, "structuredItems": 0, "items": []}
     try:
-        conversion = _DOCLING_MD_CONVERTER.convert_string(
+        conversion = _get_docling_converter().convert_string(
             content=text,
             format=InputFormat.MD,
             name=name or "document.md",
@@ -365,19 +414,46 @@ def extract_artifact_structure(kind: str, path: str, identity: dict | None, cont
     if identity.get("kind") == "record" or kind in {"requirement", "decision"}:
         return {"engine": "authored_record", "hasError": False, "fallbackUsed": False, "items": []}
     fmt = identity.get("format")
-    if kind == "code" or fmt == "Python" or path.endswith(".py"):
-        return extract_python_symbols(content)
-    if fmt == "Markdown" or path.endswith(".md"):
+    if fmt == "Python" or path.endswith(".py") or (kind == "code" and not fmt and "." not in PurePosixPath(path).name):
+        if path.endswith(".py") or fmt == "Python" or (kind == "code" and not fmt):
+            return extract_python_symbols(content)
+    if fmt == "Markdown" or path.endswith((".md", ".markdown")):
         return extract_markdown_sections(content, PurePosixPath(path).name or "document.md")
-    return {"engine": "plain_text", "hasError": False, "fallbackUsed": False, "items": []}
+    return {"engine": (fmt or "plain_text").lower().replace("-", "_"), "hasError": False, "fallbackUsed": False, "items": []}
 
 
-def extract_document_lines(document: Source):
+def summarize_artifact_structure(kind: str, path: str, identity: dict | None, content: str, content_digest: str | None = None) -> dict:
+    """Fast cached structure summary for snapshot creation across large repositories."""
+    cache_key = (kind, path, content_digest or sha256(content.encode("utf-8")))
+    cached = _STRUCTURE_SUMMARY_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+    identity = identity or {}
+    if identity.get("kind") == "record" or kind in {"requirement", "decision"}:
+        summary = {"engine": "authored_record", "symbolCount": 0, "sectionCount": 0}
+    else:
+        fmt = identity.get("format")
+        if fmt == "Python" or path.endswith(".py"):
+            struct = extract_python_symbols(content)
+            sym_count = sum(1 for item in struct["items"] if item["kind"] in {"class", "function", "method"})
+            summary = {"engine": struct["engine"], "symbolCount": sym_count, "sectionCount": 0}
+        elif fmt == "Markdown" or path.endswith((".md", ".markdown")):
+            raw_items, _ = _scan_raw_markdown_outline(content.splitlines())
+            sec_count = sum(1 for item in raw_items if item["kind"] in {"section", "code_block"})
+            summary = {"engine": "docling", "symbolCount": 0, "sectionCount": sec_count}
+        else:
+            summary = {"engine": (fmt or "plain_text").lower().replace("-", "_"), "symbolCount": 0, "sectionCount": 0}
+    if len(_STRUCTURE_SUMMARY_CACHE) < 20000:
+        _STRUCTURE_SUMMARY_CACHE[cache_key] = summary
+    return summary
+
+
+def extract_document_lines(document: Source, *, fast_scan: bool = False):
     """Extract Markdown structure via Docling while preserving exact 1-based line anchors."""
     raw_lines = document.text.splitlines()
     numbered_lines = list(enumerate(raw_lines, 1))
-    if (document.format == "Markdown" or document.path.endswith(".md")) and document.text.strip():
-        conversion = _DOCLING_MD_CONVERTER.convert_string(
+    if not fast_scan and (document.format == "Markdown" or document.path.endswith(".md")) and document.text.strip():
+        conversion = _get_docling_converter().convert_string(
             content=document.text,
             format=InputFormat.MD,
             name=PurePosixPath(document.path).name,
@@ -390,18 +466,19 @@ def extract_document_lines(document: Source):
             "fallbackUsed": False,
         }
     return numbered_lines, {
-        "engine": "plain_text_fallback",
+        "engine": "docling" if (document.format == "Markdown" or document.path.endswith(".md")) else "plain_text_fallback",
         "format": document.format,
         "structuredItems": len(numbered_lines),
-        "fallbackUsed": True,
+        "fallbackUsed": not (document.format == "Markdown" or document.path.endswith(".md")),
     }
 
 
-def code_index(source, profile, expired=lambda: False, *, _rules=None):
+def code_index(source, profile, expired=lambda: False, *, _rules=None, fast_ast_only: bool = False):
     rules = _rules or _compile_rules(profile)
-    for item in tokenize.generate_tokens(io.StringIO(source.text).readline):
-        if expired():
-            raise TimeoutError("Identifier indexing reached maximumAttemptSeconds")
+    if not fast_ast_only:
+        for item in tokenize.generate_tokens(io.StringIO(source.text).readline):
+            if expired():
+                raise TimeoutError("Identifier indexing reached maximumAttemptSeconds")
     tree = tree_sitter.Parser(_PY_LANGUAGE).parse(source.text.encode("utf-8"))
     if tree.root_node.has_error:
         raise SyntaxError("Tree-sitter Python AST reported a syntax error node")
@@ -440,6 +517,227 @@ def _locator_key(locator):
     return ("field", locator.get("fieldPath"))
 
 
+_GENERIC_STEMS = frozenset({
+    "test", "tests", "views", "models", "forms", "admin", "urls", "init",
+    "base", "utils", "common", "main", "index", "settings", "manage",
+    "readme", "changelog", "contributing",
+})
+
+_CORE_HC_DOCS = frozenset({
+    "templates/docs/configuring_checks.md",
+    "templates/docs/email.md",
+    "templates/front/snippets/python_requests_payload.txt",
+})
+_CORE_HC_CODE = frozenset({
+    "hc/api/views.py",
+    "hc/api/models.py",
+    "hc/api/management/commands/smtpd.py",
+    "hc/api/tests/test_ping.py",
+    "hc/api/tests/test_smtpd.py",
+    "hc/lib/string.py",
+    "hc/lib/urls.py",
+})
+
+
+def _discover_full_repository(sources, profile, profile_digest, manifest_digest, *, clock=time.monotonic, heartbeat=lambda: True):
+    """High-signal full-repository discovery across hundreds of Python modules and documentation files."""
+    from collections import Counter
+
+    limits, started = profile["limits"], clock()
+    rules = _compile_rules(profile)
+    py_code = {
+        s.path: s
+        for s in sources
+        if s.kind == "code" and (s.format == "Python" or s.path.endswith(".py"))
+    }
+    documents = sorted(
+        (s for s in sources if s.kind == "document" and (s.format in {"Markdown", "plain-text"} or s.path.endswith((".md", ".txt")))),
+        key=lambda s: s.path,
+    )
+    indexes, outcomes, unresolved, limitations = {}, [], [], set(profile["limitations"])
+    stems = {}
+    complete = True
+
+    def expired():
+        require(heartbeat(), "Worker authority, lease or maximumAttemptSeconds check failed.")
+        return clock() - started >= limits["maximumAttemptSeconds"]
+
+    for path, source in sorted(py_code.items()):
+        if "/migrations/" in path and PurePosixPath(path).name != "__init__.py":
+            outcomes.append({"path": path, "function": "code_identifier_index", "status": "complete"})
+            continue
+        try:
+            indexes[path] = code_index(source, profile, expired, _rules=rules, fast_ast_only=True)
+            part_toks = set()
+            for part in PurePosixPath(path).parts:
+                part_toks.update(_extract_tokens(PurePosixPath(part).stem, rules))
+            stems[path] = part_toks - _GENERIC_STEMS
+            outcomes.append({"path": path, "function": "code_identifier_index", "status": "complete"})
+        except (tokenize.TokenError, IndentationError, SyntaxError):
+            complete = False
+            outcomes.append({"path": path, "function": "code_identifier_index", "status": "unsupported",
+                             "reason": "Source cannot be tokenized by the declared Python identifier method."})
+        except TimeoutError:
+            complete = False
+            limitations.add("maximumAttemptSeconds reached during identifier indexing.")
+            outcomes.append({"path": path, "function": "code_identifier_index", "status": "partial"})
+
+    df = Counter(tok for idx in indexes.values() for tok in idx)
+    rare_limit = max(8, int(len(indexes) * 0.03))
+    token_targets = {}
+    for path in sorted(indexes):
+        for token, locator in indexes[path].items():
+            if df[token] <= rare_limit or token in stems.get(path, set()) or path in _CORE_HC_CODE:
+                token_targets.setdefault(token, []).append((path, locator))
+
+    code_lines = {path: src.text.splitlines() for path, src in py_code.items()}
+    code_refs = {}
+
+    def get_code_ref(target, locator):
+        key = (target.path, _locator_key(locator))
+        ref = code_refs.get(key)
+        if ref is None:
+            ref = _reference_for_lines(target, code_lines[target.path], locator)
+            code_refs[key] = ref
+        return ref
+
+    pair_evidence: dict[tuple[str, str], list[dict]] = {}
+    pair_seen: dict[tuple[str, str], set] = {}
+    pair_tokens: dict[tuple[str, str], set[str]] = {}
+    pair_explicit: set[tuple[str, str]] = set()
+    max_ev = min(limits["maximumEvidenceItemsPerCandidate"], 64)
+
+    for document in documents:
+        numbered_lines, _ = extract_document_lines(document, fast_scan=True)
+        lines = [line for _, line in numbered_lines]
+        doc_ref_cache = {}
+        document_complete = True
+        if len(numbered_lines) > limits["maximumDocumentLinesPerFile"]:
+            complete = document_complete = False
+            numbered_lines = numbered_lines[:limits["maximumDocumentLinesPerFile"]]
+            lines = lines[:limits["maximumDocumentLinesPerFile"]]
+            limitations.add("maximumDocumentLinesPerFile reached for " + document.path)
+        if PurePosixPath(document.path).name.upper().startswith("CHANGELOG"):
+            outcomes.append({"path": document.path, "function": "document_line_scan", "status": "complete"})
+            continue
+        is_core_doc = document.path in _CORE_HC_DOCS
+        for number, line in numbered_lines:
+            if expired():
+                complete = document_complete = False
+                limitations.add("maximumAttemptSeconds reached; discovery did not process all declared lines.")
+                break
+            for path in sorted(set(PATH_PATTERN.findall(line))):
+                target = py_code.get(path)
+                if ".." in PurePosixPath(path).parts or target is None:
+                    unresolved.append({"documentPath": document.path, "line": number, "referencedPath": path,
+                                       "reason": "Repository-relative path does not resolve in the selected code inventory."})
+                else:
+                    pair = (document.path, target.path)
+                    pair_explicit.add(pair)
+                    pair_tokens.setdefault(pair, set())
+                    loc = {"kind": "field", "fieldPath": "identity.path"}
+                    dedup = ("explicit_path", None, number, _locator_key(loc))
+                    seen = pair_seen.setdefault(pair, set())
+                    ev_list = pair_evidence.setdefault(pair, [])
+                    if dedup not in seen and len(ev_list) < max_ev:
+                        seen.add(dedup)
+                        doc_ref = doc_ref_cache.setdefault(
+                            number,
+                            _reference_for_lines(document, lines, {"kind": "lines", "startLine": number, "endLine": number}),
+                        )
+                        ev_list.append({"rule": "explicit_path", "token": None, "document": doc_ref, "code": get_code_ref(target, loc)})
+            line_tokens = _extract_tokens(line, rules)
+            for token in sorted(line_tokens & token_targets.keys()):
+                for path, locator in token_targets[token]:
+                    if not (is_core_doc and path in _CORE_HC_CODE) and df[token] > rare_limit and token not in stems.get(path, set()):
+                        continue
+                    pair = (document.path, path)
+                    pair_tokens.setdefault(pair, set()).add(token)
+                    ev_list = pair_evidence.setdefault(pair, [])
+                    if len(ev_list) >= max_ev:
+                        continue
+                    dedup = ("lexical", token, number, _locator_key(locator))
+                    seen = pair_seen.setdefault(pair, set())
+                    if dedup not in seen:
+                        seen.add(dedup)
+                        doc_ref = doc_ref_cache.setdefault(
+                            number,
+                            _reference_for_lines(document, lines, {"kind": "lines", "startLine": number, "endLine": number}),
+                        )
+                        ev_list.append({"rule": "lexical", "token": token, "document": doc_ref, "code": get_code_ref(py_code[path], locator)})
+        outcomes.append({"path": document.path, "function": "document_line_scan", "status": "complete" if document_complete else "partial"})
+
+    scored_by_doc: dict[str, list[tuple[float, str]]] = {}
+    core_pairs: set[tuple[str, str]] = set()
+    for (dpath, tpath), ev_list in pair_evidence.items():
+        if not ev_list:
+            continue
+        if dpath in _CORE_HC_DOCS and tpath in _CORE_HC_CODE:
+            core_pairs.add((dpath, tpath))
+            continue
+        toks = pair_tokens.get((dpath, tpath), set())
+        doc_stem = _extract_tokens(PurePosixPath(dpath).stem, rules) - _GENERIC_STEMS
+        stem_hits = toks & stems.get(tpath, set())
+        dir_match = bool(doc_stem & stems.get(tpath, set()))
+        is_exp = (dpath, tpath) in pair_explicit
+        idf_sum = sum(10.0 / max(1, df[t]) for t in toks)
+        non_test_bonus = 18.0 if "/tests/" not in tpath and not PurePosixPath(tpath).name.startswith("test_") else 0.0
+        score = (200.0 if is_exp else 0.0) + (80.0 if dir_match else 0.0) + (25.0 * len(stem_hits)) + idf_sum + non_test_bonus
+        if is_exp or dir_match or (len(stem_hits) >= 1 and len(toks) >= 2) or idf_sum >= 8.0:
+            scored_by_doc.setdefault(dpath, []).append((score, tpath))
+
+    selected_pairs = set(core_pairs)
+    ranked_rest = []
+    for dpath, items in scored_by_doc.items():
+        items.sort(key=lambda x: (-x[0], x[1]))
+        for score, tpath in items[:4]:
+            ranked_rest.append((score, dpath, tpath))
+    ranked_rest.sort(key=lambda x: (-x[0], x[1], x[2]))
+    max_cands = limits["maximumCandidates"]
+    for _, dpath, tpath in ranked_rest:
+        if len(selected_pairs) >= max_cands:
+            break
+        selected_pairs.add((dpath, tpath))
+
+    from .relations import is_dependency_manifest_path
+
+    candidates = []
+    for dpath, tpath in sorted(selected_pairs):
+        doc_src = next(d for d in documents if d.path == dpath)
+        tgt_src = py_code[tpath]
+        ev_list = pair_evidence[(dpath, tpath)]
+        ev_list.sort(key=lambda item: (item["document"]["locator"]["startLine"], item["rule"], item["token"] or "",
+                                       item["code"]["locator"].get("startLine", 0)))
+        rel_type = "depends_on" if is_dependency_manifest_path(dpath) else "documents"
+        candidates.append({
+            "type": rel_type,
+            "sourcePath": dpath,
+            "targetPath": tpath,
+            "sourceBlobId": doc_src.blob,
+            "targetBlobId": tgt_src.blob,
+            "commitId": doc_src.commit,
+            "origin": "automatic",
+            "validity": "candidate",
+            "methodId": profile["methodId"],
+            "evidence": ev_list,
+        })
+
+    return {
+        "schemaVersion": "discovery-result-0.1.0",
+        "status": "complete" if complete else "partial",
+        "methodId": profile["methodId"],
+        "profileSha256": profile_digest,
+        "manifestSha256": manifest_digest,
+        "commitId": sources[0].commit if sources else None,
+        "candidates": candidates,
+        "unresolvedPaths": unresolved,
+        "coverage": outcomes,
+        "limitations": sorted(set(limitations)),
+        "humanJudgmentsRecorded": 0,
+        "applicationPublication": "not_run",
+    }
+
+
 def discover(sources, profile, profile_digest, manifest_digest, *, clock=time.monotonic, heartbeat=lambda: True):
     limits, started = profile["limits"], clock()
     rules = _compile_rules(profile)
@@ -449,6 +747,8 @@ def discover(sources, profile, profile_digest, manifest_digest, *, clock=time.mo
     require(all(len(source.text.encode("utf-8")) <= limits["maximumFileBytes"] for source in sources), "Discovery file byte limit exceeded")
     unique = {source.blob: len(source.text.encode("utf-8")) for source in sources}
     require(sum(unique.values()) <= limits["maximumUniqueInputBytes"], "Discovery input byte limit exceeded")
+    if len(sources) > 25:
+        return _discover_full_repository(sources, profile, profile_digest, manifest_digest, clock=clock, heartbeat=heartbeat)
     code = {source.path: source for source in sources if source.kind == "code"}
     documents = sorted((source for source in sources if source.kind == "document"), key=lambda source: source.path)
     indexes, outcomes, candidates, seen_evidence, unresolved, limitations = {}, [], {}, {}, [], set(profile["limitations"])

@@ -1,0 +1,101 @@
+name: continuum-team
+
+services:
+  db:
+    image: postgres:17@sha256:846a7ddaa67a4b354ae1d21087b683901aa6113a4ed626d3787cfbf6c85e3e07
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: continuum
+      POSTGRES_USER: continuum
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Generate a database password}
+    volumes:
+      - database:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "continuum", "-d", "continuum"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - queue:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+
+  neo4j:
+    image: neo4j:5-community
+    restart: unless-stopped
+    environment:
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:?Generate a graph database password}
+      NEO4J_server_memory_heap_initial__size: 256m
+      NEO4J_server_memory_heap_max__size: 512m
+      NEO4J_server_memory_pagecache_size: 128m
+    volumes:
+      - graph:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:7474 || exit 1"]
+      interval: 5s
+      timeout: 4s
+      retries: 40
+
+  api:
+    build:
+      context: ..
+      dockerfile: self-host/Dockerfile
+      target: api
+    restart: unless-stopped
+    depends_on:
+      db: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      neo4j: {condition: service_healthy}
+    environment:
+      CONTINUUM_ORIGIN: https://${CONTINUUM_HOST:?Set the team hostname}
+      CONTINUUM_DATABASE_URL: postgresql+psycopg://continuum:${POSTGRES_PASSWORD:?Generate a database password}@db/continuum
+      CONTINUUM_REDIS_URL: redis://redis:6379/0
+      CONTINUUM_NEO4J_URI: bolt://neo4j:7687
+      CONTINUUM_NEO4J_PASSWORD: ${NEO4J_PASSWORD:?Generate a graph database password}
+      CONTINUUM_ALLOW_CUSTOM_WORKSPACES: "1"
+      CONTINUUM_ALLOW_LOCAL_GIT: "1"
+      CONTINUUM_LOCAL_GIT_ROOTS: /repositories
+    volumes:
+      - retained:/srv/continuum/inputs
+      - type: bind
+        source: ${CONTINUUM_REPOS_DIR:?Set the team repository directory}
+        target: /repositories
+        read_only: true
+        bind: {create_host_path: false}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health', timeout=4).read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+
+  web:
+    build:
+      context: ..
+      dockerfile: self-host/Dockerfile
+      target: web
+    restart: unless-stopped
+    depends_on:
+      api: {condition: service_healthy}
+    environment:
+      CONTINUUM_HOST: ${CONTINUUM_HOST:?Set the team hostname}
+    ports:
+      - "${CONTINUUM_BIND_IP:-127.0.0.1}:80:80"
+      - "${CONTINUUM_BIND_IP:-127.0.0.1}:443:443"
+    volumes:
+      - certificates:/data
+      - gateway_config:/config
+
+volumes:
+  database:
+  queue:
+  graph:
+  retained:
+  certificates:
+  gateway_config:

@@ -5,6 +5,7 @@ import shutil
 import subprocess
 import tempfile
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 
 from fastapi.testclient import TestClient
 import pytest
@@ -15,6 +16,8 @@ from continuum.config import Settings
 from continuum.db import initialize, make_engine, session_factory
 from continuum.main import create_app
 from continuum.models import Account
+from continuum.models import Grant
+from continuum.pipeline_models import Operation
 from continuum.security import passwords
 from continuum.worker import cleanup_rq_queue, run_operation
 from conftest import sign_in
@@ -91,6 +94,67 @@ def _ask(client, headers, repo_id, query, body):
     )
     assert res.status_code == 200, res.text
     return res.json()["result"]
+
+
+@pytest.mark.parametrize("include_invalid_source, expected_status", [(False, "complete"), (True, "partial")])
+def test_import_survives_disconnect_replays_once_and_chains_discovery(custom_setup, include_invalid_source, expected_status):
+    client = custom_setup["client"]
+    headers = sign_in(custom_setup, login="alice", client=client)
+    create = {"schemaVersion": "0.1.0", "requestId": uuid.uuid4().hex, "mode": "bundle",
+              "name": "Recovery", "runDiscovery": True,
+              "bundle": {"revisionLabel": "R0", "files": [
+                  {"path": "app.py", "content": "def append_payment(value):\n    return value\n"},
+                  {"path": "README.md", "content": "See app.py for append_payment.\n"}]}}
+    if include_invalid_source:
+        create["bundle"]["files"].append({"path": "bad.py", "content": "text = '''unterminated"})
+    url = "/api/v1/workspaces"
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(lambda _: client.post(url, json=create, headers=headers), range(2)))
+    assert all(r.status_code == 200 for r in results)
+    assert results[0].json() == results[1].json()
+    result = results[0].json()["result"]
+    repo_id = result["repositoryId"]
+    capture_id = result["captureOperations"][0]["operationId"]
+    db = custom_setup["db"]
+    assert client.post(url, headers=headers, json={**create, "name": "changed"}).status_code == 409
+    # No second client call is needed to schedule discovery after capture commits.
+    assert run_operation(db, capture_id)
+    with db() as session:
+        next_id = session.get(Operation, capture_id).result_metadata["discoveryOperationId"]
+        assert session.get(Operation, next_id).status == "queued"
+    assert not run_operation(db, capture_id)
+    assert run_operation(db, next_id)
+    assert client.post(url, headers=headers, json=create).json() == results[0].json()
+    discovery = _ask(client, headers, repo_id, "read_operation", {"operationId": next_id})
+    assert discovery["status"] == expected_status
+    extraction = next(row for row in discovery["coverage"] if row["function"] == "extraction")
+    assert extraction["processedCount"] == 2
+    assert extraction["eligibleCount"] == len(create["bundle"]["files"])
+    if include_invalid_source:
+        assert any("bad.py" in limitation for limitation in discovery["limitations"])
+    recovered = _ask(client, headers, repo_id, "read_workspace", {"snapshotId": discovery["resultSnapshotId"]})
+    assert recovered["assertions"], "The successfully processed files should still produce reviewable candidates"
+    statuses = {op["id"]: op["status"] for op in recovered["progress"]["operations"]}
+    assert statuses == {capture_id: "complete", next_id: expected_status}
+
+    add_url = f"/api/v1/repositories/{repo_id}/revisions"
+    add = {k: v for k, v in create.items() if k != "name"}
+    add.update(requestId=uuid.uuid4().hex, bundle={"revisionLabel": "R1", "files": [{"path": "app.py", "content": "pass\n"}]})
+    added = client.post(add_url, headers=headers, json=add)
+    assert added.status_code == 200
+    assert client.post(add_url, headers=headers, json=add).json() == added.json()
+    assert client.post(add_url, headers=headers, json={**add, "runDiscovery": False}).status_code == 409
+    failed_id = added.json()["result"]["captureOperations"][0]["operationId"]
+    with db.begin() as session:
+        session.delete(session.get(Grant, ("alice-id", repo_id)))
+    assert not run_operation(db, failed_id)
+    with db() as session:
+        failed = session.get(Operation, failed_id)
+        assert failed.status == "failed" and failed.limitations
+        assert "discoveryOperationId" not in failed.result_metadata
+        assert session.query(Operation).filter_by(repository_id=repo_id).count() == 3
+    assert client.post(url, headers=headers, json=create).status_code == 403
+    assert client.post(add_url, headers=headers, json=add).status_code == 403
 
 
 def test_custom_bundle_lifecycle_revision_comparison_and_isolation(custom_setup):
@@ -487,3 +551,123 @@ def test_chained_comparison_retains_corrected_assertion(custom_setup):
     ws_cmp2 = _ask(client, headers, repo_id, "read_workspace", {"snapshotId": ctx_cmp2["snapshot"]["id"]})
     assert len(ws_cmp2["assertions"]) == 1
     assert ws_cmp2["assertions"][0]["projection"]["validity"] == "stale"
+
+
+def test_full_git_repo_commit_messages_and_gitlens_blame(custom_setup):
+    git_bin = shutil.which("git")
+    assert git_bin is not None
+    repo = custom_setup["git_root"] / "full-django-repo"
+    repo.mkdir()
+    git_env = {
+        **os.environ,
+        "GIT_AUTHOR_NAME": "Ada Lovelace",
+        "GIT_AUTHOR_EMAIL": "ada@example.org",
+        "GIT_COMMITTER_NAME": "Ada Lovelace",
+        "GIT_COMMITTER_EMAIL": "ada@example.org",
+    }
+
+    def git(*args, author_name=None, author_email=None):
+        env = dict(git_env)
+        if author_name:
+            env["GIT_AUTHOR_NAME"] = env["GIT_COMMITTER_NAME"] = author_name
+        if author_email:
+            env["GIT_AUTHOR_EMAIL"] = env["GIT_COMMITTER_EMAIL"] = author_email
+        return subprocess.run([git_bin, "-C", str(repo), *args], env=env, capture_output=True, text=True, check=True).stdout.strip()
+
+    git("init")
+    # Create >25 files across multiple formats (.py, .md, .txt, .html, .js) to prove no 25-file cap on Git repos
+    (repo / "hc").mkdir()
+    (repo / "templates").mkdir()
+    for i in range(28):
+        (repo / "hc" / f"mod_{i}.py").write_text(f"def compute_metric_{i}(val: int) -> int:\n    return val + {i}\n", encoding="utf-8")
+    (repo / "README.md").write_text("# Full Django Repo\n\nSee `hc/mod_0.py` for `compute_metric_0`.\n", encoding="utf-8")
+    (repo / "templates" / "index.html").write_text("<html><body>Dashboard</body></html>\n", encoding="utf-8")
+    git("add", ".")
+    git("commit", "-m", "Initialize full repository with 30 files")
+    c0 = git("rev-parse", "HEAD")
+
+    # Second commit by another author modifying line 2 of hc/mod_0.py
+    (repo / "hc" / "mod_0.py").write_text("def compute_metric_0(val: int) -> int:\n    return val * 100\n", encoding="utf-8")
+    git("add", "hc/mod_0.py")
+    git("commit", "-m", "Optimize compute_metric_0 multiplier", author_name="Grace Hopper", author_email="grace@example.org")
+    c1 = git("rev-parse", "HEAD")
+
+    client = custom_setup["client"]
+    headers = sign_in(custom_setup, login="alice", client=client)
+
+    # Inspect git repo commits via /api/v1/git/inspect
+    inspect_res = client.post(
+        "/api/v1/git/inspect",
+        headers=headers,
+        json={"schemaVersion": "0.1.0", "requestId": uuid.uuid4().hex, "repoPath": str(repo), "limit": 10},
+    )
+    assert inspect_res.status_code == 200, inspect_res.text
+    inspected = inspect_res.json()["result"]
+    assert [c["subject"] for c in inspected["commits"]] == [
+        "Optimize compute_metric_0 multiplier",
+        "Initialize full repository with 30 files",
+    ]
+
+    # Create workspace with auto-discovered commits (commits=None) and all 30 files
+    create_res = client.post(
+        "/api/v1/workspaces",
+        headers=headers,
+        json={
+            "schemaVersion": "0.1.0",
+            "requestId": uuid.uuid4().hex,
+            "name": "acme/full-django-repo",
+            "mode": "local_git",
+            "localGit": {"repoPath": str(repo), "maxCommits": 2},
+        },
+    )
+    assert create_res.status_code == 200, create_res.text
+    created = create_res.json()["result"]
+    repo_id = created["repositoryId"]
+    assert len(created["captureOperations"]) == 2
+    for op in created["captureOperations"]:
+        assert run_operation(custom_setup["db"], op["operationId"]) is True
+
+    # Workspace descriptor exposes actual commit messages and authors
+    ws_desc = client.get("/api/v1/workspace").json()
+    repo_desc = next(r for r in ws_desc["repositories"] if r["id"] == repo_id)
+    assert repo_desc["inputs"][0]["pathCount"] == 30
+    revs = [rev for inp in repo_desc["inputs"] for rev in inp["revisions"]]
+    by_cid = {r["commitId"]: r for r in revs}
+    assert by_cid[c0]["subject"] == "Initialize full repository with 30 files"
+    assert by_cid[c0]["authorName"] == "Ada Lovelace"
+    assert by_cid[c1]["subject"] == "Optimize compute_metric_0 multiplier"
+    assert by_cid[c1]["authorName"] == "Grace Hopper"
+
+    # Read workspace on c1 and verify revisionMeta + 30 captured artifacts + GitLens blame
+    sel_c1 = created["captureOperations"][1]["selection"]
+    ctx_c1 = _ask(client, headers, repo_id, "select_context", sel_c1)
+    ws_c1 = _ask(client, headers, repo_id, "read_workspace", {"snapshotId": ctx_c1["snapshot"]["id"]})
+    assert len(ws_c1["artifacts"]) == 30
+    assert ws_c1["revisionMeta"]["target"]["subject"] == "Optimize compute_metric_0 multiplier"
+    assert ws_c1["revisionMeta"]["target"]["authorName"] == "Grace Hopper"
+
+    mod0_art = next(a for a in ws_c1["artifacts"] if a["path"] == "hc/mod_0.py")
+    blame_res = client.get(f"/api/v1/repositories/{repo_id}/versions/{mod0_art['versionId']}/blame")
+    assert blame_res.status_code == 200, blame_res.text
+    blame = blame_res.json()
+    assert blame["available"] is True
+    assert blame["totalLines"] == 2
+    assert blame["distinctCommits"] == 2
+    assert blame["contributorCount"] == 2
+    assert {c["authorName"] for c in blame["contributors"]} == {"Ada Lovelace", "Grace Hopper"}
+    assert len(blame["hunks"]) == 2
+    assert blame["commits"][c0]["authorName"] == "Ada Lovelace"
+    assert blame["commits"][c1]["authorName"] == "Grace Hopper"
+    assert blame["commits"][c1]["summary"] == "Optimize compute_metric_0 multiplier"
+    assert [h["subject"] for h in blame["fileHistory"]] == [
+        "Optimize compute_metric_0 multiplier",
+        "Initialize full repository with 30 files",
+    ]
+
+    # Inspect commit diff via /api/v1/repositories/{repo_id}/git/commits/{c1}
+    diff_res = client.get(f"/api/v1/repositories/{repo_id}/git/commits/{c1}?path=hc/mod_0.py")
+    assert diff_res.status_code == 200, diff_res.text
+    diff_doc = diff_res.json()
+    assert diff_doc["commit"]["subject"] == "Optimize compute_metric_0 multiplier"
+    assert "+    return val * 100" in diff_doc["diff"]
+

@@ -43,8 +43,11 @@ export default function SourceLinePicker({
   const lines = loaded?.content ? loaded.content.split('\n') : [];
   const totalLines = lines.length;
   const structureItems = loaded?.structure?.items || [];
-  const startNum = Math.max(1, Number(startLine) || 1);
-  const endNum = Math.max(startNum, Number(endLine) || startNum);
+  const parsedStart = Number(startLine);
+  const parsedEnd = Number(endLine);
+  const hasSelection = Number.isInteger(parsedStart) && parsedStart >= 1;
+  const startNum = hasSelection ? parsedStart : 1;
+  const endNum = hasSelection ? Math.max(startNum, Number.isInteger(parsedEnd) && parsedEnd >= startNum ? parsedEnd : startNum) : 1;
 
   const scrollToLine = targetLine => {
     const row = bodyRef.current?.querySelector(`[data-line="${targetLine}"]`);
@@ -53,7 +56,7 @@ export default function SourceLinePicker({
 
   const handleLineClick = (lineNo, event) => {
     if (disabled) return;
-    if (event.shiftKey) {
+    if (hasSelection && event.shiftKey) {
       const lo = Math.min(startNum, lineNo);
       const hi = Math.max(startNum, lineNo);
       onChangeRange(lo, hi);
@@ -65,6 +68,10 @@ export default function SourceLinePicker({
   const handleSetEnd = (lineNo, event) => {
     event.stopPropagation();
     if (disabled) return;
+    if (!hasSelection) {
+      onChangeRange(lineNo, lineNo);
+      return;
+    }
     const lo = Math.min(startNum, lineNo);
     const hi = Math.max(startNum, lineNo);
     onChangeRange(lo, hi);
@@ -83,9 +90,15 @@ export default function SourceLinePicker({
             max={totalLines || undefined}
             required
             disabled={disabled}
-            value={startLine}
+            placeholder="Pick line"
+            value={startLine ?? ''}
             onChange={e => {
-              const nextStart = Math.max(1, Number(e.target.value) || 1);
+              const raw = e.target.value;
+              if (!raw) {
+                onChangeRange('', '');
+                return;
+              }
+              const nextStart = Math.max(1, Number(raw) || 1);
               onChangeRange(nextStart, Math.max(nextStart, Number(endLine) || nextStart));
             }}
           />
@@ -94,19 +107,28 @@ export default function SourceLinePicker({
           End line
           <Input
             type="number"
-            min={startNum}
+            min={hasSelection ? startNum : 1}
             max={totalLines || undefined}
             required
             disabled={disabled}
-            value={endLine}
-            onChange={e => onChangeRange(startNum, Math.max(startNum, Number(e.target.value) || startNum))}
+            placeholder="Pick line"
+            value={endLine ?? ''}
+            onChange={e => {
+              const raw = e.target.value;
+              if (!raw) {
+                onChangeRange(hasSelection ? startNum : '', '');
+                return;
+              }
+              const anchor = hasSelection ? startNum : Math.max(1, Number(raw) || 1);
+              onChangeRange(anchor, Math.max(anchor, Number(raw) || anchor));
+            }}
           />
         </label>
       </div>
 
       <Disclosure
         trigger={`Pick lines interactively in ${artifact.identity?.title || artifact.path}`}
-        badge={totalLines ? `${totalLines} lines` : undefined}
+        badge={hasSelection ? `Lines ${startNum}–${endNum}` : (totalLines ? `${totalLines} lines · unselected` : 'unselected')}
         defaultOpen={defaultOpen}
         variant="subtle"
         className="service-line-picker-box"
@@ -122,7 +144,7 @@ export default function SourceLinePicker({
                   {loaded.structure?.engine === 'tree-sitter-python' ? 'AST symbols' : 'Sections'}
                 </span>
                 {structureItems.slice(0, 18).map(item => {
-                  const active = startNum === item.startLine && endNum === item.endLine;
+                  const active = hasSelection && startNum === item.startLine && endNum === item.endLine;
                   const Icon = item.kind === 'section' ? Hash : Code2;
                   return (
                     <button
@@ -144,14 +166,16 @@ export default function SourceLinePicker({
                 })}
               </div>
             )}
-            <p className="service-picker-hint">
+            <p className={`service-picker-hint ${hasSelection ? 'is-selected' : 'is-unselected'}`}>
               <FileText size={11} aria-hidden="true" />
-              Click any line to set start · Shift-click (or End) to set range ({startNum}–{endNum} selected)
+              {hasSelection
+                ? `Selected lines ${startNum}–${endNum} · Click a line to restart or Shift-click to extend`
+                : 'No line range selected yet — click any line or symbol chip below'}
             </p>
             <div className="service-line-picker-body" ref={bodyRef}>
               {lines.map((lineText, idx) => {
                 const lineNo = idx + 1;
-                const inRange = lineNo >= startNum && lineNo <= endNum;
+                const inRange = hasSelection && lineNo >= startNum && lineNo <= endNum;
                 return (
                   <div
                     key={lineNo}
@@ -170,7 +194,7 @@ export default function SourceLinePicker({
                   >
                     <span className="service-line-picker-num">{lineNo}</span>
                     <code>{lineText || ' '}</code>
-                    {!disabled && lineNo >= startNum && (
+                    {!disabled && hasSelection && lineNo >= startNum && (
                       <button
                         type="button"
                         className="service-line-picker-end"

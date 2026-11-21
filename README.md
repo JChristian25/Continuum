@@ -6,7 +6,7 @@
 
 **Keeping software knowledge connected as projects evolve.**
 
-An integrated software knowledge continuity research prototype.
+A self-hosted workspace for developers to trace decisions and documentation across Git revisions.
 
 ![Status: Work in progress](https://img.shields.io/badge/status-work_in_progress-f59e0b?style=flat-square)
 ![Research: Undergraduate thesis](https://img.shields.io/badge/research-undergraduate_thesis-7f1d1d?style=flat-square)
@@ -19,7 +19,7 @@ An integrated software knowledge continuity research prototype.
 </div>
 
 > [!IMPORTANT]
-> **Work in progress.** Continuum is under active specification and development as part of an ongoing thesis. The normal frontend uses named server accounts and real captured Healthchecks data. An explicit `?mode=demo` retains the synthetic demonstration. Incoming revision comparison and the complete continuity cycle remain unfinished.
+> **Self-hosted team edition in development.** Install the team stack, provision a named account and connect your repository using the [self-host guide](self-host/README.md). The [release tasks](openspec/changes/deliver-self-hosted-team-workflow/tasks.md) track operational readiness.
 
 ## Overview
 
@@ -66,7 +66,7 @@ The project supports the thesis's development and evaluation work. It remains a 
 
 Implementation began on 2026-11-13. The normal React/Vite frontend now connects to FastAPI/PostgreSQL for named-account sessions, exact snapshot/source/evidence reads, judgments, history, follow-up work and authored record capture. Synthetic browser state is isolated behind `?mode=demo`. See the [local frontend guide](services/api/FRONTEND.md) for login, startup commands, observed browser evidence and remaining UI limits.
 
-The complete continuity cycle still requires selected Git revision comparisons, incoming revalidation, complete server knowledge-access/completion/export operations and the remaining authoring forms. Remaining work is tracked in the [implementation tasks](openspec/changes/establish-versioned-continuity-core/tasks.md).
+The service supports revision comparison, incoming revalidation, earlier decisions, search and snapshot export. Developer release work focuses on reliable repository import, repeat reviews, team permissions and operating an instance across upgrades. See the [continuity service notes](services/api/CONTINUITY.md) and [self-host guide](self-host/README.md).
 
 Healthchecks is the accepted demonstration input, with Python and Markdown/plain-text documents at file scope. Its [bounded input package](openspec/changes/establish-versioned-continuity-core/healthchecks-input-proposal.md) and separate frozen discovery profile were accepted; eighteen declared blobs have been acquired and verified. Scoped processing tests use those real bytes with isolated synthetic service users. This does not establish a completed demonstration, full-project coverage or semantic discovery accuracy.
 

@@ -6,6 +6,7 @@ import uuid
 from fastapi import HTTPException
 import redis
 import rq
+from rq.timeouts import TimerDeathPenalty
 
 from sqlalchemy import and_, or_, select, text
 from sqlalchemy.exc import SQLAlchemyError
@@ -17,8 +18,9 @@ from .discovery import discover
 from .local_repo import load_any_sources
 from .models import (Account, Artifact, ArtifactVersion, Assertion, AssertionRevision,
                      Evidence, Grant, Repository, ReviewContext)
-from .pipeline import make_snapshot, registered_inputs, stable
+from .pipeline import admit, make_snapshot, registered_inputs, stable
 from .pipeline_models import Activity, EvidenceOrigin, Operation, RevisionOrigin, Selection, SelectionArtifact, SelectionContext
+from .schemas import Envelope
 from .security import utc
 
 
@@ -97,12 +99,19 @@ def provenance(operation, method, input_ids):
             "recordedAt": utc(), "limitations": ["Processing provenance does not confirm semantic correctness."]}
 
 
-def publish_capture(db, operation, selection, sources):
+def publish_capture(db, operation, selection, sources, inventory):
     result = []
     activity = provenance(operation, "immutable-file-capture-v1", [])
     activity["configurationId"] = selection.configuration_id
-    activity["sourceObjects"] = [{"commitId": source.commit, "blobId": source.blob, "path": source.path,
-                                   "contentSha256": source.digest} for source in sources]
+    if len(sources) <= 25:
+        activity["sourceObjects"] = [{"commitId": source.commit, "blobId": source.blob, "path": source.path,
+                                       "contentSha256": source.digest} for source in sources]
+        embedded_provenance = activity
+    else:
+        activity["sourceObjectCount"] = len(sources)
+        activity["sourceObjects"] = [{"commitId": source.commit, "blobId": source.blob, "path": source.path,
+                                       "contentSha256": source.digest} for source in sources[:25]]
+        embedded_provenance = {k: v for k, v in activity.items() if k != "sourceObjects"}
     db.add(Activity(id=operation.id, repository_id=selection.repository_id, document=activity))
     db.flush()
     staged_artifacts, staged_versions, artifact_entries = {}, {}, []
@@ -113,7 +122,7 @@ def publish_capture(db, operation, selection, sources):
         staged_versions[version_id] = (source, ArtifactVersion(id=version_id, artifact_id=artifact_id, repository_id=selection.repository_id,
             identity={"kind": "file", "repositoryId": selection.repository_id, "path": source.path,
                       "commit": {"objectAlgorithm": "sha1", "commitId": source.commit}, "blobId": source.blob,
-                      "format": source.format, "provenance": activity}, content=source.text, digest=source.digest))
+                      "format": source.format, "provenance": embedded_provenance}, content=source.text, digest=source.digest))
         artifact_entries.append((source, artifact_id, version_id))
     existing_artifacts = set(db.scalars(select(Artifact.id).where(Artifact.id.in_(staged_artifacts)))) if staged_artifacts else set()
     db.add_all([row for identity, row in staged_artifacts.items() if identity not in existing_artifacts])
@@ -135,10 +144,11 @@ def publish_capture(db, operation, selection, sources):
     for source, artifact_id, version_id in artifact_entries:
         result.append({"path": source.path, "artifactId": artifact_id, "artifactVersionId": version_id,
                        "outcome": "captured", "coverage": [{"function": "ingestion", "status": "complete", "eligibleCount": 1,
-                       "processedCount": 1, "excludedCount": 0, "limitations": []}], "provenance": activity, "reason": None})
+                       "processedCount": 1, "excludedCount": 0, "limitations": []}], "provenance": embedded_provenance, "reason": None})
     operation.result_items = result
     operation.coverage = [{"function": "ingestion", "status": "complete", "eligibleCount": len(sources),
-                           "processedCount": len(sources), "excludedCount": 0, "limitations": ["Only the accepted file inventory was captured."]}]
+                           "processedCount": len(sources), "excludedCount": len(inventory.get("excluded", [])),
+                           "limitations": ["Only the accepted file inventory was captured."]}]
     operation.limitations = ["Capture does not establish identifier extraction or relationship discovery."]
     operation.status = "complete"
 
@@ -147,7 +157,10 @@ def publish_discovery(db, operation, selection, generated):
     versions = list(db.scalars(select(ArtifactVersion).join(SelectionArtifact, SelectionArtifact.version_id == ArtifactVersion.id)
                                .where(SelectionArtifact.selection_id == selection.id)))
     by_path = {version.identity["path"]: version for version in versions}
-    activity = provenance(operation, generated["methodId"], [version.id for version in versions])
+    all_vids = sorted({version.id for version in versions})
+    activity = provenance(operation, generated["methodId"], all_vids if len(all_vids) <= 25 else all_vids[:25])
+    if len(all_vids) > 25:
+        activity["inputVersionCount"] = len(all_vids)
     activity["configurationId"] = selection.configuration_id
     db.add(Activity(id=operation.id, repository_id=selection.repository_id, document=activity))
     db.flush()
@@ -165,10 +178,11 @@ def publish_discovery(db, operation, selection, generated):
                     locator=reference["locator"], availability="available", reason=None, method_id=generated["methodId"], excerpt_digest=reference["excerptSha256"])
                 evidence_ids.add(identity)
         evidence_ids = sorted(evidence_ids)
-        assertion_id = stable(selection.repository_id, "assertion", "documents", source.artifact_id, target.artifact_id)
+        rel_type = candidate.get("type") or "documents"
+        assertion_id = stable(selection.repository_id, "assertion", rel_type, source.artifact_id, target.artifact_id)
         revision_id = stable(assertion_id, source.id, target.id, generated["profileSha256"], evidence_ids)
         context_id = stable("initial-context", selection.id, revision_id)
-        staged_assertions[assertion_id] = Assertion(id=assertion_id, repository_id=selection.repository_id, type="documents",
+        staged_assertions[assertion_id] = Assertion(id=assertion_id, repository_id=selection.repository_id, type=rel_type,
             source_artifact_id=source.artifact_id, target_artifact_id=target.artifact_id)
         endpoint = lambda version: {"artifactId": version.artifact_id, "versionId": version.id,
                                    "availability": "available", "reason": None, "priorVersionId": None}
@@ -206,6 +220,11 @@ def publish_discovery(db, operation, selection, generated):
                           {"function": "evidence", "status": generated["status"], "eligibleCount": code_count * document_count,
                            "processedCount": processed_pairs, "excludedCount": 0, "limitations": generated["limitations"]}]
     operation.limitations = generated["limitations"] + [f"Unresolved explicit paths: {len(generated['unresolvedPaths'])}."]
+    unsupported = [item["path"] for item in generated["coverage"] if item["status"] == "unsupported"]
+    if unsupported:
+        examples = ", ".join(unsupported[:3])
+        noun = "file" if len(unsupported) == 1 else "files"
+        operation.limitations.append(f"Python indexing skipped {len(unsupported)} {noun} with invalid tokens, including {examples}.")
     operation.status = "complete" if generated["status"] == "complete" else "partial"
 
 
@@ -229,7 +248,20 @@ def publish(factory, claimed, sources, generated=None):
             failed(operation, selection, repository, "Selected context changed during processing; publication was not applied.")
             return False
         if operation.kind == "capture":
-            publish_capture(db, operation, selection, sources)
+            revision = next(revision for revision in claimed["manifest"]["revisions"].values()
+                            if revision["commitId"] == claimed["commitId"])
+            publish_capture(db, operation, selection, sources, revision.get("gitInventory", {}))
+            discovery_view_id = operation.result_metadata.get("discoveryViewId")
+            if discovery_view_id:
+                # Publish the capture and admit its requested follow-up in the same transaction.
+                follow_up = admit(db, actor, repository, Envelope(
+                    schemaVersion="0.1.0", requestId=stable("after-capture", operation.id),
+                    repositoryId=repository.id, viewId=discovery_view_id, command="discover_candidates",
+                    input={"targetRevision": selection.target_revision, "inventoryId": selection.inventory_id,
+                           "configurationId": selection.configuration_id},
+                ))
+                operation.result_metadata = {**operation.result_metadata,
+                                             "discoveryOperationId": follow_up["result"]["operationId"]}
         else:
             publish_discovery(db, operation, selection, generated)
         selection.snapshot_version += 1
@@ -379,6 +411,9 @@ def run_rq_burst(factory, queue, target_job_id=None):
             connection=queue.connection,
             default_result_ttl=600,
         )
+        if threading.current_thread() is not threading.main_thread():
+            # The embedded API worker cannot install POSIX alarm handlers.
+            rq_worker.death_penalty_class = TimerDeathPenalty
         while True:
             worked = rq_worker.work(burst=True, max_jobs=1, logging_level="WARNING")
             if not worked:

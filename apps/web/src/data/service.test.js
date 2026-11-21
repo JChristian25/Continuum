@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ContinuumApi, ServiceError } from './serviceApi.js';
-import { DraftStore, draftKey, judgmentInput, chooseSelection, optionalReason, reasonLabel, allSelections, buildCompareOptions } from './serviceModel.js';
+import { DraftStore, draftKey, judgmentInput, chooseSelection, returningSelection, optionalReason, reasonLabel, allSelections, buildCompareOptions, permittedDecisions, permittedTriageDispositions, REASON_PRESETS } from './serviceModel.js';
 import { computeLineDiff } from './diff.js';
-import { rankEvidenceItems, findEnclosingStructureItem, classifyCandidateSignal, resolveEvidenceEnclosingLabel } from './evidenceSignal.js';
+import { rankEvidenceItems, findEnclosingStructureItem, classifyCandidateSignal, resolveEvidenceEnclosingLabel, analyzeRelationshipMeaning, isDependencyManifestPath } from './evidenceSignal.js';
 import { buildAuditReportMarkdown } from './auditReport.js';
 
 test('only initial candidates allow absent reason and drafts remain verbatim', () => {
@@ -41,6 +41,17 @@ test('session csrf stays in memory and commands keep their exact request identit
   assert.equal(requests[1][1].credentials, 'same-origin');
 });
 
+test('Git admission explains the capacity limit and why selected files were excluded', async () => {
+  const reject = (code, details) => new ContinuumApi(async () => new Response(
+    JSON.stringify({ error: { code, details, message: 'Request rejected.' } }), { status: 422 }));
+  const overBudget = reject('limit_exceeded', { limitName: 'maximumUniqueBlobBytes', maximum: 250 * 1048576 });
+  await assert.rejects(overBudget.createWorkspace({}), /250 MiB.*fewer commits/);
+  const empty = reject('invalid_input', { reason: 'No eligible files.', gitInventory: {
+    capturedPaths: 0, excluded: [{ path: 'logo', reason: 'binary' }],
+  } });
+  await assert.rejects(empty.addRevision('repo', {}), /No eligible files.*logo \(binary\)/);
+});
+
 test('drafts are isolated by actor, repository, commit, context and assertion revision', () => {
   const entries = new Map(); const storage = { getItem: k => entries.get(k), setItem: (k, v) => entries.set(k, v) };
   const first = new DraftStore(storage, 'alice'); const second = new DraftStore(storage, 'bob');
@@ -71,6 +82,20 @@ test('selection comes only from a granted repository with a registered profile',
   assert.equal(chooseSelection({ id: 'repo', inputs: [] }), null);
   const selected = chooseSelection({ id: 'repo', inputs: [{ id: 'accepted', profiles: [{ id: 'frozen' }], revisions: [{ commitId: 'exact', objectAlgorithm: 'sha1' }] }] });
   assert.equal(selected.targetRevision.commitId, 'exact'); assert.equal(selected.baseRevision, null);
+});
+
+test('returning developers resume an authorized revision or comparison and skip unavailable workspaces', () => {
+  const repo = { id: 'team', inputs: [{ id: 'docs', profiles: [{ id: 'lex' }],
+    revisions: ['a', 'b'].map(commitId => ({ objectAlgorithm: 'sha1', commitId })) }] };
+  const other = { ...repo, id: 'other' };
+  const empty = { id: 'empty', inputs: [{ id: 'unused', profiles: [{ id: 'lex' }], revisions: [] }] };
+  const selection = chooseSelection(repo, { targetRevision: { commitId: 'b' } });
+  const comparison = { ...selection, comparisonId: 'context', baseRevision: { objectAlgorithm: 'sha1', commitId: 'a' } };
+  assert.deepEqual(returningSelection([empty, other, repo], comparison), comparison);
+  assert.deepEqual(returningSelection([empty, other, repo], selection), selection);
+  assert.deepEqual(returningSelection([empty, other], comparison), chooseSelection(other));
+  assert.deepEqual(returningSelection([repo], { ...comparison, inventoryId: 'removed' }), chooseSelection(repo, selection));
+  assert.deepEqual(returningSelection([empty], comparison), null);
 });
 
 test('computeLineDiff extracts minimal changed hunks cleanly', () => {
@@ -263,3 +288,105 @@ test('buildCompareOptions selects settled R0->R1 comparison snapshot as default 
   assert.equal(opts.defaultBaseKey, 'snap:snap-comp-r0-r1');
   assert.ok(opts.baselineOptions.some(o => o.label === 'Revalidated R0 → R1 · bbbbbbb' && o.snapshotId === 'snap-comp-r0-r1'));
 });
+
+test('triage dispositions, rationale presets, and scoped audit report remain consistent', () => {
+  assert.deepEqual(permittedTriageDispositions({ validity: 'candidate', resolution: 'open' }), ['defer', 'screen']);
+  assert.deepEqual(permittedTriageDispositions({ validity: 'candidate', resolution: 'deferred' }), ['screen', 'restore']);
+  assert.deepEqual(permittedTriageDispositions({ validity: 'candidate', resolution: 'screened' }), ['defer', 'restore']);
+  assert.deepEqual(permittedTriageDispositions({ validity: 'confirmed', resolution: 'resolved' }), []);
+  assert.deepEqual(permittedTriageDispositions({ validity: 'stale', resolution: 'open' }), []);
+
+  assert.deepEqual(permittedDecisions({ validity: 'candidate', resolution: 'deferred' }), ['confirm', 'reject']);
+  assert.deepEqual(permittedDecisions({ validity: 'candidate', resolution: 'screened' }), ['confirm', 'reject']);
+  assert.equal(optionalReason({ projection: { kind: 'initial', comparisonId: null, validity: 'candidate', resolution: 'deferred' } }, 'confirm'), true);
+  assert.equal(optionalReason({ projection: { kind: 'initial', comparisonId: null, validity: 'stale', resolution: 'open' } }, 'reconfirm'), false);
+  assert.ok(REASON_PRESETS.confirm.length >= 2 && REASON_PRESETS.reject.length >= 2 && REASON_PRESETS.reconfirm.length >= 2 && REASON_PRESETS.retire.length >= 2);
+
+  const md = buildAuditReportMarkdown({
+    selection: { repositoryId: 'repo' },
+    state: { repositories: [{ id: 'repo', fullName: 'healthchecks/healthchecks' }] },
+    workspace: {
+      mode: 'active',
+      artifacts: [{ artifactId: 'a1' }],
+      completion: { completionScope: 'scoped_review', recordedAt: '2026-11-17T00:00:00Z', actorId: 'alice' },
+      snapshot: {
+        id: 'snap-1',
+        snapshotVersion: 2,
+        pendingReviewCount: 1,
+        openCandidateCount: 1,
+        deferredCount: 2,
+        screenedCount: 3,
+        unresolvedCandidateCount: 6,
+        openFollowUpCount: 0,
+        limitations: ['Sample disclosed limitation'],
+        coverage: [],
+        selection: { repositoryId: 'repo', targetRevision: { commitId: '0f78e110000' } },
+      },
+      followUps: [],
+    },
+    rows: [
+      {
+        id: 'c1',
+        sourcePath: 'README.md',
+        targetPath: 'hc/api/views.py',
+        assertion: { type: 'documents', methodId: 'lexical-file-v1', evidenceIds: ['e1'] },
+        projection: { validity: 'candidate', resolution: 'deferred' },
+      },
+    ],
+  });
+  assert.match(md, /Scoped review recorded — 0 confirmed, 6 unconfirmed/);
+  assert.match(md, /\| Open candidates \| 1 \|/);
+  assert.match(md, /\| Deferred candidates \(triaged\) \| 2 \|/);
+  assert.match(md, /\| Screened-out candidates \(triaged\) \| 3 \|/);
+  assert.match(md, /6 automated candidate\(s\) \(1 open, 2 deferred, 3 screened\) remain unconfirmed/);
+});
+
+test('analyzeRelationshipMeaning separates lexical evidence from semantic meaning and flags dependency manifests labeled documents', () => {
+  assert.equal(isDependencyManifestPath('requirements.txt'), true);
+  assert.equal(isDependencyManifestPath('requirements-dev.txt'), true);
+  assert.equal(isDependencyManifestPath('templates/docs/email.md'), false);
+
+  const detail = {
+    assertion: {
+      type: 'documents',
+      methodId: 'lexical-file-v1',
+      source: { artifactId: 'a-req', versionId: 'v-req' },
+      target: { artifactId: 'a-webauthn', versionId: 'v-webauthn' },
+    },
+    projection: {
+      validity: 'confirmed',
+      resolution: 'resolved',
+      effectiveJudgmentEventId: 'ev-1',
+    },
+    evidence: [
+      { id: 'e1', artifactVersionId: 'v-req', excerpt: 'fido2==2.0.0', locator: { kind: 'lines', startLine: 6, endLine: 6 } },
+      { id: 'e2', artifactVersionId: 'v-webauthn', excerpt: 'from fido2.server import Fido2Server', locator: { kind: 'lines', startLine: 8, endLine: 8 } },
+    ],
+    history: {
+      items: [{ id: 'ev-1', type: 'judgment', actorId: 'jc', reason: '', payload: { decision: 'confirm' } }],
+    },
+  };
+  const ranked = { tokenHistogram: [{ token: 'fido2', count: 2 }] };
+  const analysis = analyzeRelationshipMeaning(
+    detail,
+    { path: 'requirements.txt', kind: 'document' },
+    { path: 'hc/lib/webauthn.py', kind: 'code' },
+    ranked
+  );
+  assert.equal(analysis.evidenceBasis.kind, 'lexical');
+  assert.match(analysis.evidenceBasis.summary, /fido2/);
+  assert.equal(analysis.judgmentStatus.hasRationale, false);
+  assert.ok(analysis.mismatchWarning);
+  assert.equal(analysis.mismatchWarning.suggestedType, 'depends_on');
+  assert.match(analysis.mismatchWarning.headline, /confirmed as "documents", but evidence shows a package dependency/);
+
+  const corrected = analyzeRelationshipMeaning(
+    { ...detail, assertion: { ...detail.assertion, type: 'depends_on' } },
+    { path: 'requirements.txt', kind: 'document' },
+    { path: 'hc/lib/webauthn.py', kind: 'code' },
+    ranked
+  );
+  assert.equal(corrected.mismatchWarning, null);
+  assert.match(corrected.question, /Does requirements\.txt declare a dependency used by webauthn\.py\?/);
+});
+

@@ -166,8 +166,9 @@ def compare(db, actor, repository, envelope):
                 evidence_ids=evidence_ids, method_id='direct-path-comparison-v1', limitations=limitations, supersedes_revision_id=a['id']))
             db.flush()
             validity = 'stale' if p['validity'] in {'confirmed', 'stale'} else 'candidate'
+            incoming_resolution = p['resolution'] if validity == 'candidate' and p.get('resolution') in {'deferred', 'screened'} else 'open'
             db.add(ReviewContext(id=cid, repository_id=repository.id, assertion_revision_id=rid, kind='incoming', base_revision=before.target_revision,
-                target_revision=after.target_revision, comparison_id=identity, initial_validity=validity, validity=validity))
+                target_revision=after.target_revision, comparison_id=identity, initial_validity=validity, validity=validity, resolution=incoming_resolution))
             db.flush()
             db.add(SelectionContext(selection_id=identity, context_id=cid))
             origins.append(RevisionOrigin(revision_id=rid, activity_id=identity))

@@ -67,3 +67,21 @@ mode. Synthetic AI previews and unimplemented extensions SHALL NOT appear outsid
 - **WHEN** a user opens a snapshot artifact in Code explorer
 - **THEN** its exact captured version and identity are read from the service
 - **AND** fixture file contents are not substituted
+
+### Requirement: WEB-05 Lightweight candidate triage, per-item batch accountability, and scoped completion
+The service frontend SHALL separate lightweight candidate queue triage (`defer`, `screen`, `restore`) from accountable formal review judgments, SHALL enforce per-item evidence inspection checks in batch confirmation, and SHALL allow scoped cycle sign-off when change-triggered stale items are zero while disclosing unresolved candidates.
+
+#### Scenario: Triage a candidate without falsifying formal rejection
+- **WHEN** a reviewer defers or screens an unconfirmed candidate from the review list or inspector
+- **THEN** the UI dispatches `triage_candidate` and updates the queue state to `deferred` or `screened`
+- **AND** the item retains `validity: candidate` with no falsified rejection event
+
+#### Scenario: Confirm selected candidates in batch with per-item inspection
+- **WHEN** a reviewer opens `Review & confirm` for selected open candidates
+- **THEN** confirmation remains disabled until at least one item's evidence checkbox is checked
+- **AND** only individually checked relationships receive formal confirmation commands
+
+#### Scenario: Record scoped completion while stale reviews are zero
+- **WHEN** change-triggered stale reviews are zero and unconfirmed or triaged candidates remain
+- **THEN** `CycleActions` permits `complete_cycle` with `scope: scoped` after limitation acknowledgment
+- **AND** the completion summary, audit reports, and exports preserve unresolved candidate counts explicitly
