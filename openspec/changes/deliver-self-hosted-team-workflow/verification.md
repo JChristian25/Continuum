@@ -15,4 +15,4 @@ The run exposed a Git ownership check on a host-mounted read-only checkout and a
 
 The API image ID was `sha256:e5c919a2f81cbc0447b64a607fe7109950b2bd925d7284bbcb37e93dec8fdf71`. The web image ID was `sha256:761f5481b931873a50c4f2d9c4ca768e199eb183fdafad19f743aa4a6bd6a8b4`. Historical source SHA-256 values were `2953666baa50db56fce7008a603b36c55d6b45fec3be84da0746ed5bbf5e7351` for the email document and `51f33d5fcebdc5b59dc9fc4f3648d8e865b18f12caab39e2fc1da7f9ee2a74f3` for the SMTP command.
 
-This evidence covers a same-version restore on one physical host with the original Git checkout mounted at the same path. Full-tree import, managed remote updates, version upgrades, a separate host and independent team usage remain open in the [developer release tasks](tasks.md).
+This exercise covered a same-version restore on one physical host with the original Git checkout mounted at the same path. Subsequent [developer workflow verification](developer-workflow-verification.md) covers full-tree import, managed remote updates and browser recovery. Version upgrades, a separate host and independent team usage are tracked in the [developer release tasks](tasks.md).

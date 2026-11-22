@@ -1,4 +1,5 @@
 import base64
+from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 import json
 from pathlib import Path
@@ -7,7 +8,27 @@ import tempfile
 import pytest
 
 from continuum.acquisition import (API, WORKSPACE, AcquisitionError, acquire, blob_sha,
-                                   fetch_github, sha256)
+                                   fetch_github, sha256, write_retained)
+
+
+def test_retained_file_only_publishes_after_complete_write(monkeypatch):
+    directory = WORKSPACE / "outputs" / "acquisition-tests"
+    directory.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=directory) as temporary:
+        target = Path(temporary) / "object"
+        def interrupted_sync(_descriptor):
+            raise OSError("injected flush failure")
+
+        with monkeypatch.context() as patch:
+            patch.setattr("continuum.acquisition.os.fsync", interrupted_sync)
+            with pytest.raises(OSError, match="injected flush failure"):
+                write_retained(target, b"complete")
+        assert not list(target.parent.iterdir())
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            list(pool.map(lambda _: write_retained(target, b"complete"), range(8)))
+        with pytest.raises(AcquisitionError, match="refusing overwrite"):
+            write_retained(target, b"different")
+        assert target.read_bytes() == b"complete"
 
 
 @pytest.fixture
