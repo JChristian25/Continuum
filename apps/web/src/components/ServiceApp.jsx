@@ -562,6 +562,7 @@ function Relationships({ ctx, onSelect, heading = true }) {
   const hiddenByFilter = totalCount - rows.length;
   const selectedRows = eligibleCandidates.filter(r => selectedIds.has(r.id));
   const allEligibleSelected = eligibleCandidates.length > 0 && selectedRows.length === eligibleCandidates.length;
+  const changedPaths = new Set(ctx.workspace?.comparison?.changes.map(change => change.path) || []);
 
   const toggleSelect = id => setSelectedIds(prev => {
     const next = new Set(prev);
@@ -601,6 +602,12 @@ function Relationships({ ctx, onSelect, heading = true }) {
     const selectable = canBatch && isTriageCandidate(row);
     const evCount = row.assertion?.evidenceIds?.length || 0;
     const isStale = row.projection.validity === 'stale';
+    const changedSource = changedPaths.has(row.sourcePath);
+    const changedTarget = changedPaths.has(row.targetPath);
+    const changedEndpoint = changedSource && changedTarget ? 'Both files changed'
+      : changedSource ? 'Source file changed'
+      : changedTarget ? 'Target file changed'
+      : '';
     const sig = signalMap.get(row.id);
     const isLowSignal = row.projection.validity === 'candidate' && row.projection.resolution === 'open' && sig?.tier === 'low';
     const pairLabel = `${row.sourceLabel || row.sourcePath} to ${row.targetLabel || row.targetPath}`;
@@ -621,7 +628,7 @@ function Relationships({ ctx, onSelect, heading = true }) {
                 {row.targetLabel && row.targetLabel !== row.targetPath && <span>{row.targetPath?.startsWith('authored/') ? (ARTIFACT_KIND_LABELS[row.target?.kind] || 'Authored record') : row.targetPath}</span>}
                 {evCount > 0 && <span className="service-anchor-count" title={`${evCount} evidence anchor${evCount === 1 ? '' : 's'}`}><Link2 size={10} aria-hidden="true" />{evCount}</span>}
                 {sig && <Tooltip content={sig.reason}><span className={`service-signal-badge is-${sig.tier}`}>{sig.label}</span></Tooltip>}
-                {isStale && <span className="service-stale-cue">Changed · revalidation needed</span>}
+                {isStale && changedEndpoint && <span className="service-stale-cue">{changedEndpoint}</span>}
               </small>
             </>
           ) : (
@@ -634,7 +641,7 @@ function Relationships({ ctx, onSelect, heading = true }) {
                 <span>{row.targetLabel || row.targetPath}</span>
                 {evCount > 0 && <span className="service-anchor-count" title={`${evCount} evidence anchor${evCount === 1 ? '' : 's'}`}><Link2 size={10} aria-hidden="true" />{evCount}</span>}
                 {sig && <Tooltip content={sig.reason}><span className={`service-signal-badge is-${sig.tier}`}>{sig.label}</span></Tooltip>}
-                {isStale && <span className="service-stale-cue">Changed · revalidation needed</span>}
+                {isStale && changedEndpoint && <span className="service-stale-cue">{changedEndpoint}</span>}
               </small>
             </>
           )}
@@ -1104,14 +1111,14 @@ function Inspector({ ctx }) {
             </div>
             {decisions.includes('reconfirm') && !canReconfirmDirectly && (
               <p className="service-reconfirm-hint" role="note">
-                Direct reconfirmation requires resolvable exact-version evidence on both endpoints. Because prior line anchors are unresolved after revision changes, either <strong>Retire</strong> if obsolete or expand <strong>Correct relationship meaning or endpoints</strong> below with updated line anchors.
+                The earlier evidence could not be matched to this revision. Choose <strong>Correct this relationship</strong> to select new evidence, or <strong>Retire</strong> if the link no longer applies.
               </p>
             )}
             <div className="service-decision-toggle" role="radiogroup" aria-label="Relationship judgment">
               {decisions.map(v => {
                 const blockedReconfirm = v === 'reconfirm' && !canReconfirmDirectly;
                 const hint = blockedReconfirm
-                  ? 'Unavailable while exact-version evidence is unresolved; use Correct relationship meaning or endpoints below to update line anchors, or Retire.'
+                  ? 'Select new evidence under Correct this relationship before reconfirming.'
                   : (DECISION_HINTS[v] || v);
                 return <Tooltip key={v} content={hint}>
                   <button type="button" role="radio" aria-checked={draft.decision === v} disabled={!mutable || blockedReconfirm} className={`service-decision-btn ${draft.decision === v ? 'is-selected' : ''}`} onClick={() => ctx.updateDraft({ decision: v })}><DecisionIcon decision={v} />{v}</button>
@@ -1828,7 +1835,8 @@ function CompareDialog({ ctx, open, onOpenChange }) {
     currentSelection: ctx.selection,
     targetCommit: target,
   });
-  const [base, setBase] = useState(() => defaultBaseKey);
+  const [baseOverride, setBase] = useState(null);
+  const base = baseOverride ?? defaultBaseKey;
   const selectedBaseOpt = baselineOptions.find(o => o.key === base)
     || baselineOptions.find(o => o.key === defaultBaseKey)
     || baselineOptions[0];
@@ -1838,12 +1846,13 @@ function CompareDialog({ ctx, open, onOpenChange }) {
     : Boolean(selectedBaseOpt?.captured);
   const targetCaptured = Boolean(selectedTargetOpt?.captured);
   const comparisonReady = baseCaptured && targetCaptured;
+  const captureInProgress = ctx.workspace.progress?.operations.some(op => op.kind === 'capture' && ['queued', 'running'].includes(op.status));
   return <Dialog open={open} onOpenChange={onOpenChange}>
     <DialogContent className="service-dialog service-dialog--sticky" padded={false} showClose={false} aria-labelledby="compare-revisions-title" aria-describedby="compare-revisions-desc">
       <div className="service-dialog-head">
         <div>
           <DialogTitle id="compare-revisions-title">Compare revisions</DialogTitle>
-          <DialogDescription id="compare-revisions-desc">Compare captured file bytes between revisions. Previously confirmed relationships on changed files become stale for revalidation; unconfirmed candidates remain unconfirmed.</DialogDescription>
+          <DialogDescription id="compare-revisions-desc">Choose a baseline and an incoming revision to see which files and relationships need review.</DialogDescription>
         </div>
         <Button variant="unstyled" className="btn service-dialog-close" onClick={() => onOpenChange(false)} aria-label="Close comparison dialog"><X size={18} /></Button>
       </div>
@@ -1874,7 +1883,7 @@ function CompareDialog({ ctx, open, onOpenChange }) {
           })}</Select></label>
           {!comparisonReady && (
             <p className="service-reconfirm-hint" role="note">
-              Both baseline and target revisions must be captured first. Select an uncaptured revision in the sidebar and run <strong>Capture accepted files</strong> under Team &amp; governance.
+              {captureInProgress ? 'Capturing files. Compare will be available when both revisions are ready.' : 'Capture both revisions before comparing. Open the uncaptured revision and choose Capture accepted files.'}
             </p>
           )}
         </div>
@@ -1926,7 +1935,7 @@ function ArchitecturePipelineStrip() {
 function WorkspaceProgress({ ctx, onOpenCompare }) {
   const progress = ctx.workspace.progress;
   if (!progress) return <section className="card card--p-sm" role="status">Progress is unavailable. Refresh to read service state.</section>;
-  const labels = { sources: 'Capture or inspect sources', discovery: 'Run discovery or inspect results', review: 'Inspect suggestions', compare: 'Compare revisions', incoming: 'Revalidate affected links' };
+  const labels = { sources: 'Capture or inspect sources', discovery: 'Run discovery or inspect results', review: 'Inspect suggestions', compare: 'Choose revisions', incoming: 'Revalidate affected links' };
   const modules = { sources: progress.steps[0].state === 'complete' ? 'files' : 'governance', discovery: 'governance', review: 'changes', incoming: 'changes' };
   const activeAlerts = progress.operations.filter(o => o.status !== 'complete');
   const captureReady = progress.steps[0]?.state === 'complete';
@@ -1987,7 +1996,14 @@ function WorkspaceProgress({ ctx, onOpenCompare }) {
         {canCompareAction && (
           <Button variant="ghost" size="sm" onClick={onOpenCompare}>{labels.compare}</Button>
         )}
-        {step.action !== 'compare' && (isCurrent || ['failed', 'blocked', 'partial', 'not_started'].includes(step.state) || step.id === 'discovery' || step.id === 'sources') && <Button variant={isCurrent && step.id !== 'review' ? 'secondary' : 'ghost'} size="sm" disabled={step.id === 'revalidate' && !progress.comparisonPublished} onClick={() => { if (step.action === 'review' && progress.comparisonPublished) ctx.changeSelection(progress.baseline.selection); ctx.switchModule(modules[step.action], step.id === 'revalidate' ? { queueTab: 'attention' } : null); }}>{step.action === 'review' && progress.comparisonPublished ? 'Open baseline review' : labels[step.action]}</Button>}
+        {step.action !== 'compare' && (isCurrent || ['failed', 'blocked', 'partial', 'not_started'].includes(step.state) || step.id === 'discovery' || step.id === 'sources') && <Button variant={isCurrent && step.id !== 'review' ? 'secondary' : 'ghost'} size="sm" disabled={step.id === 'revalidate' && !progress.comparisonPublished} onClick={() => {
+          if (step.id === 'discovery' && step.state === 'complete') {
+            ctx.switchModule('coverage');
+          } else {
+            if (step.action === 'review' && progress.comparisonPublished) ctx.changeSelection(progress.baseline.selection);
+            ctx.switchModule(modules[step.action], step.id === 'revalidate' ? { queueTab: 'attention' } : null);
+          }
+        }}>{step.action === 'review' && progress.comparisonPublished ? 'Open baseline review' : step.id === 'discovery' && step.state === 'complete' ? 'View discovery coverage' : labels[step.action]}</Button>}
       </li>;
     })}</ol>
     {activeAlerts.length > 0 && <div className="service-progress-alerts">{activeAlerts.map(o => <p className="inline-notice" role="status" key={o.id}>{o.kind}: {o.status}{o.limitations.length ? ` · ${o.limitations.join(' ')}` : ''}</p>)}</div>}
@@ -2162,7 +2178,6 @@ function Content({ ctx, onOpenCompare }) {
   const codeCount = (ctx.workspace.artifacts || []).filter(a => a.kind === 'code').length;
   const recordCount = (ctx.workspace.artifacts || []).filter(a => ['requirement', 'decision'].includes(a.kind)).length;
   const ingestionReady = ctx.workspace.snapshot.coverage?.some(c => c.function === 'ingestion' && c.status === 'complete');
-  const compareReady = (ctx.workspace.progress?.capturedChoices?.length || 0) > 1;
   const stalePreviewRows = pendingRows.filter(r => r.projection.validity === 'stale');
   const highModPreviewRows = pendingRows.filter(r => r.projection.validity !== 'stale' && homeSignalMap.get(r.id)?.tier !== 'low');
   const previewRows = staleCount > 0
@@ -2219,7 +2234,6 @@ function Content({ ctx, onOpenCompare }) {
             <Button onClick={() => ctx.switchModule('files')}><FileCode2 size={15} />Explore sources</Button>
             <Button variant="secondary" onClick={() => ctx.switchModule('changes')}>Review suggestions {openCandidateCount > 0 ? `(${openCandidateCount})` : ''} <ArrowRight size={15} /></Button>
             <Button variant="ghost" onClick={() => ctx.switchModule('explore')}><Network size={15} />Explore graph</Button>
-            {compareReady && onOpenCompare && <Button variant="ghost" onClick={onOpenCompare}><GitCompare size={15} />Compare revisions</Button>}
           </>
         )}
       </div>
@@ -2309,50 +2323,43 @@ function ComparisonImpactCard({ ctx }) {
     return sa - sb;
   });
   const staleImpacts = prioritizedImpacts.filter(imp => rowsByContext.get(imp.contextId)?.projection?.validity === 'stale');
-  const candidateImpacts = prioritizedImpacts.filter(imp => rowsByContext.get(imp.contextId)?.projection?.validity !== 'stale');
-  const quickImpacts = (staleImpacts.length > 0 ? [...staleImpacts, ...candidateImpacts] : prioritizedImpacts).slice(0, 3);
+  const priorityLinks = staleImpacts.length > 0 ? staleImpacts : prioritizedImpacts;
+  const quickImpacts = priorityLinks.slice(0, 3);
 
   return (
-    <section className="inline-notice service-comparison-banner" aria-label="Change impact overview">
+    <section className="service-comparison-banner" aria-labelledby="change-impact-title">
       <div className="service-impact-head">
-        <div className="service-impact-head__left">
-          <GitCompare size={15} aria-hidden="true" />
-          <strong>{comparison.changes.length} changed paths · {comparison.impacts.length} affected relationships</strong>
-          <span className="service-commit-pill">
-            {comparison.baseRevision?.commitId?.slice(0, 7)}
-            {ctx.workspace?.revisionMeta?.base?.subject ? ` (${ctx.workspace.revisionMeta.base.subject})` : ''}
-            {' → '}
-            {comparison.targetRevision?.commitId?.slice(0, 7)}
-            {ctx.workspace?.revisionMeta?.target?.subject ? ` (${ctx.workspace.revisionMeta.target.subject})` : ''}
-          </span>
-          {staleImpacts.length > 0 && (
-            <span className="service-metric-pill is-warn"><AlertTriangle size={11} aria-hidden="true" />{staleImpacts.length} stale requiring revalidation</span>
-          )}
-          {candidateImpacts.length > 0 && (
-            <span className="service-metric-pill">{candidateImpacts.length} unconfirmed candidate{candidateImpacts.length === 1 ? '' : 's'} touched</span>
-          )}
+        <div>
+          <h2 id="change-impact-title">Change impact</h2>
+          <p>{comparison.changes.length} changed paths · {comparison.impacts.length} affected relationships
+            {staleImpacts.length > 0 && <strong> · {staleImpacts.length} need revalidation</strong>}
+          </p>
         </div>
         <div className="service-impact-head__actions">
           {staleImpacts.length > 0 && ctx.state.activeModule === 'dashboard' && (
-            <Button variant="secondary" size="xs" onClick={() => ctx.switchModule('changes', { queueTab: 'attention' })}>
-              Review stale <ArrowRight size={12} aria-hidden="true" />
+            <Button variant="primary" size="sm" onClick={() => ctx.switchModule('changes', { queueTab: 'attention' })}>
+              Review affected links <ArrowRight size={14} aria-hidden="true" />
             </Button>
           )}
           {canRenderInlineGraph && (
             <Tooltip content={graphOpen ? 'Hide inline impact graph' : 'Show affected artifact graph'}>
-              <Button variant="secondary" size="xs" onClick={() => setGraphOpen(v => !v)}>
+              <Button variant="secondary" size="sm" aria-expanded={graphOpen} onClick={() => setGraphOpen(v => !v)}>
                 <Network size={13} aria-hidden="true" />
                 {graphOpen ? 'Hide graph' : 'Impact graph'}
               </Button>
             </Tooltip>
           )}
-          <Tooltip content="Open full interactive Neo4j graph explorer">
-            <Button variant="ghost" size="xs" onClick={() => ctx.switchModule('explore')}>
-              Explore <ArrowRight size={12} aria-hidden="true" />
-            </Button>
-          </Tooltip>
         </div>
       </div>
+      <dl className="service-impact-revisions">
+        {[['Baseline', comparison.baseRevision, ctx.workspace.revisionMeta?.base],
+          ['Incoming revision', comparison.targetRevision, ctx.workspace.revisionMeta?.target]].map(([label, revision, meta]) => (
+          <div key={label}>
+            <dt>{label}</dt>
+            <dd><code>{revision.commitId.slice(0, 7)}</code>{meta?.subject && <span>{meta.subject}</span>}</dd>
+          </div>
+        ))}
+      </dl>
 
       {quickImpacts.length > 0 && (
         <div className="service-impact-strip is-compact" aria-label="Priority affected links">
@@ -2371,7 +2378,7 @@ function ComparisonImpactCard({ ctx }) {
               </Tooltip>
             );
           })}
-          {prioritizedImpacts.length > quickImpacts.length && <span className="service-impact-more">+{prioritizedImpacts.length - quickImpacts.length} more</span>}
+          {priorityLinks.length > quickImpacts.length && <span className="service-impact-more">+{priorityLinks.length - quickImpacts.length} in the review list</span>}
         </div>
       )}
 
@@ -2430,6 +2437,11 @@ export default function ServiceApp() {
   useEffect(() => { const handler = e => { if (e.key === 'Escape' && !e.defaultPrevented && !document.querySelector('[role="dialog"], [role="menu"], [role="listbox"]')) { ctx.closeModal(); ctx.closeCommandPalette(); ctx.closeInspector(); } if ((e.ctrlKey || e.metaKey) && e.key === 'k') { e.preventDefault(); ctx.openCommandPalette(); } }; window.addEventListener('keydown', handler); return () => window.removeEventListener('keydown', handler); }, [ctx]);
   if (ctx.checking) return <main className="entry-page" role="status"><div className="service-checking"><InfinityIcon size={28} /><span>Checking your session…</span></div></main>;
   if (!ctx.session) return <Login ctx={ctx} />;
+  const repository = ctx.descriptor?.repositories.find(repo => repo.id === ctx.selection?.repositoryId);
+  const canAddRevision = ctx.descriptor?.capabilities?.customWorkspaces && repository?.role === 'reviewer'
+    && repository.inputs.some(input => input.isCustom);
+  const canCompare = ctx.canWrite && new Set((ctx.workspace?.progress?.capturedChoices || [])
+    .map(choice => choice.selection.targetRevision.commitId)).size > 1;
   return <div className="service-app"><Shell {...ctx} onSwitchRepo={ctx.handleSwitchRepo} onOpenImportModal={() => ctx.switchModule('governance')} /><div className="workspace"><div className="workspace-body"><main className="canvas service-canvas" id="main-content" tabIndex={-1}>
     <header className="workspace-topline">
       <div>
@@ -2438,11 +2450,13 @@ export default function ServiceApp() {
       </div>
       <div className="service-topline-actions">
         {ctx.workspace && <>
+          {canAddRevision && <Button variant={canCompare ? 'secondary' : 'primary'} size="sm" disabled={ctx.busy}
+            onClick={() => ctx.openWorkspaceModal('add_revision')}><GitCommit size={15} aria-hidden="true" />Add revision</Button>}
           <Tooltip content="Inspect commit details or switch to a historical snapshot">
             <Button variant="secondary" size="sm" onClick={() => setSnapshotOpen(true)}><GitCommit size={14} aria-hidden="true" />Revision &amp; snapshot details</Button>
           </Tooltip>
           <Tooltip content="Compare two captured revisions with Git to view change impact">
-            <Button variant="secondary" size="sm" onClick={() => setCompareOpen(true)}><GitCompare size={14} />Compare revisions</Button>
+            <Button variant={canCompare && !ctx.workspace.comparison ? 'primary' : 'secondary'} size="sm" onClick={() => setCompareOpen(true)}><GitCompare size={14} />Compare revisions</Button>
           </Tooltip>
         </>}
         <Tooltip content="Reload latest snapshot state from PostgreSQL and Neo4j">
@@ -2450,7 +2464,7 @@ export default function ServiceApp() {
         </Tooltip>
       </div>
     </header>
-    <ComparisonImpactCard ctx={ctx} />
+    <ComparisonImpactCard key={ctx.selection?.comparisonId} ctx={ctx} />
 
     {ctx.error && <p className="inline-notice form-error" role="alert">{ctx.error}</p>}
     {ctx.notice && <div className="inline-notice service-notice-banner" role="status"><CheckCircle2 size={15} /><span>{ctx.notice}</span><button type="button" className="service-notice-dismiss" onClick={ctx.dismissNotice} aria-label="Dismiss notification"><X size={13} /></button></div>}

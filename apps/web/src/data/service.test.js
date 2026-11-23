@@ -270,7 +270,7 @@ test('buildCompareOptions selects settled R0->R1 comparison snapshot as default 
     snapshotId: 'snap-comp-r0-r1',
     selection: { repositoryId: 'r1', targetRevision: { objectAlgorithm: 'sha1', commitId: 'bbbbbbb' }, baseRevision: { objectAlgorithm: 'sha1', commitId: 'aaaaaaa' }, inventoryId: 'i1', configurationId: 'p1', comparisonId: 'comp-1' },
   };
-  const opts = buildCompareOptions({
+  const comparisonInputs = {
     revisionChoices: [
       { label: 'R0', isCustom: true, selection: r0Sel },
       { label: 'R1', isCustom: true, selection: r1Sel },
@@ -284,9 +284,13 @@ test('buildCompareOptions selects settled R0->R1 comparison snapshot as default 
     ],
     currentSelection: r2Sel,
     targetCommit: 'ccccccc',
-  });
+  };
+  const opts = buildCompareOptions(comparisonInputs);
   assert.equal(opts.defaultBaseKey, 'snap:snap-comp-r0-r1');
   assert.ok(opts.baselineOptions.some(o => o.label === 'Revalidated R0 → R1 · bbbbbbb' && o.snapshotId === 'snap-comp-r0-r1'));
+  const whileCapturing = buildCompareOptions({ ...comparisonInputs,
+    capturedChoices: comparisonInputs.capturedChoices.filter(choice => choice.snapshotId !== 'snap-r2') });
+  assert.equal(whileCapturing.defaultBaseKey, 'snap:snap-comp-r0-r1');
 });
 
 test('triage dispositions, rationale presets, and scoped audit report remain consistent', () => {

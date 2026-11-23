@@ -16,6 +16,7 @@ export default function CustomWorkspaceModal({ ctx, open, onOpenChange, mode = '
   const descriptorRepo = ctx.descriptor?.repositories?.find(r => r.id === ctx.selection?.repositoryId) || activeRepo;
   const totalRevisions = (descriptorRepo?.inputs || []).reduce((sum, inp) => sum + (inp.revisions?.length || 0), 0);
   const inputs = descriptorRepo?.inputs || [];
+  const capturedShas = new Set(isAddRevision ? inputs.flatMap(input => input.revisions.map(revision => revision.commitId)) : []);
   const gitInput = inputs.find(i => i.id === ctx.selection?.inventoryId && (i.gitRepoPath || i.gitRemoteUrl))
     || inputs.findLast(i => i.gitRepoPath || i.gitRemoteUrl);
   const defaultGitPath = gitInput?.gitRepoPath || '';
@@ -37,7 +38,7 @@ export default function CustomWorkspaceModal({ ctx, open, onOpenChange, mode = '
   const [gitRepoUrl, setGitRepoUrl] = useState(defaultGitUrl);
   const [gitBranch, setGitBranch] = useState(defaultGitUrl ? gitInput.gitBranch || '' : '');
   const [gitCommits, setGitCommits] = useState('');
-  const [gitMaxCommits, setGitMaxCommits] = useState(isAddRevision ? 1 : 4);
+  const [gitMaxCommits, setGitMaxCommits] = useState(1);
   const [gitPaths, setGitPaths] = useState('');
   const [inspectedGit, setInspectedGit] = useState(null);
   const [selectedCommitShas, setSelectedCommitShas] = useState(() => new Set());
@@ -70,11 +71,9 @@ export default function CustomWorkspaceModal({ ctx, open, onOpenChange, mode = '
       if (request !== inspection.current) return;
       setInspectedGit(res);
       if (!name.trim() && res.name) setName(res.name);
-      if (res.commits?.length) {
-        const initialShas = res.commits.slice(0, isAddRevision ? 1 : 4).map(c => c.commitId).reverse();
-        setSelectedCommitShas(new Set(initialShas));
-        setGitCommits(initialShas.join(', '));
-      }
+      const latest = res.commits?.find(commit => !capturedShas.has(commit.commitId));
+      setSelectedCommitShas(new Set(latest ? [latest.commitId] : []));
+      setGitCommits(latest?.commitId || '');
     } catch (err) {
       if (request === inspection.current) setLocalError(err.details?.reason || err.message);
     } finally {
@@ -185,6 +184,10 @@ export default function CustomWorkspaceModal({ ctx, open, onOpenChange, mode = '
 
     const commits = gitCommits.split(/[\s,]+/).map(s => s.trim()).filter(Boolean);
     const paths = gitPaths.split(/[\r\n,]+/).map(s => s.trim()).filter(Boolean);
+    if (inspectedGit && !commits.length) {
+      setLocalError('Select a commit from the list or enter its SHA under Import options.');
+      return;
+    }
 
     if (sourceMode === 'git_clone') {
       if (!gitRepoUrl.trim()) {
@@ -199,7 +202,7 @@ export default function CustomWorkspaceModal({ ctx, open, onOpenChange, mode = '
           repoUrl: gitRepoUrl.trim(),
           branch: gitBranch.trim() || null,
           commits: commits.length ? commits : null,
-          maxCommits: Number(gitMaxCommits) || 4,
+          maxCommits: Number(gitMaxCommits) || 1,
           paths: paths.length ? paths : null,
         },
       };
@@ -220,7 +223,7 @@ export default function CustomWorkspaceModal({ ctx, open, onOpenChange, mode = '
       localGit: {
         repoPath: gitRepoPath.trim(),
         commits: commits.length ? commits : null,
-        maxCommits: Number(gitMaxCommits) || 4,
+        maxCommits: Number(gitMaxCommits) || 1,
         paths: paths.length ? paths : null,
       },
     };
@@ -412,19 +415,19 @@ export default function CustomWorkspaceModal({ ctx, open, onOpenChange, mode = '
                 {inspectedGit?.commits?.length > 0 && (
                   <div className="service-git-commit-picker" aria-label="Repository commit history">
                     <div className="service-git-commit-picker__head">
-                      <strong>Repository commit log ({inspectedGit.commits.length} recent commits)</strong>
-                      <small>{selectedCommitShas.size} selected · Click commits to include</small>
+                      <strong>Choose commits to capture</strong>
+                      <small>{selectedCommitShas.size} selected · {inspectedGit.commits.length} recent commits</small>
                     </div>
                     <div className="service-git-commit-picker__list">
                       {inspectedGit.commits.map(c => {
                         const checked = selectedCommitShas.has(c.commitId);
                         return (
                           <label className={`service-git-commit-row ${checked ? 'is-checked' : ''}`} key={c.commitId}>
-                            <Checkbox checked={checked} onChange={() => toggleInspectedCommit(c.commitId)} />
+                            <Checkbox checked={checked} disabled={capturedShas.has(c.commitId)} onChange={() => toggleInspectedCommit(c.commitId)} />
                             <code className="service-commit-pill">{c.shortCommitId}</code>
                             <div className="service-git-commit-row__body">
                               <strong>{c.subject}</strong>
-                              <small>{c.authorName} · {(c.authoredAt || '').slice(0, 16).replace('T', ' ')}</small>
+                              <small>{capturedShas.has(c.commitId) ? 'Already added · ' : ''}{c.authorName} · {(c.authoredAt || '').slice(0, 16).replace('T', ' ')}</small>
                             </div>
                           </label>
                         );
@@ -433,13 +436,18 @@ export default function CustomWorkspaceModal({ ctx, open, onOpenChange, mode = '
                   </div>
                 )}
 
+                <details className="service-import-options" open={!inspectedGit}>
+                <summary>Import options</summary>
                 <div className="service-form-grid-2">
                   <label>
                     Commit SHA(s) or refs (leave blank to auto-ingest latest commits)
                     <Input
                       value={gitCommits}
                       placeholder="e.g. HEAD~3, HEAD~2, HEAD~1, HEAD or commit SHAs"
-                      onChange={e => setGitCommits(e.target.value)}
+                      onChange={e => {
+                        setGitCommits(e.target.value);
+                        setSelectedCommitShas(new Set(e.target.value.split(/[\s,]+/).filter(Boolean)));
+                      }}
                     />
                   </label>
                   <label>
@@ -462,6 +470,7 @@ export default function CustomWorkspaceModal({ ctx, open, onOpenChange, mode = '
                     onChange={e => setGitPaths(e.target.value)}
                   />
                 </label>
+                </details>
               </>
             )}
 

@@ -41,7 +41,7 @@ export function RelationshipEditor({ ctx, correction = false, successor = false,
   const source = sourceItems.find(a => a.artifactId === current.source) || sourceItems[0];
   const target = targetItems.find(a => a.artifactId === current.target) || targetItems[0];
   const eligible = ctx.canWrite && !ctx.busy && ctx.workspace.mode === 'active' && (!correction || ctx.detail.mode === 'active');
-  const title = correction ? 'Correct relationship meaning or endpoints' : successor ? 'Propose an unconfirmed successor' : 'Add a relationship';
+  const title = correction ? 'Correct this relationship' : successor ? 'Propose an unconfirmed successor' : 'Add a relationship';
   const anchoredArtifact = current.anchor === 'source' ? source : target;
   const needsLineSelection = !correction || current.newAnchor;
   const hasLineSelection = Number.isInteger(Number(current.start)) && Number(current.start) >= 1 && Number(current.end) >= Number(current.start);

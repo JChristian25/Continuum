@@ -85,12 +85,11 @@ export function buildCompareOptions({ revisionChoices = [], capturedChoices = []
   }
 
   const baselineOptions = [...comparisonOptions, ...initialOptions];
-  const capturedInitials = initialOptions.filter(o => o.captured);
-  const activeCommit = currentSelection?.targetRevision?.commitId || targetCommit;
-  const currentIdx = capturedInitials.findIndex(o => o.commitId === activeCommit);
-  const prevInitial = (currentIdx > 0
-    ? capturedInitials[currentIdx - 1]
-    : capturedInitials.find(o => o.commitId !== activeCommit)) || initialOptions[0];
+  const activeCommit = targetCommit || currentSelection?.targetRevision?.commitId;
+  const currentIdx = initialOptions.findIndex(o => o.commitId === activeCommit);
+  const prevInitial = initialOptions.slice(0, Math.max(0, currentIdx)).findLast(o => o.captured)
+    || initialOptions.find(o => o.captured && o.commitId !== activeCommit)
+    || initialOptions[0];
 
   const comparisonForPrev = prevInitial
     ? comparisonOptions.find(c => c.commitId === prevInitial.commitId)
