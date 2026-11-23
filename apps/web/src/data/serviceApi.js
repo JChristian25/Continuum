@@ -53,9 +53,17 @@ export class ContinuumApi {
     return data;
   }
 
-  async session(signal) {
+  async session(signal = AbortSignal.timeout(12000)) {
     const generation = ++this.authVersion;
-    const data = await this.request('/auth/session', { signal });
+    let data;
+    try {
+      data = await this.request('/auth/session', { signal });
+    } catch (error) {
+      if (signal?.reason?.name === 'TimeoutError') {
+        throw new ServiceError('The session check timed out. Check that the Continuum API and database are running, then reload.');
+      }
+      throw error;
+    }
     if (generation === this.authVersion) this.csrf = data.csrfToken;
     return data;
   }
