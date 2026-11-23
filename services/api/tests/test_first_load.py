@@ -64,7 +64,7 @@ def test_progress_capture_discovery_failure_and_historical_isolation(pipeline):
     assert latest(pipeline)['progress']['steps'][1]['state'] == 'running'
     assert run_operation(pipeline['db'], discovered['result']['operationId'])
     result = latest(pipeline)
-    assert result['progress']['steps'][1]['state'] == 'partial'
+    assert result['progress']['steps'][1]['state'] == 'complete'
     assert result['progress']['counts']['pending'] == result['snapshot']['pendingReviewCount']
     old = ask(pipeline, pipeline['headers'], 'read_workspace', {'snapshotId': first['snapshot']['id']})
     assert old['progress']['historical']

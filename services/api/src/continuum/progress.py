@@ -16,7 +16,8 @@ def workspace_progress(db, snapshot, selection):
     active = snapshot.snapshot_version == selection.snapshot_version
     operations = ([{'id': o.id, 'kind': o.kind, 'status': o.status, 'limitations': o.limitations}
                    for o in db.scalars(select(Operation).where(Operation.selection_id == selection.id,
-                       Operation.kind.in_(['capture', 'discovery'])))] if active else document.get('processing', []))
+                       Operation.kind.in_(['capture', 'discovery'])).order_by(Operation.published_version, Operation.id))]
+                  if active else document.get('processing', []))
     processing = [o for o in operations if o['status'] in {'queued', 'running'}]
     failures = [o for o in operations if o['status'] in {'failed', 'cancelled'}]
     pending = header['pendingReviewCount']
@@ -39,7 +40,8 @@ def workspace_progress(db, snapshot, selection):
     baseline_unresolved = sum(a['projection']['validity'] == 'candidate' and a['projection']['resolution'] in {'open', 'deferred', 'screened'} for a in baseline.document['assertions'])
     baseline_completed = completion(db, baseline)
     discovery_operations = baseline.document.get('processing', []) if comparison else operations
-    discovered = any(o['kind'] == 'discovery' and o['status'] in {'complete', 'partial'} for o in discovery_operations)
+    discovery_result = next((o for o in reversed(discovery_operations)
+                             if o['kind'] == 'discovery' and o['status'] in {'complete', 'partial'}), None)
     # Return exact captured choices, reading only the latest snapshot per distinct selection.
     choices = []
     if active:
@@ -79,11 +81,23 @@ def workspace_progress(db, snapshot, selection):
     capture_running = any(o['kind'] == 'capture' for o in processing)
     discovery_running = any(o['kind'] == 'discovery' for o in processing)
     capture_ok = captured(document)
+    if discovery_running:
+        discovery_state, discovery_notes = 'running', []
+    elif discovery_result:
+        discovery_state = discovery_result['status']
+        discovery_notes = discovery_result['limitations'] if discovery_state == 'partial' else []
+    elif not capture_ok:
+        discovery_state, discovery_notes = 'blocked', ['Capture the selected revision first.']
+    elif not active and 'processing' not in document:
+        discovery_state, discovery_notes = 'unknown', ['Discovery status was not recorded for this snapshot.']
+    elif failures:
+        discovery_state, discovery_notes = 'blocked', ['Inspect the failed operation before retrying.']
+    else:
+        discovery_state, discovery_notes = 'ready', ['Find suggested relationships for review.']
     steps = [
         step('capture', 'Capture repository snapshot', 'running' if capture_running else 'complete' if capture_ok else 'blocked' if failures else 'not_started', 'sources',
              [] if capture_ok else ['Capture the selected revision’s accepted inventory.']),
-        step('discovery', 'Discover relationships', 'running' if discovery_running else 'partial' if discovered else 'unknown' if not active and 'processing' not in document else 'blocked' if not capture_ok or failures else 'ready', 'discovery',
-             ['Baseline discovery is retained; incoming review comes from comparison. Frozen lexical scope only.'] if discovered and comparison else ['Discovery covers the frozen lexical profile only.'] if discovered else ['Capture inputs first.'] if not capture_ok else ['Run discovery or inspect processing failures.']),
+        step('discovery', 'Discover relationships', discovery_state, 'discovery', discovery_notes),
         step('review', 'Review the baseline', 'blocked' if processing and not comparison else 'complete' if baseline_completed else 'in_progress' if baseline_pending else 'ready', 'review',
              [f'{baseline_pending} candidate reviews open. Review key links or compare revisions anytime.'] if baseline_pending else ['Wait for processing to settle.'] if processing and not comparison else [] if baseline_completed else ['Acknowledge the exact limitations to record completion.']),
         step('compare', 'Compare a revision', 'complete' if comparison else 'ready' if capture_ok and choices else 'blocked', 'compare',
@@ -91,7 +105,7 @@ def workspace_progress(db, snapshot, selection):
         step('revalidate', 'Revalidate changes', 'complete' if comparison and completed else 'ready' if comparison else 'not_started', 'incoming',
              [] if comparison else ['Compare captured revisions to create the incoming queue.']),
     ]
-    current = next((s['id'] for s in steps if s['state'] != 'complete' and not (s['id'] == 'discovery' and discovered)), None)
+    current = next((s['id'] for s in steps if s['state'] != 'complete' and not (s['id'] == 'discovery' and s['state'] == 'partial')), None)
     return {'snapshotId': snapshot.id, 'snapshotVersion': snapshot.snapshot_version, 'historical': not active,
             'steps': steps, 'currentStep': current,
             'counts': {**counts, 'reviewed': reviewed, 'pending': pending, 'deferred': deferred, 'screened': screened,
