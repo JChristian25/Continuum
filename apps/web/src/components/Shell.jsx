@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Infinity as InfinityIcon, PanelLeftClose, PanelLeftOpen, Bot, Check, ChevronDown, FileCode2, FolderGit2, GitCompare, GitCommit,
   LayoutDashboard, Moon, Network, Plus, Search, Server, Shield,
@@ -26,8 +26,8 @@ const modules = [
 
 const SERVICE_NAV_GROUPS = [
   { key: 'overview', label: null, ids: ['dashboard'] },
-  { key: 'explore', label: 'Explore knowledge', ids: ['files', 'explore'] },
   { key: 'review', label: 'Changes & review', ids: ['changes', 'summary'] },
+  { key: 'explore', label: 'Explore knowledge', ids: ['files', 'explore'] },
   { key: 'system', label: 'System & access', ids: ['coverage', 'governance', 'account'] },
 ];
 
@@ -44,7 +44,8 @@ export default function Shell({
   onSwitchRepo
 }) {
   const ctx = useContinuum();
- const { openCommandPalette, serviceMode } = ctx;
+  const { openCommandPalette, serviceMode } = ctx;
+  const navRef = useRef(null);
   const [personaOpen, setPersonaOpen] = useState(false);
   const [repoOpen, setRepoOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(() => window.matchMedia('(max-width: 760px)').matches);
@@ -52,6 +53,10 @@ export default function Shell({
     document.documentElement.dataset.sidebar = collapsed ? 'collapsed' : 'expanded';
     return () => { delete document.documentElement.dataset.sidebar; };
   }, [collapsed]);
+  useEffect(() => {
+    if (!serviceMode || !window.matchMedia('(max-width: 760px)').matches) return;
+    navRef.current?.querySelector('[aria-current="page"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }, [serviceMode, state.activeModule]);
   const AccountTrigger = serviceMode ? Button : Menu.Trigger;
 
   const isMac = typeof navigator !== 'undefined' && /(Mac|iPhone|iPod|iPad)/i.test(navigator.userAgent || navigator.platform || '');
@@ -236,7 +241,7 @@ export default function Shell({
                 className="rail-popover__action"
                 onClick={() => { setRepoOpen(false); onOpenImportModal?.(); }}
               >
-                <Plus size={14} /> {serviceMode ? 'Registered inputs' : 'Import repository'}
+                <Plus size={14} /> {serviceMode ? 'Manage repository' : 'Import repository'}
               </Menu.Item>
             </div>
           </Menu.Popup></Menu.Positioner></Menu.Portal>
@@ -269,7 +274,7 @@ export default function Shell({
       </div>
 
       {/* 4. NAVIGATION LINKS */}
-      <nav className="app-rail__nav" aria-label="Continuum navigation">
+      <nav ref={navRef} className="app-rail__nav" aria-label="Continuum navigation">
         {serviceMode ? SERVICE_NAV_GROUPS.map(group => (
           <div className="app-rail__nav-group" key={group.key}>
             {group.label && <span className="app-rail__label app-rail__group-label">{group.label}</span>}

@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState, lazy, Suspense } from 'react';
 import {
   Infinity as InfinityIcon, ArrowRight, X, RefreshCw, Search, FileText, FileCode2,
   ChevronRight, ChevronDown, GitBranch, ShieldCheck, Eye, EyeOff, CheckCircle2, Copy, Check,
-  GitCompare, ListChecks, LogOut, Shield, FolderGit2, Clock, Sun, Moon,
+  GitCompare, ListChecks, LogOut, FolderGit2, Clock, Sun, Moon,
   AlertTriangle, Network, Layers, List, Link2, Sparkles, Cpu, Info, Archive, GitCommit,
   Code2, Hash, FolderPlus
 } from 'lucide-react';
@@ -16,6 +16,7 @@ import { allSelections, buildCompareOptions, contextEnvelope, permittedDecisions
 import { computeLineDiff } from '../data/diff.js';
 import { analyzeRelationshipMeaning, classifyCandidateSignal, rankEvidenceItems, resolveEvidenceEnclosingLabel } from '../data/evidenceSignal.js';
 import './service.css';
+import './service-layout.css';
 
 import { RelationshipEditor, RecordRevision, ServiceSearch, ServiceGraph, CycleActions } from './ServiceTools.jsx';
 import { buildImpactGraphData } from '../data/impactGraph.js';
@@ -85,19 +86,26 @@ function ArtifactKindIcon({ kind, size = 15, className = '' }) {
 }
 
 function Login({ ctx }) {
-  const [login, setLogin] = useState('jc');
+  const [login, setLogin] = useState('');
   const [password, setPassword] = useState('');
   const [visible, setVisible] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  return <main className="entry-page"><header className="entry-brand"><InfinityIcon size={32} strokeWidth={1.5} /><span>Continuum</span></header><div className="entry-layout">
-    <section className="entry-story"><h1>Good decisions deserve<br />a little continuity.</h1><p>Follow a change. Understand its connections. Leave the next person the context they need.</p><div className="entry-example"><span>Repository context</span><p>Exact sources. Inspectable decisions.</p><div><span>Code</span><ArrowRight size={15} /><span>Evidence</span><ArrowRight size={15} /><span>Your judgment</span></div></div><p className="entry-footnote">Your account opens the repositories granted to you.</p></section>
-    <section className="auth-panel"><h2>Welcome back to Continuum.</h2><p>Sign in to pick up the thread of your repository.</p><form className="journey-form" onSubmit={async e => { e.preventDefault(); setBusy(true); setError(''); try { await ctx.signIn(login, password); } catch (err) { setError(err.message); } finally { setPassword(''); setBusy(false); } }}>
+  return <main className="entry-page service-entry"><header className="entry-brand"><InfinityIcon size={30} strokeWidth={1.5} /><span>Continuum</span></header><div className="entry-layout">
+    <section className="auth-panel"><h1>Welcome back to Continuum.</h1><p>Sign in with the account provided by your team.</p><form className="journey-form" onSubmit={async e => { e.preventDefault(); setBusy(true); setError(''); try { await ctx.signIn(login, password); } catch (err) { setError(err.message); } finally { setPassword(''); setBusy(false); } }}>
       <div className="journey-field"><label htmlFor="service-login-username">Login</label><Input id="service-login-username" autoComplete="username" required value={login} onChange={e => setLogin(e.target.value)} placeholder="Enter your username" /></div>
       <div className="journey-field"><label htmlFor="service-login-password">Password</label><div className="password-field"><Input id="service-login-password" type={visible ? 'text' : 'password'} autoComplete="current-password" required value={password} onChange={e => setPassword(e.target.value)} placeholder="Enter your password" /><Button variant="unstyled" type="button" onClick={() => setVisible(v => !v)} aria-label={visible ? 'Hide password' : 'Show password'}>{visible ? <EyeOff size={17} /> : <Eye size={17} />}</Button></div></div>
       {(error || ctx.error) && <p className="form-error" role="alert">{error || ctx.error}</p>}
       <Button variant="unstyled" type="submit" className="btn btn--accent auth-submit" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}<ArrowRight size={16} /></Button>
-    </form><p className="auth-boundary">Accounts are provisioned by the local operator. Session access is stored in an HTTP-only cookie.</p><p className="auth-demo-link"><a className="text-link" href="?mode=demo">Explore synthetic demo workspace (?mode=demo) <ArrowRight size={13} /></a></p></section>
+    </form><p className="auth-demo-link"><a className="text-link" href="?mode=demo">Open the sample-data demo <ArrowRight size={13} aria-hidden="true" /></a></p></section>
+    <section className="service-entry-guide" aria-labelledby="entry-guide-title">
+      <h2 id="entry-guide-title">Review what changed</h2>
+      <ol>
+        <li><GitCompare size={20} aria-hidden="true" /><div><strong>Compare revisions</strong><p>See which files changed between two captured commits.</p></div></li>
+        <li><Network size={20} aria-hidden="true" /><div><strong>Trace the impact</strong><p>Find the linked docs, code and decisions that need another look.</p></div></li>
+        <li><ListChecks size={20} aria-hidden="true" /><div><strong>Record the outcome</strong><p>Save your judgment with the evidence you reviewed.</p></div></li>
+      </ol>
+    </section>
   </div></main>;
 }
 
@@ -1317,6 +1325,7 @@ function Files({ ctx }) {
   const [rangeStart, setRangeStart] = useState(1);
   const [rangeEnd, setRangeEnd] = useState(1);
   const bodyRef = useRef(null);
+  const readerRef = useRef(null);
   const activeVersionId = activeArtifact?.versionId || null;
   const selectedData = activeVersionId ? loadedByVersion[activeVersionId] : null;
   const activeBlame = activeVersionId ? blameByVersion[activeVersionId] : null;
@@ -1392,7 +1401,7 @@ function Files({ ctx }) {
 
   return <section className="service-files">
     <div className="service-filters">
-      <label className="service-search-field">Search captured paths<Input type="search" placeholder="Find any file, module, template, or authored record in this snapshot…" value={search} onChange={e => { setSearch(e.target.value); setVisibleLimit(150); }} /></label>
+      <label className="service-search-field">Find a file<Input type="search" placeholder="Search paths and record titles" value={search} onChange={e => { setSearch(e.target.value); setVisibleLimit(150); }} /></label>
       <label className="service-validity-field">Artifact kind<Select aria-label="Filter by artifact kind" value={kindFilter} onChange={e => { setKindFilter(e.target.value); setVisibleLimit(150); }}>{['all', 'code', 'document', 'requirement', 'decision'].map(k => <option key={k} value={k}>{k === 'all' ? 'All kinds' : ARTIFACT_KIND_LABELS[k]}</option>)}</Select></label>
       {topDirectories.length > 1 && (
         <label className="service-validity-field">Folder / package<Select aria-label="Filter by folder" value={dirFilter} onChange={e => { setDirFilter(e.target.value); setVisibleLimit(150); }}>
@@ -1410,7 +1419,15 @@ function Files({ ctx }) {
           const sec = a.structureSummary?.sectionCount || 0;
           const structText = sym > 0 ? `${sym} sym` : sec > 0 ? `${sec} sec` : null;
           const fmt = a.identity?.format;
-          return <Button variant="unstyled" className={`service-row service-file-row ${activeArtifact?.versionId === a.versionId ? 'is-selected' : ''}`} key={a.versionId} onClick={() => { setError(''); setRangeStart(1); setRangeEnd(1); ctx.setState(s => ({ ...s, sourceArtifactId: a.artifactId })); }}>
+          const selected = activeArtifact?.versionId === a.versionId;
+          return <Button variant="unstyled" className={`service-row service-file-row ${selected ? 'is-selected' : ''}`} aria-current={selected ? 'true' : undefined} key={a.versionId} onClick={() => {
+            setError(''); setRangeStart(1); setRangeEnd(1);
+            ctx.setState(s => ({ ...s, sourceArtifactId: a.artifactId }));
+            if (window.matchMedia('(max-width: 900px)').matches) {
+              readerRef.current?.focus();
+              readerRef.current?.scrollIntoView({ block: 'start' });
+            }
+          }}>
             <ArtifactKindIcon kind={a.kind} size={15} />
             <span><strong>{a.identity.title || a.path.split('/').at(-1)}</strong><small title={a.path}>{a.path}{structText ? ` · ${structText}` : ''}</small></span>
             <span className="service-kind-badge">{fmt || a.kind}</span>
@@ -1425,14 +1442,14 @@ function Files({ ctx }) {
         )}
         {!filteredArtifacts.length && <p className="service-padding service-empty-note">No artifacts match this filter.</p>}
       </div>
-      <div className="service-file-reader">
+      <section className="service-file-reader" ref={readerRef} tabIndex={-1} aria-label="Selected file">
         {error && <p className="inline-notice form-error" role="alert">{error}</p>}
         {selectedData ? <>
           <header className="service-file-header-card">
             <div>
               <div className="service-file-header-card__title">
                 <span className="service-kind-badge">{selectedData.identity?.format || ARTIFACT_KIND_LABELS[activeArtifact.kind] || activeArtifact.kind}</span>
-                <strong>{selectedData.identity.title || activeArtifact.path}</strong>
+                <strong>{selectedData.identity.title || activeArtifact.path.split('/').at(-1)}</strong>
               </div>
               <small className="service-id">{activeArtifact.path} · SHA-256 {(typeof selectedData.contentDigest === 'string' ? selectedData.contentDigest : selectedData.contentDigest?.value || '').slice(0, 12)}{selectedData.structure?.engine ? ` · ${selectedData.structure.engine}` : ''}</small>
             </div>
@@ -1587,8 +1604,8 @@ function Files({ ctx }) {
               </button>)}
             </div>
           </section>}
-        </> : <div className="service-reader-empty"><FileCode2 size={28} /><h2>{activeArtifact ? 'Loading captured source…' : 'Read the exact source.'}</h2><p>Select a file to inspect its captured content and revision identity.</p></div>}
-      </div>
+        </> : !error && <div className="service-reader-empty" role={activeArtifact ? 'status' : undefined}><FileCode2 size={28} /><h2>{activeArtifact ? 'Loading captured source…' : 'No captured files yet'}</h2>{!activeArtifact && <p>Capture this revision to browse its files here.</p>}</div>}
+      </section>
     </div>
     {commitInspect && <CommitDiffDialog key={`${commitInspect.commitId}:${commitInspect.path || ''}`} ctx={ctx} commitRequest={commitInspect} onClose={() => setCommitInspect(null)} />}
   </section>;
@@ -1937,7 +1954,10 @@ function WorkspaceProgress({ ctx, onOpenCompare }) {
   if (!progress) return <section className="card card--p-sm" role="status">Progress is unavailable. Refresh to read service state.</section>;
   const labels = { sources: 'Capture or inspect sources', discovery: 'Run discovery or inspect results', review: 'Inspect suggestions', compare: 'Choose revisions', incoming: 'Revalidate affected links' };
   const modules = { sources: progress.steps[0].state === 'complete' ? 'files' : 'governance', discovery: 'governance', review: 'changes', incoming: 'changes' };
-  const activeAlerts = progress.operations.filter(o => o.status !== 'complete');
+  const currentResults = new Set(progress.operations.filter(o => ['complete', 'partial'].includes(o.status)).map(o => o.kind));
+  const hasPublishedResult = op => ['failed', 'cancelled'].includes(op.status) && currentResults.has(op.kind);
+  const activeAlerts = progress.operations.filter(op => op.status !== 'complete' && !hasPublishedResult(op));
+  const otherAttempts = progress.operations.filter(hasPublishedResult);
   const captureReady = progress.steps[0]?.state === 'complete';
   const compareChoicesCount = progress.capturedChoices?.length || 0;
   return <section className="card card--p-sm service-progress" aria-label="Repository progress">
@@ -2007,6 +2027,9 @@ function WorkspaceProgress({ ctx, onOpenCompare }) {
       </li>;
     })}</ol>
     {activeAlerts.length > 0 && <div className="service-progress-alerts">{activeAlerts.map(o => <p className="inline-notice" role="status" key={o.id}>{o.kind}: {o.status}{o.limitations.length ? ` · ${o.limitations.join(' ')}` : ''}</p>)}</div>}
+    {otherAttempts.length > 0 && <Disclosure trigger="Processing attempt history" badge={otherAttempts.length} variant="subtle">
+      <ul>{otherAttempts.map(op => <li key={op.id}>{op.kind}: {op.status}. {op.limitations.join(' ')}</li>)}</ul>
+    </Disclosure>}
   </section>;
 }
 
@@ -2028,19 +2051,18 @@ function Content({ ctx, onOpenCompare }) {
   if (module === 'account') {
     const repos = ctx.descriptor?.repositories || [];
     const initials = (ctx.session.displayName || ctx.session.actorId || 'U').slice(0, 2).toUpperCase();
-    return <div className="service-account-layout">
+    return <div className="service-account-layout service-settings">
       <section className="card card--p-sm service-account-card">
         <div className="service-account-card__head">
           <span className="service-account-avatar">{initials}</span>
           <div>
             <h2>{ctx.session.displayName}</h2>
-            <p className="service-id">Named server account · {ctx.session.actorId}</p>
+            <p className="service-method">Signed in to this Continuum instance</p>
           </div>
           <Button variant="secondary" disabled={ctx.busy} onClick={ctx.signOut}><LogOut size={15} />Sign out</Button>
         </div>
         <div className="service-account-meta">
-          <div><Clock size={14} /><span>Session expires <strong>{ctx.session.absoluteExpiresAt}</strong></span></div>
-          <div><Shield size={14} /><span>Server-verified HTTP-only session cookie with actor-scoped browser drafts.</span></div>
+          <div><Clock size={14} /><span>Session expires <strong>{formatTimestamp(ctx.session.absoluteExpiresAt)}</strong></span></div>
         </div>
       </section>
       <section className="card card--p-sm service-account-card">
@@ -2049,7 +2071,7 @@ function Content({ ctx, onOpenCompare }) {
           {repos.map(repo => <div className="service-account-repo-row" key={repo.id}>
             <div>
               <strong>{repo.inputs?.[0]?.repositoryFullName || repo.name}</strong>
-              <small>{repo.inputs?.[0]?.pathCount || 0} accepted paths · {repo.inputs?.[0]?.revisions?.length || 0} registered revisions</small>
+              <small>{new Set((repo.inputs || []).flatMap(input => (input.revisions || []).map(revision => revision.commitId))).size} registered revisions</small>
             </div>
             <span className="service-breakdown-pill">{repo.role}</span>
           </div>)}
@@ -2060,14 +2082,16 @@ function Content({ ctx, onOpenCompare }) {
         <div className="service-account-card__head">
           <div>
             <h3>Appearance</h3>
-            <p className="service-method">Switch between warm paper light mode and low-glare dark mode.</p>
+            <p className="service-method">{ctx.theme === 'dark' ? 'Dark mode is active.' : 'Light mode is active.'}</p>
           </div>
           <Button variant="secondary" onClick={ctx.toggleTheme}>{ctx.theme === 'dark' ? <><Sun size={15} />Switch to Light mode</> : <><Moon size={15} />Switch to Dark mode</>}</Button>
         </div>
       </section>
       <section className="card card--p-sm service-account-card">
-        <h3>Session &amp; draft boundaries</h3>
-        <p className="service-method">Your access is checked by the service on every request. Passwords and session tokens are not stored in browser drafts.</p>
+        <Disclosure trigger="Session and draft details" variant="subtle">
+          <p className="service-method">Unsent review drafts stay in this browser under your account. The server checks repository access on every request.</p>
+          <p className="service-id">Account ID {ctx.session.actorId}</p>
+        </Disclosure>
       </section>
     </div>;
   }
@@ -2084,32 +2108,36 @@ function Content({ ctx, onOpenCompare }) {
   </section>;
   if (module === 'files') return <Files key={`${ctx.selection?.repositoryId || ''}-${ctx.selection?.targetRevision?.commitId || ''}-${ctx.workspace?.mode || ''}`} ctx={ctx} />;
   if (module === 'changes') return <Relationships ctx={ctx} />;
-  if (module === 'explore') return <><ServiceGraph key={ctx.workspace.snapshot.id} ctx={ctx} /><Relationships heading={false} ctx={ctx} /></>;
-  if (module === 'coverage') return <section className="service-coverage">
-    <div className="service-coverage-overview">
-      <div className="card card--p-sm"><strong>{ctx.workspace.artifacts.length}</strong><span>Captured artifacts</span></div>
-      <div className="card card--p-sm"><strong>{ctx.rows.length}</strong><span>Snapshot relationships</span></div>
-      <div className="card card--p-sm"><strong>{ctx.workspace.snapshot.limitations.length}</strong><span>Disclosed limits</span></div>
-      <div className="card card--p-sm"><strong className="service-cap">{ctx.workspace.mode}</strong><span>Snapshot mode</span></div>
-    </div>
-    <section className="card card--p-sm service-pipeline-card">
-      <div className="service-section-heading"><h2>Active pipeline</h2><p>Services verified in this build</p></div>
-      <ArchitecturePipelineStrip />
+  if (module === 'explore') return <>
+    <section className="service-graph-workbench" aria-label="Relationship graph">
+      <ServiceGraph key={ctx.workspace.snapshot.id} ctx={ctx} />
     </section>
-    <div className="service-section-heading"><h2>Processing coverage</h2><p>Completion applies to the accepted inventory for each function. Unsupported functions remain explicit.</p></div>
+    <Disclosure trigger={`Browse relationship list (${ctx.rows.length})`} variant="card">
+      <Relationships heading={false} ctx={ctx} />
+    </Disclosure>
+  </>;
+  if (module === 'coverage') return <section className="service-coverage">
+    <div className="service-section-heading"><div><h2>Processing coverage</h2><p>Each status describes work on the selected revision. Open a row’s scope to see what the run could process.</p></div></div>
+    {ctx.workspace.gitInventory && <div className="service-inventory-line">
+      <FolderGit2 size={18} aria-hidden="true" />
+      <strong>{ctx.workspace.gitInventory.capturedPaths} captured files</strong>
+      <span>{ctx.workspace.gitInventory.treeEntries} Git tree entries</span>
+      <span>{ctx.workspace.gitInventory.excluded.length} excluded</span>
+    </div>}
     <div className="service-coverage-table"><div className="service-coverage-heading" aria-hidden="true"><span>Function</span><span>Status</span><span>Processed / Eligible</span></div>{ctx.workspace.snapshot.coverage.map(c => <section className="service-coverage-row" key={c.function}><div><h3>{c.function.replaceAll('_', ' ')}</h3><small>{c.excludedCount ?? 'Unknown'} excluded</small></div><span className={`service-chip service-chip--${c.status}`}>{c.status}</span><span className="service-coverage-count">{c.processedCount} / {c.eligibleCount ?? 'unknown'}</span>{!!c.limitations.length && <div className="service-coverage-disclosure"><Disclosure trigger="Scope & limitations" variant="subtle"><ul>{c.limitations.map((l, i) => <li key={i}>{l}</li>)}</ul></Disclosure></div>}</section>)}</div>
     <Limitations ctx={ctx} />
+    <Disclosure trigger="Processing pipeline" variant="subtle"><ArchitecturePipelineStrip /></Disclosure>
   </section>;
   if (module === 'governance') {
     const repo = ctx.descriptor.repositories.find(r => r.id === ctx.selection.repositoryId);
     const activeInput = repo?.inputs?.find(i => i.id === ctx.selection.inventoryId);
     const isCustomRepo = repo?.inputs?.some(i => i.isCustom);
-    return <div className="service-governance-layout">
+    return <div className="service-governance-layout service-settings">
       <div className="service-governance-grid">
         <section className="card card--p-sm">
           <h2>Repository access</h2>
-          <div className="service-gov-meta"><span className="service-breakdown-pill">Current role: {repo?.role}</span><span className="service-breakdown-pill">{activeInput?.pathCount || 0} accepted paths</span></div>
-          <p>Accounts and grants are provisioned by the operator. Browser persona switching cannot change authority.</p>
+          <div className="service-gov-meta"><strong>{repo?.name}</strong><span className="service-breakdown-pill">{repo?.role}</span></div>
+          <p>Your Continuum operator manages repository access. Reviewers can capture revisions and record judgments.</p>
           {ctx.descriptor?.capabilities?.customWorkspaces && (
             <div className="service-toolbar">
               <Button variant="secondary" size="sm" disabled={ctx.busy} onClick={() => ctx.openWorkspaceModal('create')}>
@@ -2124,8 +2152,8 @@ function Content({ ctx, onOpenCompare }) {
           )}
         </section>
         <section className="card card--p-sm">
-          <h3>Registered input</h3>
-          <p>Capture and discovery use the accepted local inventory and frozen profile. Neither action acquires or executes upstream source.</p>
+          <h2>Process this revision</h2>
+          <p>Capture the {activeInput?.pathCount || 0} registered paths, then look for suggested relationships.</p>
           <div className="service-toolbar">{[['capture_files', 'Capture accepted files'], ['discover_candidates', 'Discover unconfirmed candidates']].map(([command, label]) => <Button variant="unstyled" className="btn btn--secondary" disabled={!ctx.canWrite || ctx.busy} key={command} onClick={() => ctx.submit(contextEnvelope(ctx.selection, { viewId: ctx.repositoryViewId }, command, { targetRevision: ctx.selection.targetRevision, inventoryId: ctx.selection.inventoryId, configurationId: ctx.selection.configurationId }))}>{label}</Button>)}</div>
         </section>
       </div>
@@ -2151,12 +2179,18 @@ function Content({ ctx, onOpenCompare }) {
     const followUps = ctx.workspace.followUps || [];
     const contextById = new Map(ctx.rows.map(r => [r.id, r]));
     return <>
-      <div className="service-stats service-stats--four">
-        <section className={`card card--p-sm ${staleCount > 0 ? 'service-stat-warn' : ''}`}><h2>{staleCount}</h2><p>Stale (needs revalidation)</p><small>{staleCount > 0 ? 'Requires reconfirmation or retirement' : 'No pending revalidations'}</small></section>
-        <section className="card card--p-sm"><h2>{confirmedCount}</h2><p>Confirmed relationships</p><small>{rejectedCount} rejected · {retiredCount} retired</small></section>
-        <section className="card card--p-sm"><h2>{unresolvedCand}</h2><p>Unconfirmed suggestions</p><small>{openCand} open · {deferredCand} deferred · {screenedCand} screened out</small></section>
-        <section className="card card--p-sm"><h2>{ctx.workspace.snapshot.openFollowUpCount}</h2><p>Open follow-ups</p><small>Independent corrective tasks</small></section>
-      </div>
+      <section className="service-summary-ledger" aria-labelledby="review-outcomes-title">
+        <h2 id="review-outcomes-title">Review outcomes</h2>
+        <dl>
+          <div><dt>Need revalidation</dt><dd>{staleCount}<small>{staleCount > 0 ? 'Review the changed evidence' : 'No stale links to review'}</small></dd></div>
+          <div><dt>Confirmed</dt><dd>{confirmedCount}<small>{rejectedCount} rejected · {retiredCount} retired</small></dd></div>
+          <div><dt>Unconfirmed suggestions</dt><dd>{unresolvedCand}<small>{openCand} open · {deferredCand} deferred · {screenedCand} screened out</small></dd></div>
+          <div><dt>Open follow-ups</dt><dd>{ctx.workspace.snapshot.openFollowUpCount}<small>Tracked below</small></dd></div>
+        </dl>
+        {staleCount > 0 && <Button variant="primary" size="sm" onClick={() => ctx.switchModule('changes', { queueTab: 'attention' })}>
+          Review affected links <ArrowRight size={14} aria-hidden="true" />
+        </Button>}
+      </section>
       <CycleActions key={ctx.workspace.snapshot.id} ctx={ctx} />
       <section className="card card--p-sm service-followups-panel">
         <div className="service-section-heading"><h2>Follow-up work <span>{followUps.length}</span></h2><p>Corrective work remains separate from relationship validity.</p></div>
@@ -2171,7 +2205,6 @@ function Content({ ctx, onOpenCompare }) {
     </>;
   }
   const confirmedCount = ctx.rows.filter(r => r.projection.validity === 'confirmed').length;
-  const triagedCount = ctx.rows.filter(r => ['deferred', 'screened'].includes(r.projection.resolution)).length;
   const staleCount = ctx.rows.filter(r => r.projection.validity === 'stale' && r.projection.resolution === 'open').length;
   const openCandidateCount = ctx.rows.filter(r => r.projection.validity === 'candidate' && r.projection.resolution === 'open').length;
   const docCount = (ctx.workspace.artifacts || []).filter(a => a.kind === 'document').length;
@@ -2183,17 +2216,19 @@ function Content({ ctx, onOpenCompare }) {
   const previewRows = staleCount > 0
     ? stalePreviewRows.slice(0, 4)
     : (highModPreviewRows.length > 0 ? highModPreviewRows : pendingRows).slice(0, 4);
-  const activeRepoName = ctx.state.repositories.find(r => r.id === ctx.selection.repositoryId)?.fullName || 'Repository workspace';
   const targetCommitMeta = ctx.workspace?.revisionMeta?.target;
+  const headline = !ingestionReady ? 'Capture this revision' : staleCount
+    ? `${staleCount} ${staleCount === 1 ? 'link needs' : 'links need'} revalidation` : openCandidateCount
+      ? `${openCandidateCount} ${openCandidateCount === 1 ? 'relationship' : 'relationships'} to inspect` : 'No relationship reviews pending';
 
   return <div className="service-home">
-    <section className="focus-brief service-home-brief">
-      <div className="focus-brief__context">
-        <GitBranch size={14} aria-hidden="true" />
-        <span>{activeRepoName}</span>
-        <span className="service-commit-pill">{ctx.selection?.targetRevision?.commitId?.slice(0, 7)}</span>
-        <span className="cycle-label">{ingestionReady ? `${ctx.workspace.mode} snapshot · sources captured` : `${ctx.workspace.mode} snapshot · capture needed`}</span>
-      </div>
+    <div className="service-home-workbench">
+      <section className="focus-brief service-home-brief">
+      <h2>{headline}</h2>
+      <p>{!ingestionReady ? 'Capture the files at this commit to browse sources and find related evidence.'
+        : staleCount > 0 ? 'Check whether the changed files still support the earlier judgments.'
+          : openCandidateCount > 0 ? 'Open a suggestion to inspect the evidence and decide whether the link holds.'
+            : 'Browse captured sources or add the next commit when you’re ready to compare.'}</p>
       {targetCommitMeta?.subject && (
         <div className="service-home-commit" aria-label="Active revision commit message">
           <GitCommit size={15} aria-hidden="true" />
@@ -2207,20 +2242,6 @@ function Content({ ctx, onOpenCompare }) {
           </div>
         </div>
       )}
-      <h2>
-        {!ingestionReady
-          ? 'Sources ready to capture.'
-          : staleCount > 0
-            ? 'Changes affect confirmed knowledge.'
-            : 'Repository ready to explore.'}
-      </h2>
-      <p>
-        {!ingestionReady
-          ? 'Capture the accepted repository files before exploring captured source versions or discovering relationship candidates.'
-          : staleCount > 0
-            ? `${staleCount} previously confirmed relationship${staleCount === 1 ? '' : 's'} touched changed artifacts and require revalidation against the new revision.`
-            : 'Explore captured code, documents, and authored records. Open a suggested relationship to inspect its evidence.'}
-      </p>
       <div className="focus-brief__actions">
         {!ingestionReady ? (
           <Button onClick={() => ctx.switchModule('governance')}>Capture accepted files <ArrowRight size={15} /></Button>
@@ -2231,8 +2252,8 @@ function Content({ ctx, onOpenCompare }) {
           </>
         ) : (
           <>
-            <Button onClick={() => ctx.switchModule('files')}><FileCode2 size={15} />Explore sources</Button>
-            <Button variant="secondary" onClick={() => ctx.switchModule('changes')}>Review suggestions {openCandidateCount > 0 ? `(${openCandidateCount})` : ''} <ArrowRight size={15} /></Button>
+            {openCandidateCount > 0 && <Button onClick={() => ctx.switchModule('changes', { queueTab: 'suggestions' })}>Review suggestions <ArrowRight size={15} /></Button>}
+            <Button variant={openCandidateCount > 0 ? 'secondary' : 'primary'} onClick={() => ctx.switchModule('files')}><FileCode2 size={15} />Explore sources</Button>
             <Button variant="ghost" onClick={() => ctx.switchModule('explore')}><Network size={15} />Explore graph</Button>
           </>
         )}
@@ -2242,22 +2263,14 @@ function Content({ ctx, onOpenCompare }) {
         <Tooltip content="Captured files classified as documents"><span className="service-brief-stat"><FileText size={13} aria-hidden="true" />{docCount} docs</span></Tooltip>
         {recordCount > 0 && <Tooltip content="Authored requirements and decisions"><span className="service-brief-stat"><ListChecks size={13} aria-hidden="true" />{recordCount} authored records</span></Tooltip>}
         {confirmedCount > 0 && <Tooltip content="Human-confirmed relationships"><span className="service-brief-stat"><CheckCircle2 size={13} aria-hidden="true" />{confirmedCount} confirmed</span></Tooltip>}
-        {staleCount > 0 && <Tooltip content="Change-triggered stale links requiring revalidation"><span className="service-brief-stat is-warn"><AlertTriangle size={13} aria-hidden="true" />{staleCount} stale requiring revalidation</span></Tooltip>}
-        {openCandidateCount > 0 && <Tooltip content="Optional automated or manual suggestions available for inspection"><span className="service-brief-stat"><Clock size={13} aria-hidden="true" />{openCandidateCount} suggestions available</span></Tooltip>}
-        {triagedCount > 0 && <Tooltip content="Suggestions deferred or screened out"><span className="service-brief-stat"><Layers size={13} aria-hidden="true" />{triagedCount} triaged</span></Tooltip>}
         {ctx.workspace.snapshot.openFollowUpCount > 0 && <Tooltip content="Independent corrective follow-ups"><span className="service-brief-stat"><AlertTriangle size={13} aria-hidden="true" />{ctx.workspace.snapshot.openFollowUpCount} follow-up{ctx.workspace.snapshot.openFollowUpCount === 1 ? '' : 's'}</span></Tooltip>}
       </div>
     </section>
 
-    <div className="service-home-next">
+    <section className="service-home-next" aria-labelledby="workspace-queue-title">
       <div className="service-section-heading">
         <div>
-          <h2>{staleCount > 0 ? 'Needs revalidation' : 'Notable connections to explore'}</h2>
-          <p>{staleCount > 0
-            ? 'Previously confirmed links affected by revision changes.'
-            : (previewRows.length > 0
-              ? 'Highest-signal connections appear first. You do not need to review every suggestion before exploring or comparing revisions.'
-              : 'Explore captured files or record requirements and decisions anytime.')}</p>
+          <h2 id="workspace-queue-title">Review queue</h2>
         </div>
         <Button variant="ghost" size="sm" onClick={() => ctx.switchModule('changes', staleCount > 0 ? { queueTab: 'attention' } : null)}>View all relationships <ArrowRight size={14} /></Button>
       </div>
@@ -2266,6 +2279,7 @@ function Content({ ctx, onOpenCompare }) {
         return <Button variant="unstyled" className="service-home-record" key={row.id} onClick={() => { ctx.switchModule('changes'); ctx.selectArtifact(row.id); }}><ArtifactKindIcon kind={row.source?.kind} size={17} /><span><strong>{row.sourceLabel || row.sourcePath}</strong><small className="service-row-target"><span className="service-rel-tag">{row.assertion.type}</span><ArrowRight size={11} aria-hidden="true" />{row.targetLabel || row.targetPath}{sig && <span className={`service-signal-badge is-${sig.tier}`}>{sig.label}</span>}</small></span><ValidityChip validity={row.projection.validity} /><ChevronRight size={14} /></Button>;
       })}
       {!previewRows.length && <p className="service-empty-note">{ingestionReady ? 'No open suggestions or stale links in this snapshot.' : 'Capture accepted files to populate captured artifacts and candidate links.'}</p>}
+    </section>
     </div>
 
     <WorkspaceProgress ctx={ctx} onOpenCompare={onOpenCompare} />
