@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, lazy, Suspense } from 'react';
 import {
   FileText, ChevronRight, Search, ArrowLeft, Download, CheckCircle2, Network, Plus, X, Printer, FileDown,
-  AlertTriangle, GitCompare, Layers, Clock
+  AlertTriangle, GitCompare, Layers, Clock, ArrowRight, Link2, Eye, RotateCcw
 } from 'lucide-react';
 import Tooltip from './Tooltip.jsx';
 import { Button, Input, Textarea, Select, Checkbox, Dialog, DialogContent, DialogTitle, DialogDescription, Disclosure } from './ui/index.js';
@@ -9,6 +9,9 @@ import SourceLinePicker from './SourceLinePicker.jsx';
 import { contextEnvelope, reasonLabel } from '../data/serviceModel.js';
 import { buildAuditReportMarkdown } from '../data/auditReport.js';
 import { buildImpactGraphData } from '../data/impactGraph.js';
+import { classifyCandidateSignal } from '../data/evidenceSignal.js';
+import './service-graph.css';
+
 const TraceabilityFlow = lazy(() => import('./TraceabilityFlow.jsx'));
 const relationKinds = {
   documents: [['document'], ['code']],
@@ -183,6 +186,9 @@ export function ServiceGraph({ ctx }) {
   const [loading, setLoading] = useState(false);
   const isLargeRepo = (ctx.workspace?.artifacts?.length || 0) > 25 && (ctx.rows?.length || 0) > 35;
   const [graphScope, setGraphScope] = useState(() => (isLargeRepo ? 'top' : 'all'));
+  const [validityFilter, setValidityFilter] = useState('all');
+  const [relTypeFilter, setRelTypeFilter] = useState('all');
+  const [showAllConnections, setShowAllConnections] = useState(false);
 
   useEffect(() => {
     if (!root) return;
@@ -196,41 +202,56 @@ export function ServiceGraph({ ctx }) {
     [ctx.workspace, ctx.rows]
   );
 
+  const artifactById = new Map((ctx.workspace?.artifacts || []).map(a => [a.artifactId, a]));
+  const rowByContextId = new Map((ctx.rows || []).map(r => [r.id, r]));
+  const signalByContextId = new Map((ctx.rows || []).map(r => [r.id, classifyCandidateSignal(r, ctx.rows)]));
+
   const currentVersion = new Map(ctx.workspace.artifacts.map(a => [a.artifactId, a.versionId]));
   const supersededIds = new Set(ctx.rows.filter(r => r.projection.resolution === 'superseded').map(r => r.id));
   const unresolvedRows = ctx.rows.filter(r => [r.assertion.source, r.assertion.target].some(e => (e.availability !== undefined ? e.availability !== 'available' : false) || (e.versionId !== undefined ? currentVersion.get(e.artifactId) !== e.versionId : false)));
-  const allEdges = root && result
-    ? result.edges
+
+  const enrichEdgeMeta = (contextId, fromId, toId, relType, validity) => {
+    const row = rowByContextId.get(contextId);
+    const sig = signalByContextId.get(contextId);
+    const srcArt = artifactById.get(fromId);
+    const tgtArt = artifactById.get(toId);
+    const sm = row?.signalMeta || {};
+    const evidenceCount = row?.assertion?.evidenceIds?.length || row?.evidence?.length || 0;
+    const score = (validity === 'stale' ? 500 : 0)
+      + (validity === 'confirmed' ? 400 : 0)
+      + (sm.hasExplicitPath ? 200 : 0)
+      + (sm.stemOverlap ? 80 : 0)
+      + ((sm.rareTokenCount || 0) * 15)
+      + (sm.uniqueTokenCount || 0)
+      + (sig?.tier === 'high' ? 120 : sig?.tier === 'moderate' ? 45 : 0);
+    return {
+      id: contextId,
+      from: fromId,
+      to: toId,
+      relationType: relType,
+      label: `${relType} · ${validity}`,
+      kind: validity,
+      resolution: row?.projection?.resolution || 'open',
+      impacted: impact.impactedContextIds.has(contextId) || validity === 'stale',
+      evidenceCount,
+      signalTier: sig?.tier || 'moderate',
+      signalLabel: sig?.label || 'Recorded claim',
+      signalReason: row?.priorDecision?.reason
+        ? `Prior rationale: "${row.priorDecision.reason}"`
+        : (sig?.reason || 'Inspect exact line anchors in the relationship drawer.'),
+      sourceShort: srcArt?.identity?.title || (srcArt?.path || fromId).split('/').at(-1),
+      targetShort: tgtArt?.identity?.title || (tgtArt?.path || toId).split('/').at(-1),
+      score,
+    };
+  };
+
+  const allEdges = root
+    ? (result?.edges || [])
         .filter(e => !supersededIds.has(e.contextId))
-        .map(e => ({
-          id: e.contextId,
-          from: e.sourceArtifactId,
-          to: e.targetArtifactId,
-          label: `${e.type} · ${e.validity}`,
-          kind: e.validity,
-          impacted: impact.impactedContextIds.has(e.contextId) || e.validity === 'stale',
-          score: 100,
-        }))
+        .map(e => enrichEdgeMeta(e.contextId, e.sourceArtifactId, e.targetArtifactId, e.type, e.validity))
     : ctx.rows
         .filter(r => r.projection.resolution !== 'superseded' && !unresolvedRows.includes(r))
-        .map(r => {
-          const sm = r.signalMeta || {};
-          const score = (r.projection.validity === 'stale' ? 500 : 0)
-            + (r.projection.validity === 'confirmed' ? 400 : 0)
-            + (sm.hasExplicitPath ? 200 : 0)
-            + (sm.stemOverlap ? 80 : 0)
-            + ((sm.rareTokenCount || 0) * 15)
-            + (sm.uniqueTokenCount || 0);
-          return {
-            id: r.id,
-            from: r.assertion.source.artifactId,
-            to: r.assertion.target.artifactId,
-            label: `${r.assertion.type} · ${r.projection.validity}`,
-            kind: r.projection.validity,
-            impacted: impact.impactedContextIds.has(r.id) || r.projection.validity === 'stale',
-            score,
-          };
-        });
+        .map(r => enrichEdgeMeta(r.id, r.assertion.source.artifactId, r.assertion.target.artifactId, r.assertion.type, r.projection.validity));
 
   const degreeByArtifact = new Map();
   for (const e of allEdges) {
@@ -239,7 +260,7 @@ export function ServiceGraph({ ctx }) {
   }
 
   const rawAllNodes = ctx.workspace.artifacts.filter(
-    a => !root || !result || result.nodes.some(n => n.artifactId === a.artifactId) || a.artifactId === root
+    a => !root || a.artifactId === root || result?.nodes.some(n => n.artifactId === a.artifactId)
   );
   // In large multi-hundred-file repositories, exclude isolated 0-link files from the relationship canvas
   const allNodes = (!root && ctx.workspace.artifacts.length > 25 && allEdges.length > 0)
@@ -258,16 +279,33 @@ export function ServiceGraph({ ctx }) {
 
   const impactOnly = !root && graphScope === 'impact' && impact.hasImpact;
   const topOnly = !root && graphScope === 'top' && isLargeRepo && !impactOnly;
-  const edges = impactOnly
+  const scopeEdges = impactOnly
     ? allEdges.filter(e => impact.affectedIds.has(e.from) && impact.affectedIds.has(e.to))
     : topOnly
       ? topEdges
       : allEdges;
-  const nodes = impactOnly
+  const scopeNodes = impactOnly
     ? allNodes.filter(a => impact.affectedIds.has(a.artifactId))
     : topOnly
       ? allNodes.filter(a => topNodeIds.has(a.artifactId))
       : allNodes;
+
+  const hasCustomFilter = validityFilter !== 'all' || relTypeFilter !== 'all';
+  const edges = hasCustomFilter
+    ? scopeEdges.filter(e => {
+        const matchesValidity = validityFilter === 'all' || e.kind === validityFilter;
+        const matchesType = relTypeFilter === 'all' || e.relationType === relTypeFilter;
+        return matchesValidity && matchesType;
+      })
+    : scopeEdges;
+
+  const filteredNodeIds = hasCustomFilter
+    ? new Set(edges.flatMap(e => [e.from, e.to]).concat(root ? [root] : []))
+    : null;
+
+  const nodes = hasCustomFilter
+    ? scopeNodes.filter(a => filteredNodeIds.has(a.artifactId))
+    : scopeNodes;
 
   const focusOptions = [...ctx.workspace.artifacts].sort((a, b) => {
     const da = degreeByArtifact.get(a.artifactId) || 0;
@@ -279,92 +317,311 @@ export function ServiceGraph({ ctx }) {
   const rootArtifact = root ? ctx.workspace.artifacts.find(a => a.artifactId === root) : null;
   const kindCounts = ['code', 'document', 'requirement', 'decision'].map(k => ({ kind: k, count: nodes.filter(n => n.kind === k).length })).filter(x => x.count > 0);
 
-  return <>
+  const staleEdgeCount = scopeEdges.filter(e => e.kind === 'stale').length;
+  const confirmedEdgeCount = scopeEdges.filter(e => e.kind === 'confirmed').length;
+  const candidateEdgeCount = scopeEdges.filter(e => e.kind === 'candidate').length;
+
+  const prioritizedEdges = [...edges].sort((a, b) => (b.score || 0) - (a.score || 0));
+
+  const visibleEvidenceConnections = root
+    ? (showAllConnections ? prioritizedEdges : prioritizedEdges.slice(0, 6))
+    : prioritizedEdges.slice(0, 4);
+
+  const activeContextId = ctx.state?.inspectorOpen ? ctx.state?.selectedArtifactId : null;
+  const activeInspectedEdge = activeContextId ? allEdges.find(e => e.id === activeContextId) : null;
+
+  const resetGraphFilters = () => {
+    setValidityFilter('all');
+    setRelTypeFilter('all');
+  };
+
+  return <div className="sg-shell">
     <div className="service-graph-bar">
-      <div className="service-graph-bar__info">
-        <Network size={16} aria-hidden="true" />
-        <div>
-          <strong>{rootArtifact ? `1-hop neighborhood: ${rootArtifact.identity.title || rootArtifact.path}` : (impactOnly ? 'Change impact subgraph' : topOnly ? `High-signal relationship subgraph (${nodes.length} nodes)` : 'Snapshot relationship graph')}</strong>
-          <p className="service-explore-note">
-            {rootArtifact
-              ? 'Showing direct connections. Click any connected node to re-center, or click an edge to inspect evidence.'
-              : 'Select any node on the canvas or pick an artifact to focus on its 1-hop neighborhood.'}
-          </p>
-          <div className="service-graph-legend" aria-label="Graph legend">
-            {impact.changesByArtifactId.size > 0 && (
-              <Tooltip content="Artifact modified, added, revised, or removed in the comparison">
-                <span className="service-legend-chip is-changed"><AlertTriangle size={11} aria-hidden="true" />Changed ({impact.changesByArtifactId.size})</span>
+      <div className="sg-bar-top">
+        <div className="service-graph-bar__info">
+          <Network size={16} aria-hidden="true" />
+          <div className="sg-title-block">
+            <div className="sg-title-row">
+              <strong>
+                {rootArtifact
+                  ? `1-hop neighborhood: ${rootArtifact.identity.title || rootArtifact.path}`
+                  : (impactOnly
+                    ? 'Change impact subgraph'
+                    : topOnly
+                      ? `High-signal relationship subgraph (${nodes.length} nodes)`
+                      : 'Snapshot relationship graph')}
+              </strong>
+              {rootArtifact && <span className="service-kind-badge">{rootArtifact.kind}</span>}
+            </div>
+            <p className="service-explore-note">
+              {rootArtifact
+                ? (result ? `Showing ${edges.length} direct connection${edges.length === 1 ? '' : 's'}.` : 'Direct connections are unavailable until the graph loads.')
+                : staleEdgeCount > 0
+                  ? `${staleEdgeCount} ${staleEdgeCount === 1 ? 'relationship needs' : 'relationships need'} revalidation. Open a priority link to inspect its evidence.`
+                  : 'Select an artifact to see its direct connections, or open a relationship to inspect its evidence.'}
+            </p>
+            <div className="service-graph-legend" aria-label="Graph legend">
+              {impact.changesByArtifactId.size > 0 && (
+                <Tooltip content="Artifact modified, added, revised, or removed in the comparison">
+                  <span className="service-legend-chip is-changed"><AlertTriangle size={11} aria-hidden="true" />Changed ({impact.changesByArtifactId.size})</span>
+                </Tooltip>
+              )}
+              {impact.affectedIds.size > 0 && (
+                <Tooltip content="Downstream or upstream artifact connected to a changed node">
+                  <span className="service-legend-chip is-affected"><GitCompare size={11} aria-hidden="true" />Affected ({impact.affectedIds.size})</span>
+                </Tooltip>
+              )}
+              {staleEdgeCount > 0 && (
+                <Tooltip content="Previously confirmed link requiring revalidation after revision change">
+                  <span className="service-legend-chip is-stale"><AlertTriangle size={11} aria-hidden="true" />Stale ({staleEdgeCount})</span>
+                </Tooltip>
+              )}
+              <Tooltip content="Automated or manual proposal awaiting human decision">
+                <span className="service-legend-chip is-candidate"><Clock size={11} aria-hidden="true" />Candidate ({candidateEdgeCount})</span>
               </Tooltip>
-            )}
-            {impact.affectedIds.size > 0 && (
-              <Tooltip content="Downstream or upstream artifact connected to a changed node">
-                <span className="service-legend-chip is-affected"><GitCompare size={11} aria-hidden="true" />Affected ({impact.affectedIds.size})</span>
+              <Tooltip content="Confirmed relationship backed by inspected evidence">
+                <span className="service-legend-chip is-confirmed"><CheckCircle2 size={11} aria-hidden="true" />Confirmed ({confirmedEdgeCount})</span>
               </Tooltip>
-            )}
-            <Tooltip content="Automated or manual proposal awaiting human decision">
-              <span className="service-legend-chip is-candidate"><Clock size={11} aria-hidden="true" />Candidate</span>
-            </Tooltip>
-            <Tooltip content="Confirmed relationship backed by inspected evidence">
-              <span className="service-legend-chip is-confirmed"><CheckCircle2 size={11} aria-hidden="true" />Confirmed</span>
-            </Tooltip>
+            </div>
           </div>
         </div>
+        <div className="sg-breakdown-group" aria-label="Visible graph breakdown">
+          {kindCounts.map(({ kind, count }) => <span className="service-breakdown-pill" key={kind}>{count} {kind}</span>)}
+          <span className="service-breakdown-pill">{edges.length} {edges.length === 1 ? 'link' : 'links'}</span>
+        </div>
       </div>
+
       <div className="service-graph-bar__meta">
-        <Select
-          aria-label="Focus artifact"
-          value={root || '__all__'}
-          onChange={e => {
-            const val = e.target.value;
-            setError('');
-            setResult(null);
-            setRoot(val === '__all__' ? null : val);
-          }}
-          className="service-graph-focus-select"
-        >
-          <option value="__all__">Full snapshot overview ({allNodes.length})</option>
-          {focusOptions.map(a => {
-            const deg = degreeByArtifact.get(a.artifactId) || 0;
-            return (
-              <option key={a.artifactId} value={a.artifactId}>
-                1-hop: {a.identity?.title || a.path}{deg > 0 ? ` (${deg} link${deg === 1 ? '' : 's'})` : ''}
-              </option>
-            );
-          })}
-        </Select>
-        {!root && (isLargeRepo || impact.hasImpact) && (
-          <div className="service-view-toggle" role="group" aria-label="Graph scope">
-            {isLargeRepo && (
-              <Tooltip content="Show the highest-signal connected relationships for readable overview">
-                <button type="button" className={graphScope === 'top' ? 'is-active' : ''} onClick={() => setGraphScope('top')}>
-                  Top ({topNodeIds.size})
+        <div className="sg-controls-primary">
+          <Select
+            aria-label="Focus artifact"
+            value={root || '__all__'}
+            onChange={e => {
+              const val = e.target.value;
+              setError('');
+              setResult(null);
+              setShowAllConnections(false);
+              setRoot(val === '__all__' ? null : val);
+            }}
+            className="service-graph-focus-select"
+          >
+            <option value="__all__">Snapshot overview</option>
+            {focusOptions.map(a => {
+              const deg = degreeByArtifact.get(a.artifactId) || 0;
+              return (
+                <option key={a.artifactId} value={a.artifactId}>
+                  1-hop: {a.identity?.title || a.path}{deg > 0 ? ` (${deg} link${deg === 1 ? '' : 's'})` : ''}
+                </option>
+              );
+            })}
+          </Select>
+
+          {!root && (isLargeRepo || impact.hasImpact) && (
+            <div className="service-view-toggle" role="group" aria-label="Graph scope">
+              {isLargeRepo && (
+                <Tooltip content="Show the highest-signal connected relationships for readable overview">
+                  <button type="button" className={graphScope === 'top' ? 'is-active' : ''} onClick={() => setGraphScope('top')}>
+                    Top ({topNodeIds.size})
+                  </button>
+                </Tooltip>
+              )}
+              <Tooltip content="Show all connected artifacts and links in this snapshot">
+                <button type="button" className={graphScope === 'all' ? 'is-active' : ''} onClick={() => setGraphScope('all')}>
+                  <Layers size={12} aria-hidden="true" /> All ({allNodes.length})
                 </button>
               </Tooltip>
-            )}
-            <Tooltip content="Show all connected artifacts and links in this snapshot">
-              <button type="button" className={graphScope === 'all' ? 'is-active' : ''} onClick={() => setGraphScope('all')}>
-                <Layers size={12} aria-hidden="true" /> All ({allNodes.length})
-              </button>
-            </Tooltip>
-            {impact.hasImpact && (
-              <Tooltip content="Isolate changed artifacts and impacted neighbors">
-                <button type="button" className={graphScope === 'impact' ? 'is-active' : ''} onClick={() => setGraphScope('impact')}>
-                  <AlertTriangle size={12} aria-hidden="true" /> Affected ({impact.affectedIds.size})
-                </button>
-              </Tooltip>
-            )}
-          </div>
-        )}
-        {kindCounts.map(({ kind, count }) => <span className="service-breakdown-pill" key={kind}>{count} {kind}</span>)}
-        <span className="service-breakdown-pill">{edges.length} {edges.length === 1 ? 'link' : 'links'}</span>
-        {root && <>
-          <Button variant="secondary" size="sm" onClick={() => ctx.openSource(root)}>Open source</Button>
-          <Button variant="secondary" size="sm" onClick={() => { setRoot(null); setResult(null); setError(''); }}><ArrowLeft size={13} />Show full snapshot</Button>
-        </>}
+              {impact.hasImpact && (
+                <Tooltip content="Isolate changed artifacts and impacted neighbors">
+                  <button type="button" className={graphScope === 'impact' ? 'is-active' : ''} onClick={() => setGraphScope('impact')}>
+                    <AlertTriangle size={12} aria-hidden="true" /> Affected ({impact.affectedIds.size})
+                  </button>
+                </Tooltip>
+              )}
+            </div>
+          )}
+
+          <Select
+            aria-label="Filter graph by validity"
+            value={validityFilter}
+            onChange={e => setValidityFilter(e.target.value)}
+            className="sg-filter-select"
+          >
+            <option value="all">All validities ({scopeEdges.length})</option>
+            <option value="stale">Stale ({staleEdgeCount})</option>
+            <option value="confirmed">Confirmed ({confirmedEdgeCount})</option>
+            <option value="candidate">Candidates ({candidateEdgeCount})</option>
+          </Select>
+
+          <Select
+            aria-label="Filter graph by relationship type"
+            value={relTypeFilter}
+            onChange={e => setRelTypeFilter(e.target.value)}
+            className="sg-filter-select"
+          >
+            <option value="all">All relationship types</option>
+            <option value="documents">documents</option>
+            <option value="depends_on">depends_on</option>
+            <option value="implements">implements</option>
+            <option value="motivates">motivates</option>
+          </Select>
+
+          {hasCustomFilter && (
+            <Button variant="ghost" size="sm" onClick={resetGraphFilters}>
+              <RotateCcw size={12} /> Reset filters
+            </Button>
+          )}
+        </div>
+
+        <div className="sg-controls-secondary">
+          {!root && activeInspectedEdge && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                setError('');
+                setResult(null);
+                setRoot(activeInspectedEdge.from);
+              }}
+            >
+              <Network size={13} /> Focus 1-hop for inspected link
+            </Button>
+          )}
+          {root && <>
+            <Button variant="secondary" size="sm" onClick={() => ctx.openSource(root)}>Open source</Button>
+            <Button variant="secondary" size="sm" onClick={() => { setRoot(null); setResult(null); setError(''); setShowAllConnections(false); }}><ArrowLeft size={13} />Show full snapshot</Button>
+          </>}
+        </div>
       </div>
     </div>
+
+    {prioritizedEdges.length > 0 && <Disclosure trigger={root ? 'Direct relationships' : 'Priority relationships'}
+      badge={prioritizedEdges.length} defaultOpen={staleEdgeCount > 0} variant="subtle">
+      <section
+        className={`sg-evidence-strip ${root ? 'is-focused' : ''} ${staleEdgeCount > 0 ? 'is-warn' : ''}`}
+        aria-label={root ? 'Focused 1-hop evidence connections' : 'Priority evidence connections'}
+      >
+        <div className="sg-strip-head">
+          <div className="sg-strip-title">
+            <strong>
+              {rootArtifact
+                ? `Connected evidence for ${rootArtifact.identity?.title || rootArtifact.path.split('/').at(-1)} (${prioritizedEdges.length})`
+                : staleEdgeCount > 0
+                  ? 'Priority relationships requiring evidence revalidation'
+                  : 'Priority evidence-backed connections to inspect'}
+            </strong>
+            <span>
+              {rootArtifact
+                ? 'Open any relationship in the inspector to verify exact line anchors or pivot 1-hop to a neighbor.'
+                : `Showing top ${visibleEvidenceConnections.length} of ${prioritizedEdges.length} relationships in view by review priority and signal.`}
+            </span>
+          </div>
+          {root && prioritizedEdges.length > 6 && (
+            <div className="sg-strip-actions">
+              <Button variant="ghost" size="xs" onClick={() => setShowAllConnections(v => !v)}>
+                {showAllConnections ? 'Show top 6 connections' : `Show all ${prioritizedEdges.length} connections`}
+              </Button>
+            </div>
+          )}
+        </div>
+
+        <div className="sg-conn-grid">
+          {visibleEvidenceConnections.map(edge => {
+            const isSelectedEdge = activeContextId === edge.id;
+            const neighborId = root
+              ? (edge.from === root ? edge.to : edge.from)
+              : edge.from;
+            const neighborShort = root
+              ? (edge.from === root ? edge.targetShort : edge.sourceShort)
+              : edge.sourceShort;
+            return (
+              <div
+                key={edge.id}
+                className={`sg-conn-card ${isSelectedEdge ? 'is-active' : ''} ${edge.kind === 'stale' ? 'is-stale' : ''}`}
+              >
+                <div className="sg-conn-card__top">
+                  <span className="sg-conn-type">{edge.relationType}</span>
+                  <div className="sg-conn-badges">
+                    <span className={`sg-validity-pill is-${edge.kind}`}>{edge.kind}</span>
+                  </div>
+                </div>
+
+                <div className="sg-conn-endpoints" title={`${edge.sourceShort} → ${edge.targetShort}`}>
+                  <span>{edge.sourceShort}</span>
+                  <ArrowRight size={11} aria-hidden="true" />
+                  <span>{edge.targetShort}</span>
+                </div>
+
+                <p className="sg-conn-evidence">{edge.signalReason}</p>
+
+                <div className="sg-conn-footer">
+                  <span className="sg-anchor-meta">
+                    <Link2 size={11} aria-hidden="true" />
+                    {edge.evidenceCount > 0
+                      ? `${edge.evidenceCount} anchor${edge.evidenceCount === 1 ? '' : 's'}`
+                      : edge.signalLabel}
+                  </span>
+                  <div className="sg-conn-btns">
+                    {neighborId && neighborId !== root && (
+                      <button
+                        type="button"
+                        className="sg-pivot-btn"
+                        aria-label={`Center 1-hop on ${neighborShort}`}
+                        title={`Focus 1-hop neighborhood on ${neighborShort}`}
+                        onClick={() => {
+                          setError('');
+                          setResult(null);
+                          setShowAllConnections(false);
+                          setRoot(neighborId);
+                        }}
+                      >
+                        1-hop
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="sg-evidence-btn"
+                      aria-label={`Inspect evidence for ${edge.sourceShort} to ${edge.targetShort}`}
+                      onClick={() => ctx.selectArtifact(edge.id)}
+                    >
+                      <Eye size={11} aria-hidden="true" />
+                      <span>{isSelectedEdge ? 'Inspecting' : 'Inspect evidence'}</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+    </Disclosure>}
+
     {error && <p className="inline-notice form-error" role="alert">{error}</p>}
-    <div className="service-graph">{(rootArtifact && !result && !error) ? <div className="service-graph-loading" role="status">Loading 1-hop neighborhood…</div> : <Suspense fallback={<div className="service-graph-loading" role="status">Loading graph layout…</div>}><TraceabilityFlow compact height={580} rawNodes={nodes.map(impact.enrichNode)} rawEdges={edges} onSelectNode={id => { if (id !== root) { setError(''); setResult(null); setRoot(id); } }} onSelectEdge={id => ctx.selectArtifact(id)} selectedArtifactId={root} theme={ctx.theme} /></Suspense>}</div>
+    <div className="service-graph">
+      {(rootArtifact && !result) ? (
+        !error && <div className="service-graph-loading" role="status">Loading 1-hop neighborhood…</div>
+      ) : (
+        <Suspense fallback={<div className="service-graph-loading" role="status">Loading graph layout…</div>}>
+          <TraceabilityFlow
+            compact
+            rawNodes={nodes.map(impact.enrichNode)}
+            rawEdges={edges}
+            onSelectNode={id => {
+              if (id !== root) {
+                setError('');
+                setResult(null);
+                setShowAllConnections(false);
+                setRoot(id);
+              }
+            }}
+            onSelectEdge={id => ctx.selectArtifact(id)}
+            onResetFilters={hasCustomFilter ? resetGraphFilters : null}
+            selectedArtifactId={root}
+            activeEdgeId={activeContextId}
+            theme={ctx.theme}
+          />
+        </Suspense>
+      )}
+    </div>
     {result?.nextCursor && <div className="service-toolbar"><Button variant="secondary" disabled={loading} onClick={async () => {
       const cursor = result.nextCursor; setLoading(true); setError('');
       try {
@@ -373,7 +630,7 @@ export function ServiceGraph({ ctx }) {
       } catch(e) {setError(e.message);} finally {setLoading(false);}
     }}>More neighbors</Button></div>}
     {(!root && unresolvedRows.length > 0 || (result?.unresolved?.length > 0)) && <div className="service-toolbar">{!root && unresolvedRows.map(row => <Button variant="secondary" size="sm" key={row.id} onClick={() => ctx.selectArtifact(row.id)}>Inspect unresolved or earlier-version relationship</Button>)}{result?.unresolved?.map(item => <Button variant="secondary" size="sm" key={item.contextId} onClick={() => ctx.selectArtifact(item.contextId)}>Inspect unresolved endpoint context</Button>)}</div>}
-  </>;
+  </div>;
 }
 
 function AuditReportDialog({ ctx, open, onOpenChange }) {

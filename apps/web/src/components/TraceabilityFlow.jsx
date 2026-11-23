@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ReactFlow,
   MiniMap,
@@ -14,6 +14,7 @@ import {
   Position
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import './service-graph.css';
 import ELK from 'elkjs/lib/elk.bundled.js';
 import {
   FileCode2,
@@ -24,9 +25,14 @@ import {
   Sparkles,
   AlertTriangle,
   GitCompare,
-  Clock
+  Clock,
+  ArrowRight,
+  ArrowDown,
+  Maximize2,
+  Tag,
+  Map as MapIcon,
+  RotateCcw
 } from 'lucide-react';
-import { Badge } from './ui/index.js';
 
 const elk = new ELK();
 
@@ -37,7 +43,6 @@ const CHANGE_LABELS = {
   record_modified: 'Revised',
 };
 
-// Custom Node for XYFlow
 function ArtifactFlowNode({ data }) {
   const {
     title,
@@ -45,6 +50,10 @@ function ArtifactFlowNode({ data }) {
     category,
     isSeed,
     isSelected,
+    isActiveEndpoint,
+    isNeighbor,
+    isDimmed,
+    direction = 'RIGHT',
     statusDot,
     changeKind,
     impactRole,
@@ -57,6 +66,8 @@ function ArtifactFlowNode({ data }) {
   const isChanged = Boolean(changeKind) || impactRole === 'changed';
   const isImpacted = !isChanged && impactRole === 'impacted';
   const isDeleted = changeKind === 'deleted';
+  const targetPos = direction === 'DOWN' ? Position.Top : Position.Left;
+  const sourcePos = direction === 'DOWN' ? Position.Bottom : Position.Right;
 
   const getIcon = () => {
     const className = isDeleted ? 'tf-icon-danger' : isChanged || isImpacted ? 'tf-icon-warn' : 'tf-icon-accent';
@@ -79,26 +90,27 @@ function ArtifactFlowNode({ data }) {
     }
   };
 
-  const nodeStateClass = isSelected
-    ? 'is-selected'
-    : isDeleted
-      ? 'is-deleted'
-      : isChanged
-        ? 'is-changed'
-        : isImpacted
-          ? 'is-impacted'
-          : '';
+  const nodeStateClass = [
+    isSelected ? 'is-selected' : '',
+    !isSelected && isActiveEndpoint ? 'is-active-endpoint' : '',
+    !isSelected && isDeleted ? 'is-deleted' : '',
+    !isSelected && !isDeleted && isChanged ? 'is-changed' : '',
+    !isSelected && !isDeleted && !isChanged && isImpacted ? 'is-impacted' : '',
+    isNeighbor ? 'is-neighbor' : '',
+    isDimmed ? 'is-dimmed' : '',
+  ].filter(Boolean).join(' ');
 
   const hasMiniStats = staleCount > 0 || candidateCount > 0 || confirmedCount > 0;
   const nodeTooltip = [
     sub || title,
     changeKind ? `Change: ${CHANGE_LABELS[changeKind] || changeKind}` : null,
     isImpacted ? `Affected by revision change (${impactCount} link${impactCount === 1 ? '' : 's'})` : null,
+    isSelected ? 'Focused 1-hop root (click another node to re-center)' : 'Click to focus 1-hop neighborhood',
   ].filter(Boolean).join(' · ');
 
   return (
     <div title={nodeTooltip} className={`tf-node ${nodeStateClass}`}>
-      <Handle type="target" position={Position.Left} className={`tf-handle ${isChanged || isImpacted ? 'is-warn' : ''}`} />
+      <Handle type="target" position={targetPos} className={`tf-handle ${isChanged || isImpacted ? 'is-warn' : ''}`} />
 
       <div className="tf-node__top">
         <div className="tf-node__kind">
@@ -115,10 +127,10 @@ function ArtifactFlowNode({ data }) {
             <GitCompare size={10} aria-hidden="true" />
             Affected{impactCount > 1 ? ` (${impactCount})` : ''}
           </span>
+        ) : isSelected ? (
+          <span className="tf-seed-badge">Focused</span>
         ) : isSeed ? (
-          <Badge variant="accent" size="xs" className="font-mono text-[9px] px-1.5 py-0">
-            Seed
-          </Badge>
+          <span className="tf-seed-badge">Seed</span>
         ) : null}
       </div>
 
@@ -128,18 +140,18 @@ function ArtifactFlowNode({ data }) {
       {hasMiniStats ? (
         <div className="tf-node__stats">
           {staleCount > 0 && (
-            <span className="tf-stat tf-stat--warn" title={`${staleCount} stale`}>
+            <span className="tf-stat tf-stat--warn" title={`${staleCount} stale link${staleCount === 1 ? '' : 's'} needing revalidation`}>
               <AlertTriangle size={10} aria-hidden="true" /> {staleCount}
             </span>
           )}
-          {candidateCount > 0 && (
-            <span className="tf-stat" title={`${candidateCount} candidate`}>
-              <Clock size={10} aria-hidden="true" /> {candidateCount}
+          {confirmedCount > 0 && (
+            <span className="tf-stat tf-stat--ok" title={`${confirmedCount} confirmed link${confirmedCount === 1 ? '' : 's'}`}>
+              <CheckCircle2 size={10} aria-hidden="true" /> {confirmedCount}
             </span>
           )}
-          {confirmedCount > 0 && (
-            <span className="tf-stat tf-stat--ok" title={`${confirmedCount} confirmed`}>
-              <CheckCircle2 size={10} aria-hidden="true" /> {confirmedCount}
+          {candidateCount > 0 && (
+            <span className="tf-stat" title={`${candidateCount} unconfirmed candidate${candidateCount === 1 ? '' : 's'}`}>
+              <Clock size={10} aria-hidden="true" /> {candidateCount}
             </span>
           )}
         </div>
@@ -150,7 +162,7 @@ function ArtifactFlowNode({ data }) {
         </div>
       ) : null}
 
-      <Handle type="source" position={Position.Right} className={`tf-handle ${isChanged || isImpacted ? 'is-warn' : ''}`} />
+      <Handle type="source" position={sourcePos} className={`tf-handle ${isChanged || isImpacted ? 'is-warn' : ''}`} />
     </div>
   );
 }
@@ -186,15 +198,27 @@ function RelationEdge({
       <BaseEdge id={id} path={edgePath} markerEnd={markerEnd} style={style} />
       {showLabel && (
         <EdgeLabelRenderer>
-          <div
-            className={`tf-edge-label ${data?.tone ? `is-${data.tone}` : ''}`}
+          <button
+            type="button"
+            className={`tf-edge-label ${data?.tone ? `is-${data.tone}` : ''} ${data?.isActive ? 'is-active' : ''}`}
             style={{
               transform: `translate(-50%, -50%) translate(${labelX + shiftX}px, ${labelY + shiftY}px)`,
             }}
-            title={data?.fullLabel || data?.displayLabel}
+            title={data?.fullLabel ? `${data.fullLabel} — click to inspect evidence` : data?.displayLabel}
+            onClick={e => {
+              e.stopPropagation();
+              if (data?.contextId && data?.onSelectEdge) {
+                data.onSelectEdge(data.contextId);
+              }
+            }}
           >
-            {data.displayLabel}
-          </div>
+            <span>{data.displayLabel}</span>
+            {data?.evidenceCount > 0 && (
+              <span className="tf-edge-label__anchors" title={`${data.evidenceCount} recorded evidence anchor${data.evidenceCount === 1 ? '' : 's'}`}>
+                {data.evidenceCount}
+              </span>
+            )}
+          </button>
         </EdgeLabelRenderer>
       )}
     </>
@@ -209,26 +233,37 @@ const edgeTypes = {
   relation: RelationEdge
 };
 
-function edgeVisual(edge) {
-  const isStale = edge.kind === 'stale' || edge.impacted;
+function edgeVisual(edge, isActive = false, isHovered = false, isDimmed = false) {
+  const isStale = edge.kind === 'stale';
+  const baseOpacity = isDimmed ? 0.22 : 1;
+  if (isActive) {
+    return {
+      color: isStale || edge.kind === 'candidate' ? 'var(--amber, #b45309)' : 'var(--accent)',
+      width: 3.0,
+      animated: false,
+      dasharray: isStale ? '6 3' : edge.kind === 'candidate' ? '4 3' : undefined,
+      tone: edge.kind,
+      opacity: 1,
+    };
+  }
   if (isStale) {
     return {
       color: '#d97706',
-      width: 2.4,
-      animated: true,
+      width: isHovered ? 2.8 : 2.4,
+      animated: false,
       dasharray: '6 3',
-      tone: 'warn',
-      opacity: 1,
+      tone: 'stale',
+      opacity: baseOpacity,
     };
   }
   if (edge.kind === 'candidate') {
     return {
       color: 'var(--amber, #b45309)',
-      width: 1.8,
+      width: isHovered ? 2.3 : 1.8,
       animated: false,
       dasharray: '4 3',
       tone: 'candidate',
-      opacity: 0.9,
+      opacity: isDimmed ? 0.2 : 0.9,
     };
   }
   if (edge.kind === 'rejected' || edge.kind === 'retired') {
@@ -237,17 +272,17 @@ function edgeVisual(edge) {
       width: 1.4,
       animated: false,
       dasharray: '3 3',
-      tone: 'muted',
-      opacity: 0.68,
+      tone: 'rejected',
+      opacity: isDimmed ? 0.16 : 0.68,
     };
   }
   return {
     color: edge.kind === 'decision' ? 'var(--ink)' : 'var(--accent)',
-    width: 2.1,
+    width: isHovered ? 2.6 : 2.1,
     animated: false,
     dasharray: undefined,
     tone: 'confirmed',
-    opacity: 1,
+    opacity: baseOpacity,
   };
 }
 
@@ -255,8 +290,10 @@ export default function TraceabilityFlow({
   rawNodes = [],
   rawEdges = [],
   selectedArtifactId,
+  activeEdgeId = null,
   onSelectNode,
   onSelectEdge,
+  onResetFilters = null,
   compact = false,
   height,
   showMiniMap,
@@ -266,7 +303,30 @@ export default function TraceabilityFlow({
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [layoutReady, setLayoutReady] = useState(false);
   const [rfInstance, setRfInstance] = useState(null);
+  const [direction, setDirection] = useState('RIGHT');
+  const [showAllLabels, setShowAllLabels] = useState(false);
+  const [hoveredNodeId, setHoveredNodeId] = useState(null);
+  const [miniMapOpen, setMiniMapOpen] = useState(() => {
+    if (typeof showMiniMap === 'boolean') return showMiniMap;
+    if (typeof window !== 'undefined' && window.innerWidth < 640) return false;
+    return !compact || rawNodes.length > 16;
+  });
   const containerRef = useRef(null);
+
+  const activeEdge = useMemo(
+    () => (activeEdgeId ? rawEdges.find(e => e.id === activeEdgeId) || null : null),
+    [rawEdges, activeEdgeId]
+  );
+
+  const hoveredNeighbors = useMemo(() => {
+    if (!hoveredNodeId) return null;
+    const set = new Set([hoveredNodeId]);
+    for (const e of rawEdges) {
+      if (e.from === hoveredNodeId) set.add(e.to);
+      if (e.to === hoveredNodeId) set.add(e.from);
+    }
+    return set;
+  }, [hoveredNodeId, rawEdges]);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -283,11 +343,19 @@ export default function TraceabilityFlow({
     let isCancelled = false;
 
     async function computeLayout() {
+      if (!rawNodes.length) {
+        setNodes([]);
+        setEdges([]);
+        setLayoutReady(true);
+        return;
+      }
+
+      const isDown = direction === 'DOWN';
       const baseOptions = {
         'elk.algorithm': 'layered',
-        'elk.direction': 'RIGHT',
-        'elk.spacing.nodeNode': compact ? '18' : '28',
-        'elk.layered.spacing.nodeNodeBetweenLayers': compact ? '136' : '185',
+        'elk.direction': direction,
+        'elk.spacing.nodeNode': isDown ? (compact ? '28' : '38') : (compact ? '20' : '28'),
+        'elk.layered.spacing.nodeNodeBetweenLayers': isDown ? (compact ? '104' : '136') : (compact ? '142' : '185'),
         'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF',
         'elk.layered.spacing.edgeNodeBetweenLayers': '26',
         'elk.aspectRatio': '1.85',
@@ -301,7 +369,7 @@ export default function TraceabilityFlow({
           const elkGraph = {
             id: 'root',
             layoutOptions: baseOptions,
-            children: rawNodes.map(n => ({ id: n.id, width: 214, height: 74 })),
+            children: rawNodes.map(n => ({ id: n.id, width: 214, height: 76 })),
             edges: rawEdges.map((e, idx) => ({
               id: `e-${idx}-${e.from}-${e.to}`,
               sources: [e.from],
@@ -358,7 +426,7 @@ export default function TraceabilityFlow({
 
           const colsPerRow = Math.min(4, Math.max(2, Math.ceil(Math.sqrt(clusters.length * 1.6))));
           const colGapX = 640;
-          const rowGapY = 90;
+          const rowGapY = 96;
           let rowOffsetY = 0;
 
           for (let rStart = 0; rStart < clusters.length; rStart += colsPerRow) {
@@ -366,7 +434,7 @@ export default function TraceabilityFlow({
             let maxRowHeight = 0;
             for (let cIdx = 0; cIdx < rowClusters.length; cIdx += 1) {
               const cSet = rowClusters[cIdx];
-              const subNodes = rawNodes.filter(n => cSet.has(n.id)).map(n => ({ id: n.id, width: 214, height: 74 }));
+              const subNodes = rawNodes.filter(n => cSet.has(n.id)).map(n => ({ id: n.id, width: 214, height: 76 }));
               const subEdges = rawEdges
                 .filter(e => cSet.has(e.from) && cSet.has(e.to))
                 .map((e, idx) => ({
@@ -385,7 +453,7 @@ export default function TraceabilityFlow({
               let clusterMaxY = 0;
               subLayout.children?.forEach(ch => {
                 layoutNodeMap[ch.id] = { x: ch.x + offsetX, y: ch.y + rowOffsetY };
-                clusterMaxY = Math.max(clusterMaxY, ch.y + (ch.height || 74));
+                clusterMaxY = Math.max(clusterMaxY, ch.y + (ch.height || 76));
               });
               maxRowHeight = Math.max(maxRowHeight, clusterMaxY);
             }
@@ -393,7 +461,6 @@ export default function TraceabilityFlow({
           }
         }
 
-        // Map to XYFlow nodes
         const flowNodes = rawNodes.map(n => {
           const pos = layoutNodeMap[n.id] || { x: n.x || 0, y: n.y || 0 };
           return {
@@ -402,12 +469,15 @@ export default function TraceabilityFlow({
             position: pos,
             data: {
               ...n,
-              isSelected: n.id === selectedArtifactId
+              direction,
+              isSelected: n.id === selectedArtifactId,
+              isActiveEndpoint: Boolean(activeEdge && (activeEdge.from === n.id || activeEdge.to === n.id)),
+              isNeighbor: false,
+              isDimmed: false,
             }
           };
         });
 
-        // Map to XYFlow edges with staggered non-overlapping labels
         const pairCounts = new Map();
         for (const e of rawEdges) {
           const pk = `${e.from}::${e.to}`;
@@ -416,7 +486,8 @@ export default function TraceabilityFlow({
         const pairSeen = new Map();
         const denseGraph = rawEdges.length > 8;
         const flowEdges = rawEdges.map((e, idx) => {
-          const visual = edgeVisual(e);
+          const isActive = Boolean(activeEdgeId && e.id === activeEdgeId);
+          const visual = edgeVisual(e, isActive, false, false);
           const pk = `${e.from}::${e.to}`;
           const seenIdx = pairSeen.get(pk) || 0;
           pairSeen.set(pk, seenIdx + 1);
@@ -424,13 +495,11 @@ export default function TraceabilityFlow({
           const offset = totalForPair > 1 ? 18 + (seenIdx - (totalForPair - 1) / 2) * 26 : 20;
           const lane = (idx % 3) - 1;
           const shiftX = totalForPair > 1 ? lane * 26 : ((idx % 2 === 0 ? -1 : 1) * 18);
-          const shiftY = totalForPair > 1 ? (seenIdx - (totalForPair - 1) / 2) * 20 : 0;
-          const isImportant = e.impacted || e.kind === 'stale' || e.kind === 'confirmed';
+          const shiftY = totalForPair > 1 ? (seenIdx - (totalForPair - 1) / 2) * 20 : -13;
+          const isImportant = isActive || e.impacted || e.kind === 'stale' || e.kind === 'confirmed';
           const shortType = typeof e.label === 'string' ? e.label.split(' · ')[0] : e.label;
-          const displayLabel = denseGraph && !isImportant ? shortType : e.label;
-          // In dense full-snapshot graphs (>8 links), reserve always-on labels for stale, confirmed, or impacted links;
-          // 1-hop neighborhoods and small graphs display every link label without overlap.
-          const showLabel = !denseGraph || isImportant;
+          const displayLabel = denseGraph && !isImportant && !showAllLabels ? shortType : e.label;
+          const showLabel = showAllLabels || !denseGraph || isImportant;
 
           return {
             id: `flow-e-${idx}-${e.from}-${e.to}`,
@@ -439,12 +508,16 @@ export default function TraceabilityFlow({
             type: 'relation',
             data: {
               contextId: e.id,
+              rawEdge: e,
               offset,
               labelShiftX: shiftX,
               labelShiftY: shiftY,
               displayLabel,
               fullLabel: e.label,
+              evidenceCount: e.evidenceCount || 0,
               showLabel,
+              isActive,
+              onSelectEdge,
               tone: visual.tone,
             },
             animated: visual.animated,
@@ -471,18 +544,56 @@ export default function TraceabilityFlow({
 
     computeLayout();
     return () => { isCancelled = true; };
-  }, [rawNodes, rawEdges, selectedArtifactId, compact, setNodes, setEdges]);
+  }, [rawNodes, rawEdges, selectedArtifactId, activeEdgeId, activeEdge, direction, showAllLabels, compact, onSelectEdge, setNodes, setEdges]);
 
-  // Synchronize selection state in nodes
+  // Synchronize hover, selection, and active-edge emphasis without re-running ELK layout
   useEffect(() => {
-    setNodes(prev => prev.map(n => ({
-      ...n,
-      data: {
-        ...n.data,
-        isSelected: n.id === selectedArtifactId
-      }
-    })));
-  }, [selectedArtifactId, setNodes]);
+    setNodes(prev => prev.map(n => {
+      const inHoverSet = hoveredNeighbors ? hoveredNeighbors.has(n.id) : true;
+      return {
+        ...n,
+        data: {
+          ...n.data,
+          isSelected: n.id === selectedArtifactId,
+          isActiveEndpoint: Boolean(activeEdge && (activeEdge.from === n.id || activeEdge.to === n.id)),
+          isNeighbor: Boolean(hoveredNodeId && hoveredNodeId !== n.id && inHoverSet),
+          isDimmed: Boolean(hoveredNodeId && !inHoverSet),
+        }
+      };
+    }));
+
+    const denseGraph = rawEdges.length > 8;
+    setEdges(prev => prev.map(fe => {
+      const raw = fe.data?.rawEdge;
+      if (!raw) return fe;
+      const isActive = Boolean(activeEdgeId && raw.id === activeEdgeId);
+      const isHovered = Boolean(hoveredNodeId && (raw.from === hoveredNodeId || raw.to === hoveredNodeId));
+      const isDimmed = Boolean(hoveredNodeId && !isHovered);
+      const visual = edgeVisual(raw, isActive, isHovered, isDimmed);
+      const isImportant = isActive || isHovered || raw.impacted || raw.kind === 'stale' || raw.kind === 'confirmed';
+      const showLabel = showAllLabels || !denseGraph || isImportant;
+      return {
+        ...fe,
+        animated: visual.animated,
+        data: {
+          ...fe.data,
+          isActive,
+          showLabel,
+          tone: visual.tone,
+        },
+        style: {
+          stroke: visual.color,
+          strokeWidth: visual.width,
+          strokeDasharray: visual.dasharray,
+          opacity: visual.opacity,
+        },
+        markerEnd: {
+          type: MarkerType.ArrowClosed,
+          color: visual.color,
+        },
+      };
+    }));
+  }, [selectedArtifactId, activeEdgeId, activeEdge, hoveredNodeId, hoveredNeighbors, showAllLabels, rawEdges.length, setNodes, setEdges]);
 
   useEffect(() => {
     if (!rfInstance || !layoutReady || !nodes.length) return;
@@ -490,44 +601,123 @@ export default function TraceabilityFlow({
       rfInstance.fitView({ padding: compact ? 0.1 : 0.14, maxZoom: 1.15 });
     });
     return () => cancelAnimationFrame(raf);
-  }, [rfInstance, layoutReady, compact, nodes.length, edges.length, selectedArtifactId]);
+  }, [rfInstance, layoutReady, compact, direction, nodes.length, edges.length, selectedArtifactId]);
 
   const handleNodeClick = (_, node) => {
     onSelectNode?.(node.id);
   };
 
   const containerHeight = height ?? (compact ? 560 : 740);
-  const displayMiniMap = showMiniMap ?? (!compact || rawNodes.length > 16);
 
   return (
-    <div ref={containerRef} style={{ width: '100%', height: containerHeight, borderRadius: 'var(--r-lg)', overflow: 'hidden', border: '1px solid var(--border)', position: 'relative' }}>
+    <div
+      ref={containerRef}
+      className={`tf-container ${compact ? 'tf-container--compact' : ''}`}
+      style={containerHeight ? { height: containerHeight } : undefined}
+    >
       {!layoutReady ? (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--ink-2)', fontSize: 13 }}>
+        <div className="tf-loading-state" role="status">
           Computing graph layout…
         </div>
+      ) : rawNodes.length === 0 ? (
+        <div className="tf-empty-state" role="status">
+          <strong>No artifacts or relationships in this graph filter</strong>
+          <span>Adjust the validity or relationship type filter above to view captured connections.</span>
+          {onResetFilters && (
+            <button type="button" className="sg-pivot-btn" onClick={onResetFilters}>
+              <RotateCcw size={12} aria-hidden="true" /> Reset graph filters
+            </button>
+          )}
+        </div>
       ) : (
-        <ReactFlow
-          nodes={nodes}
-          edges={edges}
-          nodeTypes={nodeTypes}
-          edgeTypes={edgeTypes}
-          onInit={setRfInstance}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          onNodeClick={handleNodeClick}
-          onEdgeClick={(_, edge) => onSelectEdge?.(edge.data?.contextId)}
-          fitView
-          fitViewOptions={{ padding: compact ? 0.1 : 0.14, maxZoom: 1.15 }}
-          minZoom={0.05}
-          maxZoom={2.0}
-        >
-          <Background color={theme === 'dark' ? '#343b32' : '#d7d3c6'} gap={16} size={1} />
-          <Controls showInteractive={false} />
-          {displayMiniMap && <MiniMap
-            nodeColor={node => (node.data?.changeKind || node.data?.impactRole === 'impacted') ? '#d97706' : 'var(--accent)'}
-            maskColor={theme === 'dark' ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.6)'}
-          />}
-        </ReactFlow>
+        <>
+          <div className="tf-hud" role="toolbar" aria-label="Graph canvas controls">
+            <div className="tf-hud-group" role="group" aria-label="Layout direction">
+              <button
+                type="button"
+                className={`tf-hud-btn ${direction === 'RIGHT' ? 'is-active' : ''}`}
+                onClick={() => setDirection('RIGHT')}
+                aria-label="Horizontal graph layout"
+                title="Left-to-right layered flow"
+              >
+                <ArrowRight size={12} aria-hidden="true" />
+                <span>L→R</span>
+              </button>
+              <button
+                type="button"
+                className={`tf-hud-btn ${direction === 'DOWN' ? 'is-active' : ''}`}
+                onClick={() => setDirection('DOWN')}
+                aria-label="Vertical graph layout"
+                title="Top-to-bottom layered flow"
+              >
+                <ArrowDown size={12} aria-hidden="true" />
+                <span>T→B</span>
+              </button>
+            </div>
+            {rawEdges.length > 8 && (
+              <div className="tf-hud-group">
+                <button
+                  type="button"
+                  className={`tf-hud-btn ${showAllLabels ? 'is-active' : ''}`}
+                  onClick={() => setShowAllLabels(v => !v)}
+                  aria-pressed={showAllLabels}
+                  aria-label="Toggle all edge labels"
+                  title={showAllLabels ? 'Showing all link labels' : 'Showing key labels (click or hover for all)'}
+                >
+                  <Tag size={12} aria-hidden="true" />
+                  <span>{showAllLabels ? 'All labels' : 'Key labels'}</span>
+                </button>
+              </div>
+            )}
+            <div className="tf-hud-group">
+              <button
+                type="button"
+                className="tf-hud-btn"
+                onClick={() => rfInstance?.fitView({ padding: compact ? 0.1 : 0.14, maxZoom: 1.15, duration: 200 })}
+                aria-label="Fit graph to canvas"
+                title="Fit graph to viewport"
+              >
+                <Maximize2 size={12} aria-hidden="true" />
+                <span>Fit</span>
+              </button>
+              <button
+                type="button"
+                className={`tf-hud-btn ${miniMapOpen ? 'is-active' : ''}`}
+                onClick={() => setMiniMapOpen(v => !v)}
+                aria-pressed={miniMapOpen}
+                aria-label="Toggle minimap"
+                title="Toggle overview minimap"
+              >
+                <MapIcon size={12} aria-hidden="true" />
+                <span>Map</span>
+              </button>
+            </div>
+          </div>
+          <ReactFlow
+            nodes={nodes}
+            edges={edges}
+            nodeTypes={nodeTypes}
+            edgeTypes={edgeTypes}
+            onInit={setRfInstance}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            onNodeClick={handleNodeClick}
+            onNodeMouseEnter={(_, node) => setHoveredNodeId(node.id)}
+            onNodeMouseLeave={() => setHoveredNodeId(null)}
+            onEdgeClick={(_, edge) => onSelectEdge?.(edge.data?.contextId)}
+            fitView
+            fitViewOptions={{ padding: compact ? 0.1 : 0.14, maxZoom: 1.15 }}
+            minZoom={0.05}
+            maxZoom={2.0}
+          >
+            <Background color={theme === 'dark' ? '#343b32' : '#d7d3c6'} gap={16} size={1} />
+            <Controls showInteractive={false} />
+            {miniMapOpen && <MiniMap
+              nodeColor={node => (node.data?.changeKind || node.data?.impactRole === 'impacted') ? '#d97706' : 'var(--accent)'}
+              maskColor={theme === 'dark' ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.6)'}
+            />}
+          </ReactFlow>
+        </>
       )}
     </div>
   );
