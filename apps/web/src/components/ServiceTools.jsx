@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, lazy, Suspense } from 'react';
 import {
-  FileText, ChevronRight, Search, ArrowLeft, Download, CheckCircle2, Network, Plus, X, Printer, FileDown,
-  AlertTriangle, GitCompare, Layers, Clock, ArrowRight, Link2, Eye, RotateCcw
+  FileText, ChevronRight, ChevronDown, Search, ArrowLeft, Download, CheckCircle2, Network, Plus, X, Printer, FileDown,
+  AlertTriangle, GitCompare, Layers, Clock, ArrowRight, Link2, Eye, RotateCcw, SlidersHorizontal
 } from 'lucide-react';
 import Tooltip from './Tooltip.jsx';
 import { Button, Input, Textarea, Select, Checkbox, Dialog, DialogContent, DialogTitle, DialogDescription, Disclosure } from './ui/index.js';
@@ -11,6 +11,7 @@ import { buildAuditReportMarkdown } from '../data/auditReport.js';
 import { buildImpactGraphData } from '../data/impactGraph.js';
 import { classifyCandidateSignal } from '../data/evidenceSignal.js';
 import './service-graph.css';
+import './service-graph-controls.css';
 
 const TraceabilityFlow = lazy(() => import('./TraceabilityFlow.jsx'));
 const relationKinds = {
@@ -188,6 +189,8 @@ export function ServiceGraph({ ctx }) {
   const [graphScope, setGraphScope] = useState(() => (isLargeRepo ? 'top' : 'all'));
   const [validityFilter, setValidityFilter] = useState('all');
   const [relTypeFilter, setRelTypeFilter] = useState('all');
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [evidenceOpen, setEvidenceOpen] = useState(null);
   const [showAllConnections, setShowAllConnections] = useState(false);
 
   useEffect(() => {
@@ -322,10 +325,10 @@ export function ServiceGraph({ ctx }) {
   const candidateEdgeCount = scopeEdges.filter(e => e.kind === 'candidate').length;
 
   const prioritizedEdges = [...edges].sort((a, b) => (b.score || 0) - (a.score || 0));
-
-  const visibleEvidenceConnections = root
-    ? (showAllConnections ? prioritizedEdges : prioritizedEdges.slice(0, 6))
-    : prioritizedEdges.slice(0, 4);
+  const primaryConnectionLimit = 3;
+  const visibleEvidenceConnections = showAllConnections
+    ? prioritizedEdges
+    : prioritizedEdges.slice(0, primaryConnectionLimit);
 
   const activeContextId = ctx.state?.inspectorOpen ? ctx.state?.selectedArtifactId : null;
   const activeInspectedEdge = activeContextId ? allEdges.find(e => e.id === activeContextId) : null;
@@ -334,6 +337,15 @@ export function ServiceGraph({ ctx }) {
     setValidityFilter('all');
     setRelTypeFilter('all');
   };
+
+  const focusNeighborhood = nextRootId => {
+    setError('');
+    setResult(null);
+    setShowAllConnections(false);
+    setRoot(nextRootId);
+  };
+
+  const unresolvedTotalCount = (!root ? unresolvedRows.length : 0) + (result?.unresolved?.length || 0);
 
   return <div className="sg-shell">
     <div className="service-graph-bar">
@@ -360,34 +372,29 @@ export function ServiceGraph({ ctx }) {
                   ? `${staleEdgeCount} ${staleEdgeCount === 1 ? 'relationship needs' : 'relationships need'} revalidation. Open a priority link to inspect its evidence.`
                   : 'Select an artifact to see its direct connections, or open a relationship to inspect its evidence.'}
             </p>
-            <div className="service-graph-legend" aria-label="Graph legend">
-              {impact.changesByArtifactId.size > 0 && (
-                <Tooltip content="Artifact modified, added, revised, or removed in the comparison">
-                  <span className="service-legend-chip is-changed"><AlertTriangle size={11} aria-hidden="true" />Changed ({impact.changesByArtifactId.size})</span>
-                </Tooltip>
-              )}
-              {impact.affectedIds.size > 0 && (
-                <Tooltip content="Downstream or upstream artifact connected to a changed node">
-                  <span className="service-legend-chip is-affected"><GitCompare size={11} aria-hidden="true" />Affected ({impact.affectedIds.size})</span>
-                </Tooltip>
-              )}
-              {staleEdgeCount > 0 && (
-                <Tooltip content="Previously confirmed link requiring revalidation after revision change">
-                  <span className="service-legend-chip is-stale"><AlertTriangle size={11} aria-hidden="true" />Stale ({staleEdgeCount})</span>
-                </Tooltip>
-              )}
-              <Tooltip content="Automated or manual proposal awaiting human decision">
-                <span className="service-legend-chip is-candidate"><Clock size={11} aria-hidden="true" />Candidate ({candidateEdgeCount})</span>
-              </Tooltip>
-              <Tooltip content="Confirmed relationship backed by inspected evidence">
-                <span className="service-legend-chip is-confirmed"><CheckCircle2 size={11} aria-hidden="true" />Confirmed ({confirmedEdgeCount})</span>
-              </Tooltip>
-            </div>
           </div>
         </div>
-        <div className="sg-breakdown-group" aria-label="Visible graph breakdown">
-          {kindCounts.map(({ kind, count }) => <span className="service-breakdown-pill" key={kind}>{count} {kind}</span>)}
-          <span className="service-breakdown-pill">{edges.length} {edges.length === 1 ? 'link' : 'links'}</span>
+        <div className="sgc-header-summary" aria-label="Graph status summary">
+          {staleEdgeCount > 0 && (
+            <Tooltip content="Toggle filter for previously confirmed links requiring revalidation">
+              <button
+                type="button"
+                className="service-legend-chip is-stale sgc-summary-btn"
+                aria-pressed={validityFilter === 'stale'}
+                onClick={() => setValidityFilter(v => (v === 'stale' ? 'all' : 'stale'))}
+              >
+                <AlertTriangle size={11} aria-hidden="true" />Stale ({staleEdgeCount})
+              </button>
+            </Tooltip>
+          )}
+          {impact.changesByArtifactId.size > 0 && (
+            <Tooltip content="Artifact modified, added, revised, or removed in the comparison">
+              <span className="service-legend-chip is-changed"><AlertTriangle size={11} aria-hidden="true" />Changed ({impact.changesByArtifactId.size})</span>
+            </Tooltip>
+          )}
+          <span className="service-breakdown-pill">
+            {nodes.length} {nodes.length === 1 ? 'artifact' : 'artifacts'} · {edges.length} {edges.length === 1 ? 'link' : 'links'}
+          </span>
         </div>
       </div>
 
@@ -398,10 +405,7 @@ export function ServiceGraph({ ctx }) {
             value={root || '__all__'}
             onChange={e => {
               const val = e.target.value;
-              setError('');
-              setResult(null);
-              setShowAllConnections(false);
-              setRoot(val === '__all__' ? null : val);
+              focusNeighborhood(val === '__all__' ? null : val);
             }}
             className="service-graph-focus-select"
           >
@@ -440,35 +444,50 @@ export function ServiceGraph({ ctx }) {
             </div>
           )}
 
-          <Select
-            aria-label="Filter graph by validity"
-            value={validityFilter}
-            onChange={e => setValidityFilter(e.target.value)}
-            className="sg-filter-select"
+          <button
+            type="button"
+            className={`sgc-filter-trigger ${filtersOpen ? 'is-open' : ''} ${hasCustomFilter ? 'has-filters' : ''}`}
+            aria-expanded={filtersOpen}
+            aria-controls="sg-secondary-controls"
+            onClick={() => setFiltersOpen(v => !v)}
           >
-            <option value="all">All validities ({scopeEdges.length})</option>
-            <option value="stale">Stale ({staleEdgeCount})</option>
-            <option value="confirmed">Confirmed ({confirmedEdgeCount})</option>
-            <option value="candidate">Candidates ({candidateEdgeCount})</option>
-          </Select>
-
-          <Select
-            aria-label="Filter graph by relationship type"
-            value={relTypeFilter}
-            onChange={e => setRelTypeFilter(e.target.value)}
-            className="sg-filter-select"
-          >
-            <option value="all">All relationship types</option>
-            <option value="documents">documents</option>
-            <option value="depends_on">depends_on</option>
-            <option value="implements">implements</option>
-            <option value="motivates">motivates</option>
-          </Select>
+            <SlidersHorizontal size={13} aria-hidden="true" />
+            <span>Filters</span>
+            <ChevronDown size={13} className="sgc-filter-chevron" aria-hidden="true" />
+          </button>
 
           {hasCustomFilter && (
-            <Button variant="ghost" size="sm" onClick={resetGraphFilters}>
-              <RotateCcw size={12} /> Reset filters
-            </Button>
+            <div className="sgc-active-filters" role="group" aria-label="Active graph filters">
+              {validityFilter !== 'all' && (
+                <span className="sgc-active-chip">
+                  <span>Validity: <strong>{validityFilter}</strong></span>
+                  <button
+                    type="button"
+                    className="sgc-active-chip__clear"
+                    aria-label="Clear validity filter"
+                    onClick={() => setValidityFilter('all')}
+                  >
+                    <X size={11} aria-hidden="true" />
+                  </button>
+                </span>
+              )}
+              {relTypeFilter !== 'all' && (
+                <span className="sgc-active-chip">
+                  <span>Type: <strong>{relTypeFilter}</strong></span>
+                  <button
+                    type="button"
+                    className="sgc-active-chip__clear"
+                    aria-label="Clear relationship type filter"
+                    onClick={() => setRelTypeFilter('all')}
+                  >
+                    <X size={11} aria-hidden="true" />
+                  </button>
+                </span>
+              )}
+              <Button variant="ghost" size="sm" onClick={resetGraphFilters}>
+                <RotateCcw size={12} /> Reset filters
+              </Button>
+            </div>
           )}
         </div>
 
@@ -477,123 +496,226 @@ export function ServiceGraph({ ctx }) {
             <Button
               variant="secondary"
               size="sm"
-              onClick={() => {
-                setError('');
-                setResult(null);
-                setRoot(activeInspectedEdge.from);
-              }}
+              onClick={() => focusNeighborhood(activeInspectedEdge.from)}
             >
               <Network size={13} /> Focus 1-hop for inspected link
             </Button>
           )}
+          {!root && !activeInspectedEdge && prioritizedEdges.length > 0 && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => ctx.selectArtifact(prioritizedEdges[0].id)}
+            >
+              <Eye size={13} /> {prioritizedEdges[0].kind === 'stale' ? 'Inspect top stale link' : 'Inspect top relationship'}
+            </Button>
+          )}
           {root && <>
             <Button variant="secondary" size="sm" onClick={() => ctx.openSource(root)}>Open source</Button>
-            <Button variant="secondary" size="sm" onClick={() => { setRoot(null); setResult(null); setError(''); setShowAllConnections(false); }}><ArrowLeft size={13} />Show full snapshot</Button>
+            <Button variant="secondary" size="sm" onClick={() => focusNeighborhood(null)}><ArrowLeft size={13} />Show full snapshot</Button>
           </>}
         </div>
       </div>
+
+      {filtersOpen && (
+        <div
+          id="sg-secondary-controls"
+          className="sgc-disclosure-tray"
+          role="region"
+          aria-label="Graph filters and legend"
+        >
+          <div className="sgc-tray-row">
+            <div className="sgc-tray-filters">
+              <div className="sgc-filter-field">
+                <span className="sgc-filter-label">Validity</span>
+                <Select
+                  aria-label="Filter graph by validity"
+                  value={validityFilter}
+                  onChange={e => setValidityFilter(e.target.value)}
+                  className="sg-filter-select"
+                >
+                  <option value="all">All validities ({scopeEdges.length})</option>
+                  <option value="stale">Stale ({staleEdgeCount})</option>
+                  <option value="confirmed">Confirmed ({confirmedEdgeCount})</option>
+                  <option value="candidate">Candidates ({candidateEdgeCount})</option>
+                </Select>
+              </div>
+
+              <div className="sgc-filter-field">
+                <span className="sgc-filter-label">Relationship type</span>
+                <Select
+                  aria-label="Filter graph by relationship type"
+                  value={relTypeFilter}
+                  onChange={e => setRelTypeFilter(e.target.value)}
+                  className="sg-filter-select"
+                >
+                  <option value="all">All relationship types</option>
+                  <option value="documents">documents</option>
+                  <option value="depends_on">depends_on</option>
+                  <option value="implements">implements</option>
+                  <option value="motivates">motivates</option>
+                </Select>
+              </div>
+            </div>
+
+            <div className="sg-breakdown-group" aria-label="Visible graph breakdown">
+              {kindCounts.map(({ kind, count }) => <span className="service-breakdown-pill" key={kind}>{count} {kind}</span>)}
+              <span className="service-breakdown-pill">{edges.length} {edges.length === 1 ? 'link' : 'links'}</span>
+            </div>
+          </div>
+
+          <div className="sgc-tray-meta">
+            <div className="service-graph-legend" aria-label="Graph legend">
+              {impact.changesByArtifactId.size > 0 && (
+                <Tooltip content="Artifact modified, added, revised, or removed in the comparison">
+                  <span className="service-legend-chip is-changed"><AlertTriangle size={11} aria-hidden="true" />Changed ({impact.changesByArtifactId.size})</span>
+                </Tooltip>
+              )}
+              {impact.affectedIds.size > 0 && (
+                <Tooltip content="Downstream or upstream artifact connected to a changed node">
+                  <span className="service-legend-chip is-affected"><GitCompare size={11} aria-hidden="true" />Affected ({impact.affectedIds.size})</span>
+                </Tooltip>
+              )}
+              {staleEdgeCount > 0 && (
+                <Tooltip content="Previously confirmed link requiring revalidation after revision change">
+                  <button
+                    type="button"
+                    className="service-legend-chip is-stale sgc-summary-btn"
+                    aria-pressed={validityFilter === 'stale'}
+                    onClick={() => setValidityFilter(v => (v === 'stale' ? 'all' : 'stale'))}
+                  >
+                    <AlertTriangle size={11} aria-hidden="true" />Stale ({staleEdgeCount})
+                  </button>
+                </Tooltip>
+              )}
+              <Tooltip content="Automated or manual proposal awaiting human decision">
+                <button
+                  type="button"
+                  className="service-legend-chip is-candidate sgc-summary-btn"
+                  aria-pressed={validityFilter === 'candidate'}
+                  onClick={() => setValidityFilter(v => (v === 'candidate' ? 'all' : 'candidate'))}
+                >
+                  <Clock size={11} aria-hidden="true" />Candidate ({candidateEdgeCount})
+                </button>
+              </Tooltip>
+              <Tooltip content="Confirmed relationship backed by inspected evidence">
+                <button
+                  type="button"
+                  className="service-legend-chip is-confirmed sgc-summary-btn"
+                  aria-pressed={validityFilter === 'confirmed'}
+                  onClick={() => setValidityFilter(v => (v === 'confirmed' ? 'all' : 'confirmed'))}
+                >
+                  <CheckCircle2 size={11} aria-hidden="true" />Confirmed ({confirmedEdgeCount})
+                </button>
+              </Tooltip>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
 
-    {prioritizedEdges.length > 0 && <Disclosure trigger={root ? 'Direct relationships' : 'Priority relationships'}
-      badge={prioritizedEdges.length} defaultOpen={staleEdgeCount > 0} variant="subtle">
-      <section
-        className={`sg-evidence-strip ${root ? 'is-focused' : ''} ${staleEdgeCount > 0 ? 'is-warn' : ''}`}
-        aria-label={root ? 'Focused 1-hop evidence connections' : 'Priority evidence connections'}
+    {prioritizedEdges.length > 0 && (
+      <Disclosure
+        trigger={root ? 'Direct relationships' : 'Priority relationships'}
+        badge={prioritizedEdges.length}
+        open={evidenceOpen ?? (staleEdgeCount > 0)}
+        onOpenChange={setEvidenceOpen}
+        variant="subtle"
       >
-        <div className="sg-strip-head">
-          <div className="sg-strip-title">
-            <strong>
-              {rootArtifact
-                ? `Connected evidence for ${rootArtifact.identity?.title || rootArtifact.path.split('/').at(-1)} (${prioritizedEdges.length})`
-                : staleEdgeCount > 0
-                  ? 'Priority relationships requiring evidence revalidation'
-                  : 'Priority evidence-backed connections to inspect'}
-            </strong>
-            <span>
-              {rootArtifact
-                ? 'Open any relationship in the inspector to verify exact line anchors or pivot 1-hop to a neighbor.'
-                : `Showing top ${visibleEvidenceConnections.length} of ${prioritizedEdges.length} relationships in view by review priority and signal.`}
-            </span>
-          </div>
-          {root && prioritizedEdges.length > 6 && (
-            <div className="sg-strip-actions">
-              <Button variant="ghost" size="xs" onClick={() => setShowAllConnections(v => !v)}>
-                {showAllConnections ? 'Show top 6 connections' : `Show all ${prioritizedEdges.length} connections`}
-              </Button>
+        <section
+          className={`sg-evidence-strip ${root ? 'is-focused' : ''} ${staleEdgeCount > 0 ? 'is-warn' : ''}`}
+          aria-label={root ? 'Focused 1-hop evidence connections' : 'Priority evidence connections'}
+        >
+          <div className="sg-strip-head">
+            <div className="sg-strip-title">
+              <strong>
+                {rootArtifact
+                  ? `Connected evidence for ${rootArtifact.identity?.title || rootArtifact.path.split('/').at(-1)} (${prioritizedEdges.length})`
+                  : staleEdgeCount > 0
+                    ? 'Priority relationships requiring evidence revalidation'
+                    : 'Priority evidence-backed connections to inspect'}
+              </strong>
+              <span>
+                {rootArtifact
+                  ? 'Open any relationship in the inspector to verify exact line anchors or pivot 1-hop to a neighbor.'
+                  : `Showing ${visibleEvidenceConnections.length} of ${prioritizedEdges.length} relationships in view by review priority and signal.`}
+              </span>
             </div>
-          )}
-        </div>
+            {prioritizedEdges.length > primaryConnectionLimit && (
+              <div className="sg-strip-actions">
+                <Button variant="ghost" size="xs" onClick={() => setShowAllConnections(v => !v)}>
+                  {showAllConnections ? `Show top ${primaryConnectionLimit} connections` : `Show all ${prioritizedEdges.length} connections`}
+                </Button>
+              </div>
+            )}
+          </div>
 
-        <div className="sg-conn-grid">
-          {visibleEvidenceConnections.map(edge => {
-            const isSelectedEdge = activeContextId === edge.id;
-            const neighborId = root
-              ? (edge.from === root ? edge.to : edge.from)
-              : edge.from;
-            const neighborShort = root
-              ? (edge.from === root ? edge.targetShort : edge.sourceShort)
-              : edge.sourceShort;
-            return (
-              <div
-                key={edge.id}
-                className={`sg-conn-card ${isSelectedEdge ? 'is-active' : ''} ${edge.kind === 'stale' ? 'is-stale' : ''}`}
-              >
-                <div className="sg-conn-card__top">
-                  <span className="sg-conn-type">{edge.relationType}</span>
-                  <div className="sg-conn-badges">
-                    <span className={`sg-validity-pill is-${edge.kind}`}>{edge.kind}</span>
+          <div className="sg-conn-grid sgc-conn-grid--compact">
+            {visibleEvidenceConnections.map(edge => {
+              const isSelectedEdge = activeContextId === edge.id;
+              const neighborId = root
+                ? (edge.from === root ? edge.to : edge.from)
+                : edge.from;
+              const neighborShort = root
+                ? (edge.from === root ? edge.targetShort : edge.sourceShort)
+                : edge.sourceShort;
+              return (
+                <div
+                  key={edge.id}
+                  className={`sg-conn-card ${isSelectedEdge ? 'is-active' : ''} ${edge.kind === 'stale' ? 'is-stale' : ''}`}
+                >
+                  <div className="sg-conn-card__top">
+                    <span className="sg-conn-type">{edge.relationType}</span>
+                    <div className="sg-conn-badges">
+                      <span className={`sg-validity-pill is-${edge.kind}`}>{edge.kind}</span>
+                    </div>
                   </div>
-                </div>
 
-                <div className="sg-conn-endpoints" title={`${edge.sourceShort} → ${edge.targetShort}`}>
-                  <span>{edge.sourceShort}</span>
-                  <ArrowRight size={11} aria-hidden="true" />
-                  <span>{edge.targetShort}</span>
-                </div>
+                  <div className="sg-conn-endpoints" title={`${edge.sourceShort} → ${edge.targetShort}`}>
+                    <span>{edge.sourceShort}</span>
+                    <ArrowRight size={11} aria-hidden="true" />
+                    <span>{edge.targetShort}</span>
+                  </div>
 
-                <p className="sg-conn-evidence">{edge.signalReason}</p>
+                  <p className="sg-conn-evidence">{edge.signalReason}</p>
 
-                <div className="sg-conn-footer">
-                  <span className="sg-anchor-meta">
-                    <Link2 size={11} aria-hidden="true" />
-                    {edge.evidenceCount > 0
-                      ? `${edge.evidenceCount} anchor${edge.evidenceCount === 1 ? '' : 's'}`
-                      : edge.signalLabel}
-                  </span>
-                  <div className="sg-conn-btns">
-                    {neighborId && neighborId !== root && (
+                  <div className="sg-conn-footer">
+                    <span className="sg-anchor-meta">
+                      <Link2 size={11} aria-hidden="true" />
+                      {edge.evidenceCount > 0
+                        ? `${edge.evidenceCount} anchor${edge.evidenceCount === 1 ? '' : 's'}`
+                        : edge.signalLabel}
+                    </span>
+                    <div className="sg-conn-btns">
+                      {neighborId && neighborId !== root && (
+                        <button
+                          type="button"
+                          className="sg-pivot-btn"
+                          aria-label={`Center 1-hop on ${neighborShort}`}
+                          title={`Focus 1-hop neighborhood on ${neighborShort}`}
+                          onClick={() => focusNeighborhood(neighborId)}
+                        >
+                          1-hop
+                        </button>
+                      )}
                       <button
                         type="button"
-                        className="sg-pivot-btn"
-                        aria-label={`Center 1-hop on ${neighborShort}`}
-                        title={`Focus 1-hop neighborhood on ${neighborShort}`}
-                        onClick={() => {
-                          setError('');
-                          setResult(null);
-                          setShowAllConnections(false);
-                          setRoot(neighborId);
-                        }}
+                        className="sg-evidence-btn"
+                        aria-label={`Inspect evidence for ${edge.sourceShort} to ${edge.targetShort}`}
+                        onClick={() => ctx.selectArtifact(edge.id)}
                       >
-                        1-hop
+                        <Eye size={11} aria-hidden="true" />
+                        <span>{isSelectedEdge ? 'Inspecting' : 'Inspect evidence'}</span>
                       </button>
-                    )}
-                    <button
-                      type="button"
-                      className="sg-evidence-btn"
-                      aria-label={`Inspect evidence for ${edge.sourceShort} to ${edge.targetShort}`}
-                      onClick={() => ctx.selectArtifact(edge.id)}
-                    >
-                      <Eye size={11} aria-hidden="true" />
-                      <span>{isSelectedEdge ? 'Inspecting' : 'Inspect evidence'}</span>
-                    </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
-      </section>
-    </Disclosure>}
+              );
+            })}
+          </div>
+        </section>
+      </Disclosure>
+    )}
 
     {error && <p className="inline-notice form-error" role="alert">{error}</p>}
     <div className="service-graph">
@@ -607,10 +729,7 @@ export function ServiceGraph({ ctx }) {
             rawEdges={edges}
             onSelectNode={id => {
               if (id !== root) {
-                setError('');
-                setResult(null);
-                setShowAllConnections(false);
-                setRoot(id);
+                focusNeighborhood(id);
               }
             }}
             onSelectEdge={id => ctx.selectArtifact(id)}
@@ -629,7 +748,28 @@ export function ServiceGraph({ ctx }) {
         setResult(previous => previous?.nextCursor === cursor ? {...next, nodes:[...new Map([...previous.nodes,...next.nodes].map(node=>[node.artifactId,node])).values()], edges:[...previous.edges,...next.edges], unresolved:[...previous.unresolved,...next.unresolved]} : previous);
       } catch(e) {setError(e.message);} finally {setLoading(false);}
     }}>More neighbors</Button></div>}
-    {(!root && unresolvedRows.length > 0 || (result?.unresolved?.length > 0)) && <div className="service-toolbar">{!root && unresolvedRows.map(row => <Button variant="secondary" size="sm" key={row.id} onClick={() => ctx.selectArtifact(row.id)}>Inspect unresolved or earlier-version relationship</Button>)}{result?.unresolved?.map(item => <Button variant="secondary" size="sm" key={item.contextId} onClick={() => ctx.selectArtifact(item.contextId)}>Inspect unresolved endpoint context</Button>)}</div>}
+    {unresolvedTotalCount > 0 && (
+      <Disclosure
+        trigger="Unresolved or earlier-version relationships"
+        badge={unresolvedTotalCount}
+        defaultOpen={unresolvedTotalCount <= 2}
+        variant="subtle"
+        className="sgc-unresolved-disclosure"
+      >
+        <div className="service-toolbar">
+          {!root && unresolvedRows.map(row => (
+            <Button variant="secondary" size="sm" key={row.id} onClick={() => ctx.selectArtifact(row.id)}>
+              Inspect unresolved or earlier-version relationship
+            </Button>
+          ))}
+          {result?.unresolved?.map(item => (
+            <Button variant="secondary" size="sm" key={item.contextId} onClick={() => ctx.selectArtifact(item.contextId)}>
+              Inspect unresolved endpoint context
+            </Button>
+          ))}
+        </div>
+      </Disclosure>
+    )}
   </div>;
 }
 

@@ -392,6 +392,33 @@ h1, .workbench h1, .review-heading h1 { font-family: var(--font-display); font-w
 .library-menu-popup [data-highlighted] { background: var(--ground-hover); outline: none; }
 .library-menu-popup [data-disabled] { opacity: .5; }
 
+@media (prefers-reduced-motion: no-preference) {
+  :is(.library-menu-popup, .library-dialog-content) {
+    transition: opacity 180ms ease, translate 200ms cubic-bezier(.22, 1, .36, 1);
+  }
+
+  :is(.library-menu-popup, .library-dialog-content):is([data-starting-style], [data-ending-style]) {
+    opacity: 0;
+    translate: 0 5px;
+  }
+
+  .library-dialog-overlay {
+    transition: opacity 180ms ease;
+  }
+
+  .library-dialog-overlay:is([data-starting-style], [data-ending-style]) {
+    opacity: 0;
+  }
+
+  .service-disclosure-content {
+    animation: disclosure-appear 150ms ease-out;
+  }
+
+  @keyframes disclosure-appear {
+    from { opacity: .65; }
+  }
+}
+
 
 .service-tabs .tabs-trigger[aria-selected="true"] { background: var(--accent-solid, var(--accent)); color: white; }
 .service-tab-panel { margin-top: 0; }

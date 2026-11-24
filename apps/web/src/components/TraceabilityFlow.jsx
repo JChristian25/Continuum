@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import {
   ReactFlow,
   MiniMap,
@@ -31,10 +31,18 @@ import {
   Maximize2,
   Tag,
   Map as MapIcon,
-  RotateCcw
+  RotateCcw,
+  SlidersHorizontal,
+  ChevronDown
 } from 'lucide-react';
 
 const elk = new ELK();
+
+function prefersReducedMotion() {
+  return typeof window !== 'undefined' &&
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
 
 const CHANGE_LABELS = {
   modified: 'Modified',
@@ -301,17 +309,34 @@ export default function TraceabilityFlow({
 }) {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
-  const [layoutReady, setLayoutReady] = useState(false);
+  const [laidOutDirection, setLaidOutDirection] = useState(null);
+  const layoutReady = laidOutDirection !== null;
   const [rfInstance, setRfInstance] = useState(null);
   const [direction, setDirection] = useState('RIGHT');
   const [showAllLabels, setShowAllLabels] = useState(false);
   const [hoveredNodeId, setHoveredNodeId] = useState(null);
+  const [hudOpen, setHudOpen] = useState(false);
   const [miniMapOpen, setMiniMapOpen] = useState(() => {
     if (typeof showMiniMap === 'boolean') return showMiniMap;
     if (typeof window !== 'undefined' && window.innerWidth < 640) return false;
     return !compact || rawNodes.length > 16;
   });
   const containerRef = useRef(null);
+  const hudRef = useRef(null);
+  const hudTriggerRef = useRef(null);
+  const hasInitialFitRef = useRef(false);
+  const hudPanelId = useId();
+
+  useEffect(() => {
+    if (!hudOpen) return;
+    const handlePointerDown = event => {
+      if (hudRef.current && !hudRef.current.contains(event.target)) {
+        setHudOpen(false);
+      }
+    };
+    document.addEventListener('pointerdown', handlePointerDown);
+    return () => document.removeEventListener('pointerdown', handlePointerDown);
+  }, [hudOpen]);
 
   const activeEdge = useMemo(
     () => (activeEdgeId ? rawEdges.find(e => e.id === activeEdgeId) || null : null),
@@ -346,7 +371,7 @@ export default function TraceabilityFlow({
       if (!rawNodes.length) {
         setNodes([]);
         setEdges([]);
-        setLayoutReady(true);
+        setLaidOutDirection(direction);
         return;
       }
 
@@ -536,7 +561,7 @@ export default function TraceabilityFlow({
 
         setNodes(flowNodes);
         setEdges(flowEdges);
-        setLayoutReady(true);
+        setLaidOutDirection(direction);
       } catch (err) {
         console.error('ELK layout computation error:', err);
       }
@@ -597,17 +622,29 @@ export default function TraceabilityFlow({
 
   useEffect(() => {
     if (!rfInstance || !layoutReady || !nodes.length) return;
+    const isInitial = !hasInitialFitRef.current;
+    hasInitialFitRef.current = true;
+    const duration = isInitial || prefersReducedMotion() ? 0 : 240;
     const raf = requestAnimationFrame(() => {
-      rfInstance.fitView({ padding: compact ? 0.1 : 0.14, maxZoom: 1.15 });
+      rfInstance.fitView({ padding: compact ? 0.1 : 0.14, maxZoom: 1.15, duration });
     });
     return () => cancelAnimationFrame(raf);
-  }, [rfInstance, layoutReady, compact, direction, nodes.length, edges.length, selectedArtifactId]);
+  }, [rfInstance, layoutReady, compact, laidOutDirection, nodes.length, edges.length, selectedArtifactId]);
+
+  const handleFitView = () => {
+    rfInstance?.fitView({
+      padding: compact ? 0.1 : 0.14,
+      maxZoom: 1.15,
+      duration: prefersReducedMotion() ? 0 : 260,
+    });
+  };
 
   const handleNodeClick = (_, node) => {
     onSelectNode?.(node.id);
   };
 
   const containerHeight = height ?? (compact ? 560 : 740);
+  const hasActiveOption = direction === 'DOWN' || showAllLabels || miniMapOpen;
 
   return (
     <div
@@ -631,66 +668,114 @@ export default function TraceabilityFlow({
         </div>
       ) : (
         <>
-          <div className="tf-hud" role="toolbar" aria-label="Graph canvas controls">
-            <div className="tf-hud-group" role="group" aria-label="Layout direction">
-              <button
-                type="button"
-                className={`tf-hud-btn ${direction === 'RIGHT' ? 'is-active' : ''}`}
-                onClick={() => setDirection('RIGHT')}
-                aria-label="Horizontal graph layout"
-                title="Left-to-right layered flow"
-              >
-                <ArrowRight size={12} aria-hidden="true" />
-                <span>L→R</span>
-              </button>
-              <button
-                type="button"
-                className={`tf-hud-btn ${direction === 'DOWN' ? 'is-active' : ''}`}
-                onClick={() => setDirection('DOWN')}
-                aria-label="Vertical graph layout"
-                title="Top-to-bottom layered flow"
-              >
-                <ArrowDown size={12} aria-hidden="true" />
-                <span>T→B</span>
-              </button>
-            </div>
-            {rawEdges.length > 8 && (
-              <div className="tf-hud-group">
-                <button
-                  type="button"
-                  className={`tf-hud-btn ${showAllLabels ? 'is-active' : ''}`}
-                  onClick={() => setShowAllLabels(v => !v)}
-                  aria-pressed={showAllLabels}
-                  aria-label="Toggle all edge labels"
-                  title={showAllLabels ? 'Showing all link labels' : 'Showing key labels (click or hover for all)'}
-                >
-                  <Tag size={12} aria-hidden="true" />
-                  <span>{showAllLabels ? 'All labels' : 'Key labels'}</span>
-                </button>
-              </div>
-            )}
-            <div className="tf-hud-group">
+          <div
+            ref={hudRef}
+            className={`tf-hud ${hudOpen ? 'is-open' : ''}`}
+            role="group"
+            aria-label="Graph canvas controls"
+            onBlur={event => {
+              if (hudOpen && event.relatedTarget && !event.currentTarget.contains(event.relatedTarget)) {
+                setHudOpen(false);
+              }
+            }}
+            onKeyDown={event => {
+              if (hudOpen && event.key === 'Escape') {
+                event.stopPropagation();
+                setHudOpen(false);
+                hudTriggerRef.current?.focus();
+              }
+            }}
+          >
+            <div className="tf-hud-bar">
               <button
                 type="button"
                 className="tf-hud-btn"
-                onClick={() => rfInstance?.fitView({ padding: compact ? 0.1 : 0.14, maxZoom: 1.15, duration: 200 })}
+                onClick={handleFitView}
                 aria-label="Fit graph to canvas"
                 title="Fit graph to viewport"
               >
                 <Maximize2 size={12} aria-hidden="true" />
                 <span>Fit</span>
               </button>
+              <span className="tf-hud-divider" aria-hidden="true" />
               <button
+                ref={hudTriggerRef}
                 type="button"
-                className={`tf-hud-btn ${miniMapOpen ? 'is-active' : ''}`}
-                onClick={() => setMiniMapOpen(v => !v)}
-                aria-pressed={miniMapOpen}
-                aria-label="Toggle minimap"
-                title="Toggle overview minimap"
+                className={`tf-hud-btn tf-hud-trigger ${hudOpen ? 'is-active' : ''}`}
+                onClick={() => setHudOpen(v => !v)}
+                aria-expanded={hudOpen}
+                aria-controls={hudPanelId}
+                aria-label="View canvas options"
+                title="Layout direction, edge labels, and minimap controls"
               >
-                <MapIcon size={12} aria-hidden="true" />
-                <span>Map</span>
+                <SlidersHorizontal size={12} aria-hidden="true" />
+                <span>View</span>
+                {hasActiveOption && (
+                  <span className="tf-hud-dot" aria-hidden="true" />
+                )}
+                <ChevronDown size={11} className="tf-hud-chevron" aria-hidden="true" />
               </button>
+            </div>
+
+            <div
+              id={hudPanelId}
+              className={`tf-hud-popover ${hudOpen ? 'is-open' : ''}`}
+              inert={!hudOpen}
+            >
+              <div className="tf-hud-section">
+                <span className="tf-hud-section-label">Layout</span>
+                <div className="tf-hud-group tf-hud-segmented" role="group" aria-label="Layout direction">
+                  <button
+                    type="button"
+                    className={`tf-hud-btn ${direction === 'RIGHT' ? 'is-active' : ''}`}
+                    onClick={() => setDirection('RIGHT')}
+                    aria-pressed={direction === 'RIGHT'}
+                    aria-label="Across, horizontal graph layout"
+                    title="Left-to-right layered flow"
+                  >
+                    <ArrowRight size={12} aria-hidden="true" />
+                    <span>Across</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`tf-hud-btn ${direction === 'DOWN' ? 'is-active' : ''}`}
+                    onClick={() => setDirection('DOWN')}
+                    aria-pressed={direction === 'DOWN'}
+                    aria-label="Down, vertical graph layout"
+                    title="Top-to-bottom layered flow"
+                  >
+                    <ArrowDown size={12} aria-hidden="true" />
+                    <span>Down</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="tf-hud-section">
+                <span className="tf-hud-section-label">Display</span>
+                <div className="tf-hud-group" role="group" aria-label="Canvas display toggles">
+                  <button
+                    type="button"
+                    className={`tf-hud-btn ${showAllLabels ? 'is-active' : ''}`}
+                    onClick={() => setShowAllLabels(v => !v)}
+                    aria-pressed={showAllLabels}
+                    title={showAllLabels ? 'Showing all link labels' : 'Showing key labels (click or hover for all)'}
+                  >
+                    <Tag size={12} aria-hidden="true" />
+                    <span>All labels</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`tf-hud-btn ${miniMapOpen ? 'is-active' : ''}`}
+                    onClick={() => setMiniMapOpen(v => !v)}
+                    aria-pressed={miniMapOpen}
+                    aria-label="Toggle minimap"
+                    title="Toggle overview minimap"
+                  >
+                    <MapIcon size={12} aria-hidden="true" />
+                    <span>Minimap</span>
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
           <ReactFlow
@@ -711,7 +796,7 @@ export default function TraceabilityFlow({
             maxZoom={2.0}
           >
             <Background color={theme === 'dark' ? '#343b32' : '#d7d3c6'} gap={16} size={1} />
-            <Controls showInteractive={false} />
+            <Controls showInteractive={false} showFitView={false} />
             {miniMapOpen && <MiniMap
               nodeColor={node => (node.data?.changeKind || node.data?.impactRole === 'impacted') ? '#d97706' : 'var(--accent)'}
               maskColor={theme === 'dark' ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.6)'}

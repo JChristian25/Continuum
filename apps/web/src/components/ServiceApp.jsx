@@ -5,8 +5,9 @@ import {
   ChevronRight, ChevronDown, GitBranch, ShieldCheck, Eye, EyeOff, CheckCircle2, Copy, Check,
   GitCompare, ListChecks, LogOut, FolderGit2, Clock, Sun, Moon,
   AlertTriangle, Network, Layers, List, Link2, Sparkles, Cpu, Info, Archive, GitCommit,
-  Code2, Hash, FolderPlus
+  Code2, Hash, FolderPlus, Ellipsis
 } from 'lucide-react';
+import { Menu } from '@base-ui/react/menu';
 import Shell from './Shell.jsx';
 import Tooltip from './Tooltip.jsx';
 import SourceLinePicker from './SourceLinePicker.jsx';
@@ -22,6 +23,21 @@ import { RelationshipEditor, RecordRevision, ServiceSearch, ServiceGraph, CycleA
 import { buildImpactGraphData } from '../data/impactGraph.js';
 
 const TraceabilityFlow = lazy(() => import('./TraceabilityFlow.jsx'));
+
+function WorkspaceActions({ children }) {
+  return <Menu.Root>
+    <Menu.Trigger render={<Button variant="secondary" size="sm" aria-label="More workspace actions" />}>
+      <Ellipsis size={16} aria-hidden="true" /> More
+    </Menu.Trigger>
+    <Menu.Portal>
+      <Menu.Positioner align="end" sideOffset={6} className="library-menu-positioner">
+        <Menu.Popup className="library-menu-popup service-workspace-menu" aria-label="Workspace actions">
+          {children}
+        </Menu.Popup>
+      </Menu.Positioner>
+    </Menu.Portal>
+  </Menu.Root>;
+}
 
 const VALIDITY_HINTS = {
   candidate: 'Unconfirmed link awaiting human inspection of exact evidence',
@@ -305,7 +321,10 @@ function Source({
     if (!open || !jumpLine) return;
     const raf = requestAnimationFrame(() => {
       const row = resolvedRef.current?.querySelector(`[data-line="${jumpLine}"]`);
-      row?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      row?.scrollIntoView({
+        block: 'center',
+        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth',
+      });
     });
     return () => cancelAnimationFrame(raf);
   }, [open, jumpLine, resolvedRef]);
@@ -483,7 +502,7 @@ function rowPriorityRank(row, signalMap) {
   return 6;
 }
 
-function Relationships({ ctx, onSelect, heading = true }) {
+function Relationships({ ctx, onSelect, heading = true, filtersOpen, onFiltersOpenChange }) {
   const [search, setSearch] = useState('');
   const [localTab, setLocalTab] = useState('all');
   const [reviewFilter, setReviewFilter] = useState('all');
@@ -759,21 +778,23 @@ function Relationships({ ctx, onSelect, heading = true }) {
         ))}
       </div>
     )}
-    <div className="service-filters">
+    <div className="service-filters service-filter-bar">
       <label className="service-search-field">Search relationships<Input type="search" value={search} onChange={e => setSearch(e.target.value)} placeholder="Filter by path or type…" /></label>
-      <label className="service-validity-field">Review state<Select aria-label="Filter by review state" value={reviewFilter} onChange={e => setReviewFilter(e.target.value)}><option value="all">all</option><option value="open">open</option><option value="deferred">deferred</option><option value="screened">screened</option><option value="triaged">triaged (deferred &amp; screened)</option><option value="resolved">resolved</option></Select></label>
-      <label className="service-validity-field">Signal tier<Select aria-label="Filter by signal tier" value={signalFilter} onChange={e => setSignalFilter(e.target.value)}><option value="all">All signals</option><option value="high_moderate">High &amp; moderate</option><option value="high">High only</option><option value="low">Low signal only</option></Select></label>
-      {lowSignalTotalCount > 0 && signalFilter !== 'low' && (
-        <button
-          type="button"
-          className={`service-noise-toggle ${hideLowSignal ? 'is-active' : ''}`}
-          aria-pressed={hideLowSignal}
-          onClick={() => setHideLowSignal(v => !v)}
-          title="Hide low-signal lexical overlap suggestions from the active view without altering data"
-        >
-          {hideLowSignal ? `Showing high/moderate (${lowSignalTotalCount} low hidden)` : `Hide low-signal (${lowSignalTotalCount})`}
-        </button>
-      )}
+      <Disclosure trigger="Queue filters" open={filtersOpen} onOpenChange={onFiltersOpenChange} badge={Number(reviewFilter !== 'all') + Number(signalFilter !== 'all') + Number(hideLowSignal) || null} className="service-filter-options">
+        <label className="service-validity-field">Review state<Select aria-label="Filter by review state" value={reviewFilter} onChange={e => setReviewFilter(e.target.value)}><option value="all">all</option><option value="open">open</option><option value="deferred">deferred</option><option value="screened">screened</option><option value="triaged">triaged (deferred &amp; screened)</option><option value="resolved">resolved</option></Select></label>
+        <label className="service-validity-field">Signal tier<Select aria-label="Filter by signal tier" value={signalFilter} onChange={e => setSignalFilter(e.target.value)}><option value="all">All signals</option><option value="high_moderate">High &amp; moderate</option><option value="high">High only</option><option value="low">Low signal only</option></Select></label>
+        {lowSignalTotalCount > 0 && signalFilter !== 'low' && (
+          <button
+            type="button"
+            className={`service-noise-toggle ${hideLowSignal ? 'is-active' : ''}`}
+            aria-pressed={hideLowSignal}
+            onClick={() => setHideLowSignal(v => !v)}
+            title="Hide low-signal lexical overlap suggestions from the active view without altering data"
+          >
+            {hideLowSignal ? `Showing high/moderate (${lowSignalTotalCount} low hidden)` : `Hide low-signal (${lowSignalTotalCount})`}
+          </button>
+        )}
+      </Disclosure>
     </div>
     {hiddenByFilter > 0 && <p className="service-method service-filter-disclosure" role="status">Showing {rows.length} of {totalCount} relationships ({hiddenByFilter} filtered; {staleCount > 0 ? `${staleCount} stale review${staleCount === 1 ? '' : 's'} remain required; ` : ''}{openCount} open &amp; {triagedCount} triaged candidates remain unresolved).</p>}
     {canBatch && eligibleCandidates.length > 0 && <div className="service-batch-bar">
@@ -1400,16 +1421,18 @@ function Files({ ctx }) {
   const lastMod = activeBlame?.lastModified;
 
   return <section className="service-files">
-    <div className="service-filters">
+    <div className="service-filters service-filter-bar">
       <label className="service-search-field">Find a file<Input type="search" placeholder="Search paths and record titles" value={search} onChange={e => { setSearch(e.target.value); setVisibleLimit(150); }} /></label>
-      <label className="service-validity-field">Artifact kind<Select aria-label="Filter by artifact kind" value={kindFilter} onChange={e => { setKindFilter(e.target.value); setVisibleLimit(150); }}>{['all', 'code', 'document', 'requirement', 'decision'].map(k => <option key={k} value={k}>{k === 'all' ? 'All kinds' : ARTIFACT_KIND_LABELS[k]}</option>)}</Select></label>
-      {topDirectories.length > 1 && (
-        <label className="service-validity-field">Folder / package<Select aria-label="Filter by folder" value={dirFilter} onChange={e => { setDirFilter(e.target.value); setVisibleLimit(150); }}>
-          <option value="all">All folders ({ctx.workspace.artifacts.length})</option>
-          {topDirectories.map(([dir, cnt]) => <option key={dir} value={dir}>{dir} ({cnt})</option>)}
-        </Select></label>
-      )}
       <span className="service-result-count">{filteredArtifacts.length} of {ctx.workspace.artifacts.length} artifacts</span>
+      <Disclosure trigger="File filters" badge={Number(kindFilter !== 'all') + Number(dirFilter !== 'all') || null} className="service-filter-options">
+        <label className="service-validity-field">Artifact kind<Select aria-label="Filter by artifact kind" value={kindFilter} onChange={e => { setKindFilter(e.target.value); setVisibleLimit(150); }}>{['all', 'code', 'document', 'requirement', 'decision'].map(k => <option key={k} value={k}>{k === 'all' ? 'All kinds' : ARTIFACT_KIND_LABELS[k]}</option>)}</Select></label>
+        {topDirectories.length > 1 && (
+          <label className="service-validity-field">Folder / package<Select aria-label="Filter by folder" value={dirFilter} onChange={e => { setDirFilter(e.target.value); setVisibleLimit(150); }}>
+            <option value="all">All folders ({ctx.workspace.artifacts.length})</option>
+            {topDirectories.map(([dir, cnt]) => <option key={dir} value={dir}>{dir} ({cnt})</option>)}
+          </Select></label>
+        )}
+      </Disclosure>
     </div>
     <div className="service-file-grid">
       <div className="service-file-list">
@@ -1577,7 +1600,7 @@ function Files({ ctx }) {
             onInspectCommit={req => setCommitInspect(req)}
           />
           {activeBlame?.fileHistory?.length > 0 && (
-            <Disclosure trigger={`GitLens File Commit History (${activeBlame.fileHistory.length} commits touching ${activeArtifact.path.split('/').at(-1)})`} defaultOpen variant="card" className="service-gitlens-history">
+            <Disclosure trigger="File commit history" badge={activeBlame.fileHistory.length} variant="card" className="service-gitlens-history">
               <div className="service-gitlens-history__list">
                 {activeBlame.fileHistory.map(commit => (
                   <div className="service-gitlens-history__row" key={commit.commitId}>
@@ -2035,6 +2058,7 @@ function WorkspaceProgress({ ctx, onOpenCompare }) {
 
 function Content({ ctx, onOpenCompare }) {
   const module = ctx.state.activeModule;
+  const [queueFiltersOpen, setQueueFiltersOpen] = useState(false);
   const homeSignalMap = useMemo(() => {
     const map = new Map();
     for (const row of ctx.rows) {
@@ -2107,7 +2131,7 @@ function Content({ ctx, onOpenCompare }) {
     )}
   </section>;
   if (module === 'files') return <Files key={`${ctx.selection?.repositoryId || ''}-${ctx.selection?.targetRevision?.commitId || ''}-${ctx.workspace?.mode || ''}`} ctx={ctx} />;
-  if (module === 'changes') return <Relationships ctx={ctx} />;
+  if (module === 'changes') return <Relationships ctx={ctx} filtersOpen={queueFiltersOpen} onFiltersOpenChange={setQueueFiltersOpen} />;
   if (module === 'explore') return <>
     <section className="service-graph-workbench" aria-label="Relationship graph">
       <ServiceGraph key={ctx.workspace.snapshot.id} ctx={ctx} />
@@ -2276,7 +2300,21 @@ function Content({ ctx, onOpenCompare }) {
       </div>
       {previewRows.map(row => {
         const sig = homeSignalMap.get(row.id);
-        return <Button variant="unstyled" className="service-home-record" key={row.id} onClick={() => { ctx.switchModule('changes'); ctx.selectArtifact(row.id); }}><ArtifactKindIcon kind={row.source?.kind} size={17} /><span><strong>{row.sourceLabel || row.sourcePath}</strong><small className="service-row-target"><span className="service-rel-tag">{row.assertion.type}</span><ArrowRight size={11} aria-hidden="true" />{row.targetLabel || row.targetPath}{sig && <span className={`service-signal-badge is-${sig.tier}`}>{sig.label}</span>}</small></span><ValidityChip validity={row.projection.validity} /><ChevronRight size={14} /></Button>;
+        const target = row.targetLabel || row.targetPath;
+        return <Button variant="unstyled" className="service-home-record" key={row.id} onClick={() => { ctx.switchModule('changes'); ctx.selectArtifact(row.id); }}>
+          <ArtifactKindIcon kind={row.source?.kind} size={17} />
+          <span>
+            <strong title={row.sourceLabel || row.sourcePath}>{row.sourceLabel || row.sourcePath}</strong>
+            <small className="service-row-target">
+              <span className="service-rel-tag">{row.assertion.type}</span>
+              <ArrowRight size={11} aria-hidden="true" />
+              <span className="service-home-target-name" title={target}>{target}</span>
+            </small>
+            {sig && <span className={`service-signal-badge is-${sig.tier}`}>{sig.label}</span>}
+          </span>
+          <ValidityChip validity={row.projection.validity} />
+          <ChevronRight size={14} aria-hidden="true" />
+        </Button>;
       })}
       {!previewRows.length && <p className="service-empty-note">{ingestionReady ? 'No open suggestions or stale links in this snapshot.' : 'Capture accepted files to populate captured artifacts and candidate links.'}</p>}
     </section>
@@ -2459,23 +2497,18 @@ export default function ServiceApp() {
   return <div className="service-app"><Shell {...ctx} onSwitchRepo={ctx.handleSwitchRepo} onOpenImportModal={() => ctx.switchModule('governance')} /><div className="workspace"><div className="workspace-body"><main className="canvas service-canvas" id="main-content" tabIndex={-1}>
     <header className="workspace-topline">
       <div>
-        <h1>{({ dashboard: 'Workspace', changes: 'Review relationships', summary: 'Review summary', files: 'Code explorer', explore: 'Explore context', coverage: 'Coverage', account: 'Account', governance: 'Team & governance' })[ctx.state.activeModule]}</h1>
+        <h1 className="service-page-title" key={ctx.state.activeModule}>{({ dashboard: 'Workspace', changes: 'Review relationships', summary: 'Review summary', files: 'Code explorer', explore: 'Explore context', coverage: 'Coverage', account: 'Account', governance: 'Team & governance' })[ctx.state.activeModule]}</h1>
         <p className="service-page-context"><FolderGit2 size={13} />{ctx.state.repositories.find(r => r.id === ctx.state.activeRepoId)?.fullName || 'Repository workspace'}<span>·</span><span className="service-commit-pill">{ctx.selection?.targetRevision.commitId.slice(0, 7)}</span><span className="service-live-state">{ctx.workspace?.mode || 'No snapshot'}</span></p>
       </div>
       <div className="service-topline-actions">
-        {ctx.workspace && <>
-          {canAddRevision && <Button variant={canCompare ? 'secondary' : 'primary'} size="sm" disabled={ctx.busy}
-            onClick={() => ctx.openWorkspaceModal('add_revision')}><GitCommit size={15} aria-hidden="true" />Add revision</Button>}
-          <Tooltip content="Inspect commit details or switch to a historical snapshot">
-            <Button variant="secondary" size="sm" onClick={() => setSnapshotOpen(true)}><GitCommit size={14} aria-hidden="true" />Revision &amp; snapshot details</Button>
-          </Tooltip>
-          <Tooltip content="Compare two captured revisions with Git to view change impact">
-            <Button variant={canCompare && !ctx.workspace.comparison ? 'primary' : 'secondary'} size="sm" onClick={() => setCompareOpen(true)}><GitCompare size={14} />Compare revisions</Button>
-          </Tooltip>
-        </>}
-        <Tooltip content="Reload latest snapshot state from PostgreSQL and Neo4j">
-          <Button variant="secondary" size="sm" disabled={ctx.busy || !ctx.selection} onClick={ctx.refresh}><RefreshCw size={15} />Refresh</Button>
-        </Tooltip>
+        {ctx.workspace && canCompare && <Button variant={ctx.workspace.comparison ? 'secondary' : 'primary'} size="sm" onClick={() => setCompareOpen(true)}><GitCompare size={14} aria-hidden="true" />Compare revisions</Button>}
+        {ctx.workspace && canAddRevision && !canCompare && <Button size="sm" disabled={ctx.busy} onClick={() => ctx.openWorkspaceModal('add_revision')}><GitCommit size={15} aria-hidden="true" />Add revision</Button>}
+        <WorkspaceActions>
+          {ctx.workspace && <Menu.Item className="service-workspace-menu__item" onClick={() => setSnapshotOpen(true)}><GitCommit size={15} aria-hidden="true" />Revision &amp; snapshot details</Menu.Item>}
+          {ctx.workspace && !canCompare && <Menu.Item className="service-workspace-menu__item" onClick={() => setCompareOpen(true)}><GitCompare size={15} aria-hidden="true" />Compare revisions</Menu.Item>}
+          {ctx.workspace && canAddRevision && canCompare && <Menu.Item className="service-workspace-menu__item" disabled={ctx.busy} onClick={() => ctx.openWorkspaceModal('add_revision')}><GitCommit size={15} aria-hidden="true" />Add revision</Menu.Item>}
+          <Menu.Item className="service-workspace-menu__item" disabled={ctx.busy || !ctx.selection} onClick={ctx.refresh}><RefreshCw size={15} aria-hidden="true" />Refresh</Menu.Item>
+        </WorkspaceActions>
       </div>
     </header>
     <ComparisonImpactCard key={ctx.selection?.comparisonId} ctx={ctx} />
@@ -2485,7 +2518,9 @@ export default function ServiceApp() {
     {ctx.pending && !ctx.busy && <section className="inline-notice"><p>A request is retained for account {ctx.session.displayName}. Its result has not been reconciled. Retry sends the same request ID and input.</p><Button variant="unstyled" className="btn btn--secondary" disabled={ctx.busy} onClick={ctx.retryPending}>Retry retained request</Button></section>}
     {ctx.recoverableImport && !ctx.busy && <section className="inline-notice"><p>Your last repository import was interrupted. Resume to retrieve its workspace using the original request.</p><Button variant="unstyled" className="btn btn--secondary" onClick={ctx.resumeImport}>Resume import</Button></section>}
     {ctx.busy && <p className="service-busy-banner" role="status">Updating workspace…</p>}
-    <Content ctx={ctx} onOpenCompare={() => setCompareOpen(true)} />
+    <div className="service-page-body" key={ctx.state.activeModule}>
+      <Content ctx={ctx} onOpenCompare={() => setCompareOpen(true)} />
+    </div>
   </main>{ctx.state.inspectorOpen && <Inspector key={ctx.state.selectedArtifactId} ctx={ctx} />}</div></div>
     {ctx.modalOpen && <RecordDialog ctx={ctx} />}
     {ctx.workspaceModalMode && <CustomWorkspaceModal ctx={ctx} open onOpenChange={open => { if (!open) ctx.closeWorkspaceModal(); }} mode={ctx.workspaceModalMode} />}

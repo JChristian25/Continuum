@@ -7,6 +7,17 @@ const { url, password } = JSON.parse(input);
 const browser = await chromium.launch({ headless: true });
 const context = await browser.newContext();
 const page = await context.newPage();
+async function workspaceAction(name) {
+  await expect(page.locator('.service-busy-banner')).toBeHidden();
+  const button = page.locator('.service-topline-actions').getByRole('button', { name, exact: true });
+  if (await button.isVisible()) {
+    await button.click();
+    return;
+  }
+  await page.getByRole('button', { name: 'More workspace actions' }).click();
+  await page.getByRole('menuitem', { name, exact: true }).click();
+}
+
 const errors = [];
 let latestContext;
 page.on('pageerror', e => errors.push(e.message));
@@ -66,6 +77,7 @@ try {
   await expect(page.locator('.service-group-card').first()).toBeVisible();
   await expect(page.locator('.service-signal-badge').first()).toBeVisible();
   await page.screenshot({ path: fileURLToPath(new URL('../../../outputs/frontend-integration/signal-triage.png', import.meta.url)), fullPage: true });
+  await page.getByRole('button', { name: /^Queue filters/ }).click();
   await page.getByRole('combobox', { name: 'Filter by signal tier' }).click();
   await page.getByRole('option', { name: 'Low signal only', exact: true }).click();
   const lowCount = await page.locator('.service-row').count();
@@ -106,7 +118,7 @@ try {
   await expect(page.getByRole('alert')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Retry retained request' })).toHaveCount(0);
   await expect(page.getByRole('textbox', { name: /^Reason(?: \(optional\))?$/, exact: true })).toHaveValue('Isolated browser verification of exact-source review; not a research assessment.');
-  await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+  await workspaceAction('Refresh');
   await page.locator('.service-row').first().click();
   await expect(page.getByRole('heading', { name: 'Recorded evidence' })).toBeVisible();
   await page.getByRole('tab', { name: 'review', exact: true }).click();
@@ -176,7 +188,7 @@ try {
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.getByRole('button', { name: 'Review relationships', exact: true }).click();
   // Retained snapshots are readable and cannot accept a judgment.
-  await page.getByText('Revision & snapshot details', { exact: true }).click();
+  await workspaceAction('Revision & snapshot details');
   const retained = page.getByRole('combobox', { name: 'Retained snapshot' });
   await retained.click();
   await page.getByRole('option').filter({ hasText: 'historical' }).filter({ hasNotText: 'Version 0' }).first().click();
@@ -186,7 +198,7 @@ try {
   await page.getByRole('tab', { name: 'review', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Save judgment', exact: true })).toBeDisabled();
   await page.getByRole('button', { name: 'Close inspector' }).click();
-  await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+  await workspaceAction('Refresh');
   await page.getByRole('button', { name: 'Code explorer', exact: true }).click();
   await page.locator('.service-row').first().click();
   await expect(page.locator('.service-file-grid .code-box')).toBeVisible();
@@ -194,7 +206,7 @@ try {
   await page.getByRole('option').filter({ hasText: 'c62d664' }).click();
   await page.getByRole('button', { name: 'Review relationships', exact: true }).click();
   await expect(page.locator('.service-row')).toHaveCount(0);
-  await page.getByText('Compare revisions', { exact: true }).click();
+  await workspaceAction('Compare revisions');
   await page.getByRole('button', { name: 'Compare and review impact' }).click();
   await expect(page.getByText(/changed paths · .* affected relationships/)).toBeVisible({ timeout: 20000 });
   await expect(page.locator('.service-row').first()).toBeVisible();
@@ -275,6 +287,7 @@ try {
   await page.getByRole('tab', { name: /^Reviewed/ }).click();
   await expect(page.locator('.service-row')).toHaveCount(3);
   await page.getByRole('tab', { name: /^All/ }).click();
+  await page.getByRole('button', { name: /^Queue filters/ }).click();
   const noiseBtn = page.getByRole('button', { name: /Hide low-signal/ });
   if (await noiseBtn.count()) {
     await noiseBtn.click();
@@ -326,7 +339,7 @@ try {
   if (!exportedJson.limitations.some(l => l.includes('unresolved candidate'))) throw new Error('Export missing unresolved candidate limitation disclosure');
   await page.getByRole('combobox', { name: 'Selected revision' }).click();
   await page.getByRole('option').filter({ hasText: 'c62d664' }).click();
-  await page.getByText('Compare revisions', { exact: true }).click();
+  await workspaceAction('Compare revisions');
   await page.getByRole('button', { name: 'Compare and review impact' }).click();
   await expect(page.getByText(/changed paths · .* affected relationships/)).toBeVisible();
   // Custom workspace creation, AST/Markdown outline, anchored RecordDialog, and R0->R1 diff.
@@ -388,7 +401,7 @@ try {
   await revDialog.getByRole('button', { name: 'Capture new revision', exact: true }).click();
   await expect(revDialog).toHaveCount(0, { timeout: 40000 });
   await expect(page.locator('.service-notice-banner')).toContainText('Revision added to', { timeout: 40000 });
-  await page.getByText('Compare revisions', { exact: true }).click();
+  await workspaceAction('Compare revisions');
   await page.getByRole('button', { name: 'Compare and review impact' }).click();
   await expect(page.getByText(/1 changed paths · .* affected relationships/)).toBeVisible({ timeout: 20000 });
   await expect(page.locator('.service-comparison-banner')).toContainText('Cents conversion rule');
@@ -427,7 +440,7 @@ try {
   await rev2Dialog.getByRole('button', { name: 'Capture new revision', exact: true }).click();
   await expect(rev2Dialog).toHaveCount(0, { timeout: 40000 });
   await expect(page.locator('.service-notice-banner')).toContainText('Revision added to', { timeout: 40000 });
-  await page.getByText('Compare revisions', { exact: true }).click();
+  await workspaceAction('Compare revisions');
   const cmp2Dialog = page.getByRole('dialog', { name: 'Compare revisions' });
   await expect(cmp2Dialog.getByRole('combobox', { name: 'Baseline' })).toContainText('Revalidated R0 → R1');
   await cmp2Dialog.getByRole('button', { name: 'Compare and review impact' }).click();

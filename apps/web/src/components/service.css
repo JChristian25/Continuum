@@ -200,9 +200,9 @@
 .service-validity-field { flex: 0 1 138px; min-width: 115px; }
 .service-filters .input, .service-filters .select { min-height: 36px; height: 36px; padding: 8px 10px; font-size: 12.5px; }
 .service-empty-note { padding: 14px 0; font-size: 12.5px; color: var(--ink-2); }
-.service-canvas > .card { padding: 20px 22px; font-size: 13px; line-height: 1.65; }
-.service-canvas > .card h2 { font-size: 18px; margin-bottom: 8px; }
-.service-canvas > .card h3 { font-size: 14px; margin: 16px 0 6px; }
+.service-page-body > .card { padding: 20px 22px; font-size: 13px; line-height: 1.65; }
+.service-page-body > .card h2 { font-size: 18px; margin-bottom: 8px; }
+.service-page-body > .card h3 { font-size: 14px; margin: 16px 0 6px; }
 .service-result-count { font-size: 11.5px; color: var(--ink-2); padding-bottom: 10px; white-space: nowrap; }
 .service-list { display: grid; gap: 8px; }
 .service-relationship-list { gap: 0; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--ground-card); }
